@@ -326,6 +326,42 @@ Check report. `rows[{key, applied, calque_score, back, suspect}]` (`reason` `reg
 
 Exit codes. Check mode 0 no suspect, 1 at least one line at or above the threshold. Calibrate mode 0 written, 1 written but weak (fewer than 5 lines per class or balanced accuracy below 0.75). 2 usage or input error.
 
+## eval_critic.py (jury calibration on the contrastive set)
+
+```
+python eval_critic.py ../langpack/tr-TR/contrastive.json --locale tr-TR [--tiers J1,J2,J3] [--compare-warmup] [--update-trust-card] [--dry-run]
+```
+
+Measures every jury member against the contrastive set. Each model is called once, even when it sits in two tiers.
+
+| Measure | How | Target |
+|---|---|---|
+| Pairwise accuracy (primary) | the member sees native and robot lines of one pair blind, side order seeded at random, and picks the more natural one | 0.85 or more for every member (phase A gate) |
+| Absolute means (secondary) | 1 to 5 scores for native, robot and unknown lines in seeded order | native above 4.5, robot below 3 |
+| Unknown distribution (observation) | score histogram of the raw strong-model lines | none |
+| Kappa | quadratic weighted Cohen's kappa between members of different families in one tier (`inter_family_kappa`) and between models of one family across tiers (`intra_family_kappa`) | none |
+
+The system prompt is `prompts/critic.<locale>.md` with a seeded warm-up sample from the pack and `--shots` contrastive pairs as few-shots. The few-shot pairs are held out of the evaluation.
+
+| Flag | Meaning |
+|---|---|
+| `--input` (or positional) | `contrastive.json` |
+| `--locale` | target locale |
+| `--tiers` | comma separated tiers, default `J1,J2,J3` |
+| `--langpack-dir` | root of the packs for the warm-up sample and `trust_card.json` |
+| `--no-warmup` | evaluate without the warm-up block |
+| `--compare-warmup` | run with and without warm-up in one command and report `delta_pairwise` |
+| `--warmup-count` | warm-up lines, default 40 |
+| `--shots` | held out few-shot pairs, default 6 |
+| `--limit` / `--seed` | seeded subset of the remaining pairs, seed for side order, subsets and warm-up (default 1234) |
+| `--pairwise-min` | gate, default 0.85 |
+| `--update-trust-card` | store the result under `calibration` in `langpack/<locale>/trust_card.json` |
+| `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
+
+Report (B3.6). `{locale, langpack_version, warmup, members[{tier, family, model, pairwise_accuracy, native_mean, robot_mean, unknown_mean, n}], inter_family_kappa, intra_family_kappa, gate{pairwise_min, passed}, secondary}`. With `--compare-warmup` the report holds `with_warmup`, `without_warmup` and `delta_pairwise`, and the gate is the one with warm-up.
+
+Exit codes. 0 every member reached the gate. 1 at least one member is below it. 2 usage or input error.
+
 ## Prompt templates (prompts/)
 
 | File | Use |
