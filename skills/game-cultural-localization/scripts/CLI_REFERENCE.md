@@ -275,6 +275,18 @@ Picks native lines of the requested registers from `warmup.jsonl` and `local/war
 
 Exit codes. 0 the sample has the requested size. 1 the pack has fewer matching lines (the smaller sample is still written). 2 usage or input error (no pack, unknown register).
 
+## Prompt templates (prompts/)
+
+| File | Use |
+|---|---|
+| `prompts/critic.tr-TR.md`, `prompts/critic.de-DE.md` | native critic prompt written in the target language. A concrete player persona (not a translator), warm-up slot, contrastive pair slot, 1 to 5 rubric, issue types, task order and the vote schema `{"votes": [{key, score, issue_type, reason, suggested}]}` |
+| `prompts/critic.generic.md` | English fallback for locales without a native critic prompt, verdicts made with it count as estimated |
+| `prompts/literal.md` | instruction for the robot side of contrastive pairs (word for word, English word order, no idioms, placeholders kept) |
+
+A template starts with a short frontmatter block (`name`, `locale`, `language`, `empty_warmup`, `empty_contrastive`) and uses the slots `{{LOCALE}}`, `{{WARMUP}}` and `{{CONTRASTIVE}}`. `prompt_templates.render_prompt(name, locale, warmup, contrastive)` picks `<name>.<locale>.md`, then `<name>.generic.md`, then `<name>.md`, fills the slots and rejects unknown ones. `render_contrastive(pairs, count, seed)` builds the seeded few-shot block, one `✓` native line and one `✗` robot line per pair. The jurors never write `tier`, `member`, `family` or `model`, the harness adds them.
+
+Prompts, README, the docs and every generated Markdown report follow one punctuation style, checked by `text_style.punctuation_problems()`. Prose has no semicolons, no en or em dashes and no colon inside a sentence. Code blocks, inline code, URLs and frontmatter are exempt.
+
 ---
 
 ## localization_pipeline_template.workflow.py — Antigravity `/run-workflow` template

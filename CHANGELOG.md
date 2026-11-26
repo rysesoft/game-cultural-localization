@@ -13,6 +13,7 @@ R&D release. Multi-family LLM jury, language packs and measured nativeness, see 
 - `scripts/build_language_pack.py` and `langpack/sources.manifest.json` build `langpack/<locale>/` (warm-up corpus, trust card, licenses, round-trip threshold) from licensed game and UI corpora and the studio reference translation, with a five-layer filter whose statistics land in `manifest.json`. Local class lines stay in the gitignored `local/` folder (P2).
 - `scripts/llm_tasks.py` shared batched model tasks (translate, back-translate, jury scoring, pairwise choice) with one retry for missing keys (P2).
 - `scripts/warmup_loader.py` seeded, register filtered and source balanced warm-up sample (30 to 50 lines) from a language pack, as a prompt block or JSON lines (P3).
+- `prompts/critic.tr-TR.md` and `prompts/critic.de-DE.md`, native critic prompts written in the target language with a player persona, warm-up and contrastive slots, rubric, task order and the vote schema. `prompts/literal.md` for robot lines and an English `prompts/critic.generic.md` fallback. `scripts/prompt_templates.py` renders them, `scripts/text_style.py` checks the house punctuation style (P4).
 
 ## [2.1.0] — 2026-11-26
 
