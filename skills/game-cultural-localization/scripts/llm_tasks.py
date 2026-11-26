@@ -180,3 +180,39 @@ def ordered_unique(items: Iterable[T]) -> List[T]:
         if it not in seen:
             seen.append(it)
     return seen
+
+
+# --------------------------------------------------------------------------- #
+# Shared CLI plumbing for every model calling tool
+# --------------------------------------------------------------------------- #
+
+def add_model_args(ap: Any) -> None:
+    """Attach --providers-config, --dry-run, --fake-scenario and --budget-log."""
+    ap.add_argument("--providers-config", default=None, help="providers.config.json (default: the bundled one)")
+    ap.add_argument("--dry-run", action="store_true", help="Use the offline fake provider (no API key, no network)")
+    ap.add_argument("--fake-scenario", help="Fake provider scenario JSON (with --dry-run)")
+    ap.add_argument("--budget-log", default=None, help="budget.jsonl that receives one line per model call")
+
+
+def default_budget_path(out: Path) -> Path:
+    """budget.jsonl next to an output file, or in langpack/.cache when the output lives in the bundled langpack folder."""
+    from l10n_common import SCRIPTS_DIR
+    langpack = (SCRIPTS_DIR.parent / "langpack").resolve()
+    out = Path(out).resolve()
+    try:
+        out.relative_to(langpack)
+        return langpack / ".cache" / "budget.jsonl"
+    except ValueError:
+        return out.parent / "budget.jsonl"
+
+
+def make_router(args: Any, roles: Sequence[str], budget_default: Optional[Path] = None) -> Any:
+    """Router from the standard model arguments; checks the API keys of `roles` unless --dry-run."""
+    from providers import FakeScenario, Router, load_providers_config
+    cfg = load_providers_config(Path(args.providers_config) if getattr(args, "providers_config", None) else None)
+    budget = Path(args.budget_log) if getattr(args, "budget_log", None) else budget_default
+    router = Router(cfg, dry_run=bool(getattr(args, "dry_run", False)),
+                    scenario=FakeScenario.load(Path(args.fake_scenario)) if getattr(args, "fake_scenario", None) else None,
+                    budget_log=budget)
+    router.require(roles)
+    return router

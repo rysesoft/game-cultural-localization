@@ -275,6 +275,31 @@ Picks native lines of the requested registers from `warmup.jsonl` and `local/war
 
 Exit codes. 0 the sample has the requested size. 1 the pack has fewer matching lines (the smaller sample is still written). 2 usage or input error (no pack, unknown register).
 
+## build_contrastive_set.py (native, robot and unknown lines)
+
+```
+python build_contrastive_set.py loc_work/reference/tr.csv --locale tr-TR [--out ../langpack/tr-TR/contrastive.json] [--limit 300] [--dry-run]
+```
+
+Reads the studio's professional reference table (`key`, `en`, the target column, optional `category`, `speaker`, `archetype`) and writes the contrastive set of a pack. `native` is the professional line. `robot` is a deliberately literal translation by the `literal` model with `prompts/literal.md`. `unknown` holds raw translations by strong models (default the `pass1` model), unlabeled and used for observation only. Pairs whose robot line equals the native line, or breaks a placeholder of the English source, carry no contrast and are dropped.
+
+| Flag | Meaning |
+|---|---|
+| `--input` (or positional) | reference table (CSV, TSV, JSON or PO) |
+| `--locale` | target locale |
+| `--out` | output JSON, default `langpack/<locale>/contrastive.json` |
+| `--src-field` / `--dst-field` / `--key-field` | columns, defaults `en`, the locale code (then `dst`, `target`) and `key` |
+| `--unknown-models` | comma separated model aliases for the unknown lines, default the `pass1` model |
+| `--no-unknown` | skip the unknown lines |
+| `--limit` / `--seed` | seeded subset of N rows (default all rows, seed 1234) |
+| `--batch-size` | rows per model call, default 30 |
+| `--min-pairs` | exit 1 when fewer usable pairs result, default 30 |
+| `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access, the budget log defaults to `budget.jsonl` next to `--out` (or `langpack/.cache/` inside the bundled langpack folder) |
+
+Output (`contrastive.json`). `{locale, source_ref, seed, limit, generated_with, pairs[{key, en, native, robot, unknown{model id: text}, register, speaker, archetype}]}`.
+
+Exit codes. 0 set written. 1 set written with fewer usable pairs than `--min-pairs`. 2 usage or input error, including a missing API key.
+
 ## Prompt templates (prompts/)
 
 | File | Use |
