@@ -12,12 +12,15 @@ Tasks and reply shapes
   pairwise         pairs[{id, a, b}]                                     -> {"choices": [{id, choice: "a"|"b"}]}
 
 Missing keys in a reply are asked for once more, then the call fails with L10nError.
+The batched tasks take workers=N to send up to N batches at once (threads). Results are merged
+by key in batch order, so the outcome does not depend on the worker count.
 Python 3.9+, standard library only.
 """
 
 from __future__ import annotations
 
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequence, TypeVar
 
@@ -72,6 +75,23 @@ def chunked(items: Sequence[T], size: int) -> Iterator[List[T]]:
         yield list(items[i:i + size])
 
 
+def run_batches(batches: Sequence[T], fn: Callable[[T], Dict[str, Any]], workers: int = 1) -> Dict[str, Any]:
+    """Call fn on every batch, at most `workers` at a time, and merge the dict results in batch order.
+
+    Model calls spend most of their time waiting on the network, so threads give a near linear speed up.
+    The first failing batch raises after the running ones finish.
+    """
+    out: Dict[str, Any] = {}
+    if int(workers) <= 1 or len(batches) <= 1:
+        for b in batches:
+            out.update(fn(b))
+        return out
+    with ThreadPoolExecutor(max_workers=int(workers)) as ex:
+        for res in ex.map(fn, batches):  # map yields in submission order, the merge stays deterministic
+            out.update(res)
+    return out
+
+
 def system_for(task: str, locale: str, template: Optional[str] = None) -> str:
     """System prompt for a task: an explicit template (already rendered) or the built-in English default."""
     return template if template else DEFAULT_SYSTEM[task].format(locale=locale)
@@ -105,29 +125,29 @@ def _call_keyed(provider: Any, system: str, task: str, base_payload: Dict[str, A
 
 def translate_rows(provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, task: str = "pass1",
                    system: Optional[str] = None, batch_size: int = 30, max_tokens: int = 4096,
-                   extra: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+                   extra: Optional[Dict[str, Any]] = None, workers: int = 1) -> Dict[str, str]:
     """Translate rows [{key, source, ...}] with task 'pass1' or 'literal'; return key -> target."""
     if task not in ("pass1", "literal"):
         raise L10nError(f"translate_rows: unknown task '{task}'")
     sys_prompt = system_for(task, locale, system)
-    out: Dict[str, str] = {}
-    for batch in chunked(list(rows), batch_size):
+
+    def one(batch: List[Dict[str, Any]]) -> Dict[str, str]:
         got = _call_keyed(provider, sys_prompt, task, {"locale": locale, **(extra or {})}, batch, "rows", "rows", "key",
                           lambda it: isinstance(it.get("target"), str), max_tokens)
-        out.update({k: str(v["target"]) for k, v in got.items()})
-    return out
+        return {k: str(v["target"]) for k, v in got.items()}
+    return run_batches(list(chunked(list(rows), batch_size)), one, workers)
 
 
 def backtranslate_rows(provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
-                       batch_size: int = 30, max_tokens: int = 4096) -> Dict[str, str]:
+                       batch_size: int = 30, max_tokens: int = 4096, workers: int = 1) -> Dict[str, str]:
     """Back-translate rows [{key, target}] into English; return key -> back translation."""
     sys_prompt = system_for("roundtrip", locale, system)
-    out: Dict[str, str] = {}
-    for batch in chunked([{"key": r["key"], "target": r["target"]} for r in rows], batch_size):
+
+    def one(batch: List[Dict[str, Any]]) -> Dict[str, str]:
         got = _call_keyed(provider, sys_prompt, "roundtrip", {"locale": locale}, batch, "rows", "rows", "key",
                           lambda it: isinstance(it.get("back"), str), max_tokens)
-        out.update({k: str(v["back"]) for k, v in got.items()})
-    return out
+        return {k: str(v["back"]) for k, v in got.items()}
+    return run_batches(list(chunked([{"key": r["key"], "target": r["target"]} for r in rows], batch_size)), one, workers)
 
 
 def normalize_vote(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -149,28 +169,27 @@ def normalize_vote(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def score_entries(provider: Any, entries: Sequence[Dict[str, Any]], locale: str, *, tier: str = "J1",
                   system: Optional[str] = None, batch_size: int = 40, max_tokens: int = 4096,
-                  extra: Optional[Dict[str, Any]] = None) -> Dict[str, Dict[str, Any]]:
+                  extra: Optional[Dict[str, Any]] = None, workers: int = 1) -> Dict[str, Dict[str, Any]]:
     """Ask one jury member to score target-only entries [{key, target, ...}]; return key -> normalized vote."""
     sys_prompt = system_for("jury", locale, system)
-    out: Dict[str, Dict[str, Any]] = {}
-    for batch in chunked(list(entries), batch_size):
+
+    def one(batch: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         got = _call_keyed(provider, sys_prompt, "jury", {"locale": locale, "tier": tier, **(extra or {})}, batch, "entries", "votes", "key",
                           lambda it: normalize_vote(it) is not None, max_tokens)
-        for k, v in got.items():
-            out[k] = normalize_vote(v)  # type: ignore[assignment]
-    return out
+        return {k: normalize_vote(v) for k, v in got.items()}  # type: ignore[misc]
+    return run_batches(list(chunked(list(entries), batch_size)), one, workers)
 
 
 def pairwise_choices(provider: Any, pairs: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
-                     batch_size: int = 20, max_tokens: int = 2048) -> Dict[str, str]:
+                     batch_size: int = 20, max_tokens: int = 2048, workers: int = 1) -> Dict[str, str]:
     """Ask one member which side of each pair [{id, a, b}] is more natural; return id -> 'a' | 'b'."""
     sys_prompt = system_for("pairwise", locale, system)
-    out: Dict[str, str] = {}
-    for batch in chunked(list(pairs), batch_size):
+
+    def one(batch: List[Dict[str, Any]]) -> Dict[str, str]:
         got = _call_keyed(provider, sys_prompt, "pairwise", {"locale": locale}, batch, "pairs", "choices", "id",
                           lambda it: str(it.get("choice", "")).strip().lower() in ("a", "b"), max_tokens)
-        out.update({k: str(v["choice"]).strip().lower() for k, v in got.items()})
-    return out
+        return {k: str(v["choice"]).strip().lower() for k, v in got.items()}
+    return run_batches(list(chunked(list(pairs), batch_size)), one, workers)
 
 
 def revote(provider: Any, payload: Dict[str, Any], locale: str, *, system: Optional[str] = None, max_tokens: int = 1024) -> Dict[str, Any]:

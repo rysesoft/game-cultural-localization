@@ -381,6 +381,7 @@ The system prompt is `prompts/critic.<locale>.md` with a seeded warm-up sample f
 | `--shots` | held out few-shot pairs, default 6 |
 | `--limit` / `--seed` | seeded subset of the remaining pairs, seed for side order, subsets and warm-up (default 1234) |
 | `--pairwise-min` | gate, default 0.85 |
+| `--workers` | batches in flight per model, default 4. Above 1 every distinct model is calibrated in its own thread. The report is the same for every value, only the wall clock changes. A live full run with 8 models drops from hours to minutes |
 | `--update-trust-card` | store the result under `calibration` in `langpack/<locale>/trust_card.json` |
 | `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
 

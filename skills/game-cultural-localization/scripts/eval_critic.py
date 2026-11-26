@@ -27,6 +27,7 @@ import argparse
 import json
 import random
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from itertools import combinations
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -131,22 +132,38 @@ def _mean(xs: Sequence[float]) -> Optional[float]:
 
 def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dict[str, Any]], shots_pairs: Sequence[Dict[str, Any]],
              *, warmup: bool, pack_dir: Optional[Path], seed: int, warmup_count: int, pairwise_min: float,
-             langpack_version: Optional[str]) -> Dict[str, Any]:
-    """Run the calibration once (with or without warm-up) and return the B3.6 report."""
+             langpack_version: Optional[str], workers: int = 1) -> Dict[str, Any]:
+    """Run the calibration once (with or without warm-up) and return the B3.6 report.
+
+    With workers > 1 every distinct model is calibrated in its own thread and sends up to `workers`
+    batches at once. Results are keyed, so the report does not depend on the worker count.
+    """
     regs = sorted({p.get("register") for p in pairs if p.get("register") in REGISTERS}) or list(REGISTERS)
     warm_text = ""
     if warmup and pack_dir is not None and ((pack_dir / "warmup.jsonl").is_file() or (pack_dir / "local" / "warmup.jsonl").is_file()):
         warm_text = render_warmup(load_warmup(pack_dir, regs, warmup_count, seed))
     system = render_prompt("critic", locale, warmup=warm_text, contrastive=render_contrastive(shots_pairs, count=len(shots_pairs), seed=seed))
     pw, native_side, entries, meta = build_items(pairs, seed)
-    cache: Dict[str, Dict[str, Any]] = {}
+    unique: Dict[str, Tuple[str, Any]] = {}
+    for tier in tiers:
+        for m in router.jury(tier):
+            unique.setdefault(m.model, (tier, m))  # a model in two tiers (deepseek-v4-pro in J2 and J3) is called once
+
+    def calibrate(item: Tuple[str, Tuple[str, Any]]) -> Tuple[str, Dict[str, Any]]:
+        model, (tier, m) = item
+        choices = pairwise_choices(m.provider, pw, locale, system=system, workers=workers)
+        votes = score_entries(m.provider, entries, locale, tier=tier, system=system, workers=workers)
+        return model, {"choices": choices, "scores": {k: v["score"] for k, v in votes.items()}}
+
+    todo = list(unique.items())
+    if int(workers) > 1 and len(todo) > 1:
+        with ThreadPoolExecutor(max_workers=len(todo)) as ex:
+            cache: Dict[str, Dict[str, Any]] = dict(ex.map(calibrate, todo))
+    else:
+        cache = dict(calibrate(it) for it in todo)
     members: List[Dict[str, Any]] = []
     for tier in tiers:
         for m in router.jury(tier):
-            if m.model not in cache:
-                choices = pairwise_choices(m.provider, pw, locale, system=system)
-                votes = score_entries(m.provider, entries, locale, tier=tier, system=system)
-                cache[m.model] = {"choices": choices, "scores": {k: v["score"] for k, v in votes.items()}}
             res = cache[m.model]
             correct = sum(1 for pid, side in native_side.items() if res["choices"][pid] == side)
             by_kind: Dict[str, List[int]] = {"native": [], "robot": [], "unknown": []}
@@ -202,6 +219,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED, help=f"Seed for side order, subsets and warm-up (default {DEFAULT_SEED})")
     ap.add_argument("--pairwise-min", type=float, default=PAIRWISE_MIN, help=f"Pairwise accuracy gate (default {PAIRWISE_MIN})")
     ap.add_argument("--update-trust-card", action="store_true", help="Store the result in langpack/<locale>/trust_card.json under 'calibration'")
+    ap.add_argument("--workers", type=int, default=4, help="Batches in flight per model, models run in parallel when above 1 (default 4, 1 = one call at a time)")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap
@@ -222,7 +240,10 @@ def main() -> int:
     version = load_json_data(manifest).get("langpack_version") if manifest.is_file() else None
     shots, evald = split_shots(pairs, args.shots, args.limit, args.seed)
     router = make_router(args, tiers, default_budget_path(Path(args.input)))
-    kw = {"pack_dir": pack_dir, "seed": args.seed, "warmup_count": args.warmup_count, "pairwise_min": args.pairwise_min, "langpack_version": version}
+    if args.workers < 1:
+        raise L10nError("--workers must be 1 or more")
+    kw = {"pack_dir": pack_dir, "seed": args.seed, "warmup_count": args.warmup_count, "pairwise_min": args.pairwise_min, "langpack_version": version,
+          "workers": args.workers}
     if args.compare_warmup:
         with_w = evaluate(router, locale, tiers, evald, shots, warmup=True, **kw)
         without_w = evaluate(router, locale, tiers, evald, shots, warmup=False, **kw)
@@ -249,7 +270,7 @@ def main() -> int:
         trust["calibration"] = {"gate": main_rep["gate"], "secondary": main_rep["secondary"], "pairs": len(evald),
                                 "members": [{k: m[k] for k in ("tier", "model", "pairwise_accuracy", "native_mean", "robot_mean")} for m in main_rep["members"]],
                                 "inter_family_kappa": main_rep["inter_family_kappa"], "intra_family_kappa": main_rep["intra_family_kappa"],
-                                "langpack_version": version, "source": str(args.input)}
+                                "langpack_version": version, "source": Path(args.input).name}  # file name only, no local path in a shipped card
         card.write_text(json.dumps(trust, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     exit_code = EXIT_OK if gate["passed"] else EXIT_FINDINGS
     lines.append(f"  Gate pairwise >= {gate['pairwise_min']} {'PASSED' if gate['passed'] else 'FAILED'}")

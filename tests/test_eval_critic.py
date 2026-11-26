@@ -103,6 +103,32 @@ class EvaluateTests(unittest.TestCase):
         sonnet_calls = [r for r in router.budget.records if r["model"] == "claude-sonnet-5-5"]
         self.assertEqual(len(v4pro_calls), len(sonnet_calls))  # v4pro sits in J2 and J3 but is evaluated once
 
+    def test_parallel_workers_give_the_same_report(self):
+        sc = {"pairwise": [{"contains": "literal]", "family": "google", "pick_containing": True}],
+              "scores": [{"contains": "Acele", "family": "deepseek", "score": 3}]}
+        shots, pairs = ec.split_shots(cset()["pairs"], 2, 0, 1)
+        reps, calls = [], []
+        for workers in (1, 4):
+            router = Router(load_providers_config(), dry_run=True, scenario=FakeScenario(sc))
+            reps.append(ec.evaluate(router, "tr-TR", ["J1", "J2", "J3"], pairs, shots, warmup=False, pack_dir=None, seed=1, warmup_count=5,
+                                    pairwise_min=0.85, langpack_version=None, workers=workers))
+            calls.append(sorted((r["model"], r["role"]) for r in router.budget.records))
+        self.assertEqual(reps[0], reps[1])
+        self.assertEqual(calls[0], calls[1])                 # same calls, only their timing differs
+        self.assertEqual(len(reps[0]["members"]), 9)
+
+    def test_run_batches_keeps_order_and_raises(self):
+        from llm_tasks import run_batches
+        self.assertEqual(run_batches([[1, 2], [3], [4, 5]], lambda b: {str(x): x * 10 for x in b}, workers=3),
+                         {"1": 10, "2": 20, "3": 30, "4": 40, "5": 50})
+
+        def boom(b):
+            if 3 in b:
+                raise ValueError("bad batch")
+            return {str(x): x for x in b}
+        with self.assertRaises(ValueError):
+            run_batches([[1], [3], [5]], boom, workers=2)
+
 
 class CliTests(unittest.TestCase):
     def test_compare_warmup_and_trust_card(self):
@@ -119,6 +145,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(data["langpack_version"], "tr-TR-abc")
             trust = json.loads((td / "packs" / "tr-TR" / "trust_card.json").read_text(encoding="utf-8"))
             self.assertTrue(trust["calibration"]["gate"]["passed"])
+            self.assertEqual(trust["calibration"]["source"], "c.json")   # file name only, never a local path
             budget = (td / "budget.jsonl").read_text(encoding="utf-8").splitlines()
             self.assertTrue(budget)
 
