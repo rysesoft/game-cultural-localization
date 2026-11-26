@@ -477,12 +477,43 @@ Query report. `results[{key, en, neighbors[{key, src, dst, category, speaker, st
 
 Exit codes. 0 done. 1 findings (rows skipped by `add`, rows without any neighbour in `query`, lines still without a decision in `approve`). 2 usage or input error.
 
+## pass2_rewrite.py (Pass 2 with three candidates and a blind J1 pick)
+
+```
+python pass2_rewrite.py verdicts_tr-TR_01.json --source-table pass1_tr-TR_01.json --locale tr-TR [--critique-out critique_tr-TR_01.json] [--dry-run]
+```
+
+For every verdict with status `rewrite_light`, `rewrite`, `critical` or `unresolved` (the last one as a proposal for the developer).
+
+1. The `pass2` model (default Opus) writes three different candidates with `prompts/pass2.<locale>.md` (native Turkish and German prompts, `pass2.generic.md` elsewhere). It sees the English source, the current line, the context, the jury rationales and suggestions and the closest approved translation memory lines.
+2. The three J1 members see only the candidates (seeded order, ids `c1` to `c3`) and the context, never the source, and each picks the most natural one. Most picks wins, a tie goes to the earlier candidate.
+3. The winner goes through `validate_critique` (fixed critique schema, placeholder and tag parity with the current line, not identical to it). When it fails, the next candidate by votes is tried. When none passes, the old line stays and the line is reported.
+
+| Flag | Meaning |
+|---|---|
+| `--input` (or positional) | verdict file written by `jury.py` |
+| `--source-table` | Pass 1 table with key, English source and current target |
+| `--locale` | target locale |
+| `--out` | rewrite file, default `rewrites_<locale>_<batch>.json` next to the verdicts |
+| `--critique-out` | also write the selected lines as a critique file in the fixed schema (`summary.total` is the number of judged lines, so it validates against the blind slice) |
+| `--src-field` / `--dst-field` / `--key-field` | columns of `--source-table` |
+| `--candidates` | candidates per line, default 3 (1 to 6) |
+| `--statuses` | verdict statuses to rewrite, default `rewrite_light,rewrite,critical,unresolved` |
+| `--placeholder-style` / `--tag-style` | token syntax for the parity check |
+| `--langpack-dir` / `--no-warmup` / `--seed` | warm-up and few-shots of the prompts, seed of the candidate order |
+| `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
+
+Rewrite file. `{locale, source_file, verdicts, lines[{key, en, old, new, status, final_tier, score, candidates, picks, votes_per_candidate, chosen, valid, problems, selected_by}], critique, notes}`.
+
+Exit codes. 0 every rewritten line has a validated new text. 1 at least one line kept its old text because no candidate passed. 2 usage or input error.
+
 ## Prompt templates (prompts/)
 
 | File | Use |
 |---|---|
 | `prompts/critic.tr-TR.md`, `prompts/critic.de-DE.md` | native critic prompt written in the target language. A concrete player persona (not a translator), warm-up slot, contrastive pair slot, 1 to 5 rubric, issue types, task order and the vote schema `{"votes": [{key, score, issue_type, reason, suggested}]}` |
 | `prompts/critic.generic.md` | English fallback for locales without a native critic prompt, verdicts made with it count as estimated |
+| `prompts/pass2.tr-TR.md`, `prompts/pass2.de-DE.md`, `prompts/pass2.generic.md` | Pass 2 rewrite prompt (writer persona, warm-up and contrastive slots, seven step task order, three candidates per line) |
 | `prompts/literal.md` | instruction for the robot side of contrastive pairs (word for word, English word order, no idioms, placeholders kept) |
 
 A template starts with a short frontmatter block (`name`, `locale`, `language`, `empty_warmup`, `empty_contrastive`) and uses the slots `{{LOCALE}}`, `{{WARMUP}}` and `{{CONTRASTIVE}}`. `prompt_templates.render_prompt(name, locale, warmup, contrastive)` picks `<name>.<locale>.md`, then `<name>.generic.md`, then `<name>.md`, fills the slots and rejects unknown ones. `render_contrastive(pairs, count, seed)` builds the seeded few-shot block, one `✓` native line and one `✗` robot line per pair. The jurors never write `tier`, `member`, `family` or `model`, the harness adds them.

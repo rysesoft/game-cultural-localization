@@ -24,7 +24,7 @@ Scenario file (JSON):
    "pairwise": [{"contains": "literal]", "model": "...", "pick_containing": true}],
    "deliberate": [{"key": "K", "model": "...", "score": 4, "reason": "..."}],
    "pass2": [{"contains": "...", "candidates": ["...", "...", "..."]}],
-   "picks": [{"contains": "...", "model": "...", "choice": 2}],
+   "picks": [{"contains": "...", "model": "...", "prefer": "text in the wanted candidate"}],
    "roundtrip": [{"contains": "...", "back": "..."}],
    "default": "..."}
 """
@@ -218,7 +218,12 @@ class FakeProvider:
                 cands = it.get("candidates", [])
                 joined = " ".join(str(c.get("text", "")) for c in cands)
                 rule = self._first("picks", joined, str(it.get("key", "")))
-                choice = rule.get("choice") if rule is not None else (cands[0].get("id") if cands else None)
+                choice = cands[0].get("id") if cands else None
+                if rule is not None and "prefer" in rule:
+                    hits = [c for c in cands if str(rule["prefer"]) in str(c.get("text", ""))]
+                    choice = hits[0].get("id") if hits else choice
+                elif rule is not None:
+                    choice = rule.get("choice", choice)
                 out.append({"key": it.get("key"), "choice": choice})
             return dump({"picks": out})
         if task == "ping":

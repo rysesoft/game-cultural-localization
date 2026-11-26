@@ -54,6 +54,10 @@ INSTRUCTIONS: Dict[str, str] = {
              'regional_leak|gender_leak|ui_verb|placeholder_grammar|terminology|other|none", "reason": "...", "suggested": "..."}]}. '
              'Use issue_type "none" and empty reason and suggested for score 5.'),
     "pairwise": 'For every pair reply with {"choices": [{"id": "...", "choice": "a" or "b"}]} and nothing else.',
+    "pass2": ('Rewrite every row. Reply with {"rows": [{"key": "...", "candidates": ["...", "...", "..."]}]}, exactly the requested '
+              'number of different candidates per row, and nothing else.'),
+    "pick": ('For every item choose the candidate a native player would find most natural for this context. Reply with '
+             '{"picks": [{"key": "...", "choice": "<candidate id>"}]} and nothing else.'),
     "deliberate": ('You already scored this line ("own"). "others" are the anonymous votes of two other jurors and "evidence" is the '
                    'mechanical evidence package (ban list hits, closest approved translation memory lines, back-translation signal). '
                    'Weigh them and vote once more. You may keep or change your score. Reply with {"score": 1-5, "issue_type": "...", '
@@ -185,6 +189,35 @@ def revote(provider: Any, payload: Dict[str, Any], locale: str, *, system: Optio
         if vote is not None:
             return vote
     raise L10nError(f"deliberate: model {getattr(provider, 'model', '?')} returned no valid vote for {payload.get('key')}")
+
+
+def pass2_candidates(provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, n: int = 3, system: Optional[str] = None,
+                     batch_size: int = 10, max_tokens: int = 4096) -> Dict[str, List[str]]:
+    """Ask the Pass 2 model for n candidates per row [{key, source, target, ...}]; returns key -> distinct non-empty candidates."""
+    sys_prompt = system or DEFAULT_SYSTEM["pass1"].format(locale=locale)
+
+    def ok(it: Dict[str, Any]) -> bool:
+        c = it.get("candidates")
+        return isinstance(c, list) and any(isinstance(x, str) and x.strip() for x in c)
+    out: Dict[str, List[str]] = {}
+    for batch in chunked(list(rows), batch_size):
+        got = _call_keyed(provider, sys_prompt, "pass2", {"locale": locale, "n_candidates": n}, batch, "rows", "rows", "key", ok, max_tokens)
+        for k, v in got.items():
+            out[k] = ordered_unique(str(x) for x in v["candidates"] if isinstance(x, str) and x.strip())[:n]
+    return out
+
+
+def pick_candidates(provider: Any, items: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
+                    batch_size: int = 20, max_tokens: int = 2048) -> Dict[str, str]:
+    """Blind choice among candidates: items [{key, context..., candidates: [{id, text}]}] -> key -> chosen id."""
+    sys_prompt = system_for("jury", locale, system)
+    ids = {str(it["key"]): {str(c["id"]) for c in it["candidates"]} for it in items}
+    out: Dict[str, str] = {}
+    for batch in chunked(list(items), batch_size):
+        got = _call_keyed(provider, sys_prompt, "pick", {"locale": locale}, batch, "items", "picks", "key",
+                          lambda it: str(it.get("choice")) in ids.get(str(it.get("key")), set()), max_tokens)
+        out.update({k: str(v["choice"]) for k, v in got.items()})
+    return out
 
 
 def word_count(text: str) -> int:

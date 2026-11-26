@@ -21,6 +21,7 @@ R&D release. Multi-family LLM jury, language packs and measured nativeness, see 
 - `scripts/jury.py` tiered mixed-family jury (J1, J2, J3) over a blind slice with the A4 agreement rule, the critical shortcut to J3, budget caps that stop the run (30 % to J2, 10 % to J3), ban list, TM and back-translation evidence, B3.3 votes and B3.4 verdicts (P9).
 - `scripts/deliberate.py` J3 deliberation round. Anonymous rationales (model and family names scrubbed), evidence package (ban hits, three approved TM lines, back-translation signal), one re-vote, majority decides, three different scores stay unresolved. `jury.py` runs it by default (`--no-deliberation` to skip) (P10).
 - `scripts/tm.py` SQLite translation memory. Character trigram neighbours in category and speaker tiers (top 5), approved and candidate rows, approval flow back from change reports. `jury.py --tm` puts the closest approved lines into the evidence (P11).
+- `scripts/pass2_rewrite.py` and `prompts/pass2.tr-TR.md`, `prompts/pass2.de-DE.md`, `prompts/pass2.generic.md`. The pass2 model writes three candidates per flagged line, the J1 members pick one blind (majority), and the pick is checked with `validate_critique` before it replaces the old line (P12).
 
 ## [2.1.0] — 2026-11-26
 
