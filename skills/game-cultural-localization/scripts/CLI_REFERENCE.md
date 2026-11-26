@@ -255,6 +255,26 @@ Output files. `manifest.json` (sources, versions, hashes, filter statistics, `la
 
 Exit codes. 0 pack built. 1 pack built but a source could not be loaded or no row survived. 2 usage or input error.
 
+## warmup_loader.py (seeded warm-up sample)
+
+```
+python warmup_loader.py ../langpack/tr-TR --register dialogue_casual [--register ui] [--count 40] [--seed 1234] [--out warm.txt]
+```
+
+Picks native lines of the requested registers from `warmup.jsonl` and `local/warmup.jsonl` of a pack so a model hears the target language before it translates or judges (recommended 30 to 50 lines per session). The same pack, registers, count and seed always return the same lines. Lines are balanced across sources (the studio reference first, `trusted` lines first inside a source), rich-text tags and engine colour codes such as `{BLACK}` or `[accent]` are removed, lines shorter than 2 or longer than 300 characters are skipped.
+
+| Flag | Meaning |
+|---|---|
+| `--input` (or positional) | pack folder, for example `langpack/tr-TR` |
+| `--register` | `ui`, `tutorial`, `dialogue_casual` or `dialogue_formal`, repeatable, default all |
+| `--count` | lines to pick, default 40 |
+| `--seed` | sampling seed, default 1234 |
+| `--no-local` | ignore `local/warmup.jsonl` |
+| `--format` | file format of `--out`, `text` (the prompt block, grouped by register) or `jsonl` |
+| `--out` | write the sample to this file |
+
+Exit codes. 0 the sample has the requested size. 1 the pack has fewer matching lines (the smaller sample is still written). 2 usage or input error (no pack, unknown register).
+
 ---
 
 ## localization_pipeline_template.workflow.py — Antigravity `/run-workflow` template
