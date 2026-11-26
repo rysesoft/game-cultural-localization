@@ -172,10 +172,10 @@ class HttpAdapterTests(unittest.TestCase):
         p2, t2, _ = self._make("deepseek", [(200, DEEPSEEK_OK, {})], options={"thinking": False})
         p2.complete("s", "u")
         self.assertEqual(t2.requests[0]["body"]["thinking"], {"type": "disabled"})
-        self.assertEqual(req["body"]["max_tokens"], 16000)   # thinking counts against the limit, 4096 was used up by thinking alone live
+        self.assertEqual(req["body"]["max_tokens"], 32000)   # thinking counts against the limit, v4-pro filled 16000 live
 
     def test_every_adapter_leaves_room_for_thinking(self):
-        for name, reply, field, floor in (("anthropic", ANTHROPIC_OK, ("max_tokens",), 16000), ("deepseek", DEEPSEEK_OK, ("max_tokens",), 16000),
+        for name, reply, field, floor in (("anthropic", ANTHROPIC_OK, ("max_tokens",), 16000), ("deepseek", DEEPSEEK_OK, ("max_tokens",), 32000),
                                           ("google", GOOGLE_OK, ("generationConfig", "maxOutputTokens"), 32000)):  # gemini-4-carbon hit 16000 live
             p, t, _ = self._make(name, [(200, reply, {}), (200, reply, {})])
             p.complete("s", "u", max_tokens=1024)

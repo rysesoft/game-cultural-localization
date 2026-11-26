@@ -7,7 +7,8 @@ body   {model, messages: [{role: "system"}, {role: "user"}], temperature, max_to
 Thinking mode is on by default at the API. The router passes options["thinking"]:
 None leaves the API default, True / False send {"thinking": {"type": "enabled" | "disabled"}}.
 With thinking on, the reasoning counts against max_tokens, so every request asks for at least
-MIN_MAX_TOKENS. A 4096 limit was used up by thinking alone in the first live run.
+DEEPSEEK_MIN_MAX_TOKENS. A 4096 limit was used up by thinking alone in the first live run, and in
+the live calibration deepseek-v4-pro still filled a 16000 limit on 40 line batches.
 """
 
 from __future__ import annotations
@@ -15,6 +16,8 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Tuple
 
 from .base import MIN_MAX_TOKENS, HttpProvider, ProviderError
+
+DEEPSEEK_MIN_MAX_TOKENS = 2 * MIN_MAX_TOKENS  # 32000, DeepSeek accepts up to 131072
 
 
 class DeepSeekProvider(HttpProvider):
@@ -30,7 +33,7 @@ class DeepSeekProvider(HttpProvider):
             "model": self.model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "temperature": float(temperature),
-            "max_tokens": max(int(max_tokens), MIN_MAX_TOKENS),
+            "max_tokens": max(int(max_tokens), DEEPSEEK_MIN_MAX_TOKENS),
             "response_format": {"type": "json_object" if json_mode else "text"},
         }
         thinking = self.options.get("thinking")
