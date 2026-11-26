@@ -1,0 +1,65 @@
+{
+  "locale": "tr-TR",
+  "langpack_version": "tr-TR-b76ccb27e084",
+  "trust_level": "measured",
+  "basis": "professional_reference",
+  "sources": {
+    "bundle": [
+      "reference",
+      "godot-editor",
+      "pixelorama"
+    ],
+    "local": [
+      "wesnoth",
+      "mindustry",
+      "openttd",
+      "veloren",
+      "gnome-chess",
+      "libreoffice-calc",
+      "kde"
+    ]
+  },
+  "rows": {
+    "bundle": 7054,
+    "local": 11586,
+    "by_register": {
+      "bundle": {
+        "ui": 4670,
+        "tutorial": 2213,
+        "dialogue_casual": 29,
+        "dialogue_formal": 142
+      },
+      "local": {
+        "ui": 7769,
+        "tutorial": 3644,
+        "dialogue_casual": 173
+      }
+    }
+  },
+  "filters_out": {
+    "layer1_source_selection": 24304,
+    "layer2_mechanical": 20210,
+    "layer3_mt_detection": 20210,
+    "layer4_cross_consistency": 19483,
+    "layer5_jury_prescreen": 19483
+  },
+  "roundtrip": {
+    "min_words": 6,
+    "registers": [
+      "dialogue_casual",
+      "dialogue_formal"
+    ]
+  },
+  "calibration": null,
+  "native_review": {
+    "done": false
+  },
+  "known_limits": [
+    "Native judgement for locales without a professional reference is an estimate.",
+    "Open corpora are mostly translations themselves, so warm-up calibrates to good translation, not to original writing.",
+    "Back-translation carries no signal for UI and short text.",
+    "Self-preference of a model family is reduced by deliberation, not removed.",
+    "Cultural errors are not caught by any proxy signal.",
+    "Cost is unknown until measured, rough estimate 5 to 15 calls per line."
+  ]
+}
