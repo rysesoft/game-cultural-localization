@@ -1,0 +1,180 @@
+{
+  "schema": 1,
+  "_comment": "Corpus sources for build_language_pack.py. license_class 'bundle' may ship with the plugin (attribution in LICENSES.md). 'local' is built on the user's machine only, written under langpack/<locale>/local/ (gitignored) and never distributed. URLs were checked on 2026-11-26. sha256 null means not pinned yet, run build_language_pack.py --lock-hashes once to pin. Paired formats (properties, json_nested, openttd, ftl) also need the English file in en_url.",
+  "license_classes": {
+    "bundle": "Permissive license (CC0, CC-BY, MIT) or Rysesoft's own translations. May be packed and shipped, with attribution.",
+    "local": "Copyleft or unclear license (GPL, LGPL, MPL, CC-BY-SA, translation memories). Used on the local machine only, never shipped."
+  },
+  "sources": [
+    {
+      "id": "godot-editor",
+      "name": "Godot Engine editor translations",
+      "homepage": "https://hosted.weblate.org/projects/godot-engine/godot/",
+      "license": "MIT",
+      "license_class": "bundle",
+      "attribution": "Godot Engine contributors and translators, MIT license, https://godotengine.org/license",
+      "register": "ui",
+      "review_process": true,
+      "version": "4.3-stable",
+      "format": "po",
+      "files": [
+        {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/godotengine/godot/4.3-stable/editor/translations/editor/tr.po", "sha256": null},
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/godotengine/godot/4.3-stable/editor/translations/editor/de.po", "sha256": null}
+      ]
+    },
+    {
+      "id": "pixelorama",
+      "name": "Pixelorama translations",
+      "homepage": "https://crowdin.com/project/pixelorama",
+      "license": "MIT",
+      "license_class": "bundle",
+      "attribution": "Orama Interactive and the Pixelorama translators, MIT license, https://github.com/Orama-Interactive/Pixelorama",
+      "register": "ui",
+      "review_process": true,
+      "version": "v1.0.5",
+      "format": "po",
+      "files": [
+        {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/Orama-Interactive/Pixelorama/v1.0.5/Translations/tr_TR.po", "sha256": null},
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/Orama-Interactive/Pixelorama/v1.0.5/Translations/de_DE.po", "sha256": null}
+      ]
+    },
+    {
+      "id": "wesnoth",
+      "name": "Battle for Wesnoth",
+      "homepage": "https://www.wesnoth.org/",
+      "license": "GPL-2.0-or-later",
+      "license_class": "local",
+      "attribution": "The Battle for Wesnoth Project, GPL-2.0-or-later",
+      "register": "game",
+      "review_process": true,
+      "version": "1.18.4",
+      "format": "po",
+      "files": [
+        {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth-lib/tr.po", "sha256": null},
+        {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth/tr.po", "sha256": null},
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth-lib/de.po", "sha256": null},
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth/de.po", "sha256": null}
+      ]
+    },
+    {
+      "id": "0ad",
+      "name": "0 A.D.",
+      "homepage": "https://play0ad.com/",
+      "license": "GPL-2.0-or-later (code), CC-BY-SA-3.0 (data)",
+      "license_class": "local",
+      "attribution": "Wildfire Games and the 0 A.D. translators",
+      "register": "game",
+      "review_process": true,
+      "version": "A26",
+      "format": "po",
+      "files": [
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/0ad/0ad/A26/binaries/data/mods/public/l10n/de.public-gui-ingame.po", "sha256": null},
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/0ad/0ad/A26/binaries/data/mods/public/l10n/de.public-tutorials.po", "sha256": null}
+      ]
+    },
+    {
+      "id": "mindustry",
+      "name": "Mindustry",
+      "homepage": "https://mindustrygame.github.io/",
+      "license": "GPL-3.0",
+      "license_class": "local",
+      "attribution": "Anuken and the Mindustry translators, GPL-3.0",
+      "register": "game",
+      "review_process": true,
+      "version": "v146",
+      "format": "properties",
+      "files": [
+        {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/Anuken/Mindustry/v146/core/assets/bundles/bundle_tr.properties", "sha256": null,
+         "en_url": "https://raw.githubusercontent.com/Anuken/Mindustry/v146/core/assets/bundles/bundle.properties", "en_sha256": null},
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/Anuken/Mindustry/v146/core/assets/bundles/bundle_de.properties", "sha256": null,
+         "en_url": "https://raw.githubusercontent.com/Anuken/Mindustry/v146/core/assets/bundles/bundle.properties", "en_sha256": null}
+      ]
+    },
+    {
+      "id": "openttd",
+      "name": "OpenTTD",
+      "homepage": "https://www.openttd.org/",
+      "license": "GPL-2.0",
+      "license_class": "local",
+      "attribution": "The OpenTTD team and translators, GPL-2.0",
+      "register": "game",
+      "review_process": true,
+      "version": "14.1",
+      "format": "openttd",
+      "files": [
+        {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/OpenTTD/OpenTTD/14.1/src/lang/turkish.txt", "sha256": null,
+         "en_url": "https://raw.githubusercontent.com/OpenTTD/OpenTTD/14.1/src/lang/english.txt", "en_sha256": null},
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/OpenTTD/OpenTTD/14.1/src/lang/german.txt", "sha256": null,
+         "en_url": "https://raw.githubusercontent.com/OpenTTD/OpenTTD/14.1/src/lang/english.txt", "en_sha256": null}
+      ]
+    },
+    {
+      "id": "veloren",
+      "name": "Veloren",
+      "homepage": "https://veloren.net/",
+      "license": "GPL-3.0",
+      "license_class": "local",
+      "attribution": "The Veloren contributors and translators, GPL-3.0",
+      "register": "game",
+      "review_process": true,
+      "version": "v0.17.0",
+      "format": "ftl",
+      "files": [
+        {"locale": "tr-TR", "url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/tr/main.ftl", "sha256": null,
+         "en_url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/en/main.ftl", "en_sha256": null},
+        {"locale": "tr-TR", "url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/tr/common.ftl", "sha256": null,
+         "en_url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/en/common.ftl", "en_sha256": null},
+        {"locale": "de-DE", "url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/de/main.ftl", "sha256": null,
+         "en_url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/en/main.ftl", "en_sha256": null},
+        {"locale": "de-DE", "url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/de/common.ftl", "sha256": null,
+         "en_url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/en/common.ftl", "en_sha256": null}
+      ]
+    },
+    {
+      "id": "gnome-chess",
+      "name": "GNOME Chess (GNOME translation memory)",
+      "homepage": "https://l10n.gnome.org/module/gnome-chess/",
+      "license": "GPL-3.0-or-later",
+      "license_class": "local",
+      "attribution": "The GNOME Project translators, GPL-3.0-or-later",
+      "register": "ui",
+      "review_process": true,
+      "version": "48.0",
+      "format": "po",
+      "files": [
+        {"locale": "tr-TR", "url": "https://gitlab.gnome.org/GNOME/gnome-chess/-/raw/48.0/po/tr.po", "sha256": null},
+        {"locale": "de-DE", "url": "https://gitlab.gnome.org/GNOME/gnome-chess/-/raw/48.0/po/de.po", "sha256": null}
+      ]
+    },
+    {
+      "id": "libreoffice-calc",
+      "name": "LibreOffice Calc (LibreOffice translation memory)",
+      "homepage": "https://translations.documentfoundation.org/",
+      "license": "MPL-2.0",
+      "license_class": "local",
+      "attribution": "The Document Foundation and the LibreOffice translators, MPL-2.0",
+      "register": "ui",
+      "review_process": true,
+      "version": "libreoffice-24-8",
+      "format": "po",
+      "files": [
+        {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/LibreOffice/translations/libreoffice-24-8/source/tr/sc/messages.po", "sha256": null},
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/LibreOffice/translations/libreoffice-24-8/source/de/sc/messages.po", "sha256": null}
+      ]
+    },
+    {
+      "id": "kde",
+      "name": "KDE translation memory",
+      "homepage": "https://l10n.kde.org/",
+      "license": "GPL-2.0-or-later and LGPL (per module)",
+      "license_class": "local",
+      "attribution": "The KDE translators",
+      "register": "ui",
+      "review_process": true,
+      "version": "trunk",
+      "format": "po",
+      "note": "KDE translations live in Subversion, add the PO URLs of the modules you want (for example the KPatience game) to files.",
+      "files": []
+    }
+  ]
+}

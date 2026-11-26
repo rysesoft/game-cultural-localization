@@ -214,6 +214,47 @@ python providers_check.py providers.config.json [--roles J1,J2,J3] [--ping] [--d
 
 Exit codes. 0 config, keys and pings are fine. 1 a model was not found and its fallback answered. 2 config error, a missing API key environment variable, an unknown role, or a model that failed without a fallback.
 
+## build_language_pack.py (language asset pack with a five-layer filter)
+
+```
+python build_language_pack.py ../langpack/sources.manifest.json --locale tr-TR [--reference loc_work/reference/tr.csv] [--offline] [--mt-check] [--jury-screen]
+```
+
+Builds `langpack/<locale>/` from the corpora listed in `langpack/sources.manifest.json` plus the studio's own professional translation. Every source carries a license class. `bundle` (CC0, CC-BY, MIT, the studio's own lines) may ship with the plugin and is credited in `LICENSES.md`. `local` (GPL, LGPL, MPL, translation memories) is used on this machine only and is written under `langpack/<locale>/local/`, which is gitignored. OpenSubtitles is not a source and a manifest that lists it is rejected (exit 2).
+
+| Flag | Meaning |
+|---|---|
+| `--input` (or positional) | the sources manifest |
+| `--locale` | pack locale |
+| `--langpack-dir` | root of the packs, default the skill's `langpack/` |
+| `--cache-dir` | download cache and offline source, default `<langpack-dir>/.cache` (gitignored). Files are mirrored as `<cache>/<source id>/<host>/<url path>` |
+| `--offline` | never download, read every corpus file from the cache |
+| `--refresh` | download again even when a cached copy exists |
+| `--lock-hashes` | write the sha256 of every file into the manifest where it is still `null` |
+| `--reference` | the studio's EN and target table (`key`, `en`, `<locale>`, `category`, `speaker`), repeatable. Exempt from layers 3 to 5 |
+| `--src-field` / `--dst-field` | columns of `--reference` (defaults `en` and the locale code, then `dst`, `target`) |
+| `--mt-check` | run the back-translation check of layer 3 with the `roundtrip` model |
+| `--jury-screen` | run the J1 pre-screen of layer 5 with the three J1 models |
+| `--min-words` | back-translation applies to lines with more words than this, default `roundtrip.min_words` of the providers config (6) |
+| `--seed` / `--sample-size` | seed and size of the pre-screen sample (defaults 1234 and 50) |
+| `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access as for every model calling tool, the budget log defaults to `<cache-dir>/budget_<locale>.jsonl` |
+
+Manifest source fields. `id`, `name`, `homepage`, `license`, `license_class`, `attribution`, `register` (`ui`, `game` or `dialogue`), `review_process`, `version`, `format` (`po`, `properties`, `json_nested`, `openttd`, `ftl`, `table`) and `files`, a list of `{locale, url or path, sha256}`. Paired formats (`properties`, `json_nested`, `openttd`, `ftl`) also name the English file in `en_url` or `en_path`.
+
+The five layers, with counts in `manifest.json` under `filters`.
+
+| Layer | Drops |
+|---|---|
+| 1 source selection | license class not `bundle` or `local`, no license, no review process, version not pinned, sha256 mismatch, file not cached or not downloadable |
+| 2 mechanical | empty, fuzzy, untranslated, length ratio outside 0.3 to 3.0, ban list hit (`rules/<locale>.json`), broken placeholders or tags, duplicate inside one source |
+| 3 MT detection | more than 500 rows from one commit (`commit` column), and with `--mt-check` lines over `min_words` words whose back-translation equals the English source |
+| 4 cross consistency | short terms (up to 4 words) rendered the same by 3 or more sources are `trusted`, conflicting renderings are `disputed` and dropped unless they agree with the reference |
+| 5 jury pre-screen | with `--jury-screen` a line stays only when all three J1 members give 4 or 5, a seeded sample goes to `prescreen_sample.jsonl` |
+
+Output files. `manifest.json` (sources, versions, hashes, filter statistics, `langpack_version`), `trust_card.json` (trust level, sources, row counts, known limits, calibration slot), `warmup.jsonl` (bundle class lines `{text, register, source, license_class, key, consistency}`), `local/warmup.jsonl` (local class lines), `roundtrip_threshold.json` (default 0.85 until calibrated), `LICENSES.md`. Registers are `ui`, `tutorial`, `dialogue_casual` and `dialogue_formal`, taken from the row category or guessed from the text shape.
+
+Exit codes. 0 pack built. 1 pack built but a source could not be loaded or no row survived. 2 usage or input error.
+
 ---
 
 ## localization_pipeline_template.workflow.py — Antigravity `/run-workflow` template

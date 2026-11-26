@@ -22,6 +22,7 @@ Thumbs.db
 
 # R&D pipeline (local-only corpora, working files, translation memories)
 skills/game-cultural-localization/langpack/*/local/
+skills/game-cultural-localization/langpack/.cache/
 langpack/*/local/
 loc_work/
 *.sqlite

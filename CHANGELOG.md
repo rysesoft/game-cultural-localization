@@ -10,6 +10,8 @@ R&D release. Multi-family LLM jury, language packs and measured nativeness, see 
 - `scripts/providers/` package with urllib adapters for Anthropic, Google Gemini and DeepSeek, a deterministic fake provider for tests and `--dry-run`, retry with exponential backoff for 429 and 5xx, a per provider rate limit, a model fallback on "not found" and a `budget.jsonl` line for every call (P1).
 - `scripts/providers.config.json` with the verified model ids, prices, roles and the three jury tiers. Two members of one family in one tier is rejected (P1).
 - `scripts/providers_check.py` validates the provider config and the API key environment variables and pings every model (P1).
+- `scripts/build_language_pack.py` and `langpack/sources.manifest.json` build `langpack/<locale>/` (warm-up corpus, trust card, licenses, round-trip threshold) from licensed game and UI corpora and the studio reference translation, with a five-layer filter whose statistics land in `manifest.json`. Local class lines stay in the gitignored `local/` folder (P2).
+- `scripts/llm_tasks.py` shared batched model tasks (translate, back-translate, jury scoring, pairwise choice) with one retry for missing keys (P2).
 
 ## [2.1.0] — 2026-11-26
 
