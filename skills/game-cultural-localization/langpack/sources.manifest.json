@@ -164,17 +164,28 @@
     },
     {
       "id": "kde",
-      "name": "KDE translation memory",
+      "name": "KDE games translations (KDE translation memory)",
       "homepage": "https://l10n.kde.org/",
-      "license": "GPL-2.0-or-later and LGPL (per module)",
+      "license": "GPL-2.0-or-later (KDE translations, per module)",
       "license_class": "local",
-      "attribution": "The KDE translators",
-      "register": "ui",
+      "attribution": "The KDE translation teams",
+      "register": "game",
       "review_process": true,
-      "version": "trunk",
+      "version": "trunk-kf6 r1753957",
       "format": "po",
-      "note": "KDE translations live in Subversion, add the PO URLs of the modules you want (for example the KPatience game) to files.",
-      "files": []
+      "note": "KDE keeps translations in Subversion. The URLs are pinned to repository revision 1753957 through pathrev. More KDE modules can be added the same way from https://websvn.kde.org/trunk/l10n-kf6/<lang>/messages/.",
+      "files": [
+        {"locale": "tr-TR", "url": "https://websvn.kde.org/trunk/l10n-kf6/tr/messages/kpat/kpat.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "tr-TR", "url": "https://websvn.kde.org/trunk/l10n-kf6/tr/messages/kmines/kmines.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "tr-TR", "url": "https://websvn.kde.org/trunk/l10n-kf6/tr/messages/knavalbattle/knavalbattle.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "tr-TR", "url": "https://websvn.kde.org/trunk/l10n-kf6/tr/messages/ksudoku/ksudoku.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "tr-TR", "url": "https://websvn.kde.org/trunk/l10n-kf6/tr/messages/kbounce/kbounce.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "de-DE", "url": "https://websvn.kde.org/trunk/l10n-kf6/de/messages/kpat/kpat.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "de-DE", "url": "https://websvn.kde.org/trunk/l10n-kf6/de/messages/kmines/kmines.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "de-DE", "url": "https://websvn.kde.org/trunk/l10n-kf6/de/messages/knavalbattle/knavalbattle.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "de-DE", "url": "https://websvn.kde.org/trunk/l10n-kf6/de/messages/ksudoku/ksudoku.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "de-DE", "url": "https://websvn.kde.org/trunk/l10n-kf6/de/messages/kbounce/kbounce.po?view=co&pathrev=1753957", "sha256": null}
+      ]
     }
   ]
 }
