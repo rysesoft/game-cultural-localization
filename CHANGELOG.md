@@ -2,6 +2,15 @@
 
 All notable changes to this plugin are documented here. The version number lives in `plugin.json` only.
 
+## [2.2.0] (in progress)
+
+R&D release. Multi-family LLM jury, language packs and measured nativeness, see the work packages P1 to P15.
+
+### Added
+- `scripts/providers/` package with urllib adapters for Anthropic, Google Gemini and DeepSeek, a deterministic fake provider for tests and `--dry-run`, retry with exponential backoff for 429 and 5xx, a per provider rate limit, a model fallback on "not found" and a `budget.jsonl` line for every call (P1).
+- `scripts/providers.config.json` with the verified model ids, prices, roles and the three jury tiers. Two members of one family in one tier is rejected (P1).
+- `scripts/providers_check.py` validates the provider config and the API key environment variables and pings every model (P1).
+
 ## [2.1.0] — 2026-11-26
 
 Audit-driven release (see `audit/00-OZET.md` for the finding numbers referenced below).

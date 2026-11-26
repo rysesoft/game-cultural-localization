@@ -182,6 +182,40 @@ Phases: 0 pre-flight (locale, rules, bible, optional font scan) → 1 Pass-1 →
 
 ---
 
+## LLM providers (providers/ and providers.config.json)
+
+The `providers/` package talks to Anthropic, Google Gemini and DeepSeek with `urllib` only, no SDK. Every adapter returns a `ChatResult(text, input_tokens, output_tokens, model, latency_ms)` through one interface, `complete(system, user, temperature, max_tokens, json_mode)`. `as_legacy()` wraps a provider for the old `complete(system, user) -> str` interface of `orchestrator_stub.py`.
+
+| Piece | Behaviour |
+|---|---|
+| Retry | HTTP 429, 5xx and network errors are retried with exponential backoff (1, 2, 4, 8 seconds, or the `Retry-After` header), at most 5 attempts |
+| Rate limit | `rps` per provider from the config, shared by every model of that provider |
+| Budget log | every call appends one JSON line to `budget.jsonl` with `role`, `provider`, `alias`, `model`, `input_tokens`, `output_tokens`, `latency_ms`, `ok` and `fallback_from` when a fallback answered |
+| Fallback | a model the API does not know (`not found`) switches once to the `fallback` alias of its config entry and the switch is noted in the report. Without a fallback the run stops with exit 2 |
+| Fake provider | `providers/fake.py` answers from a scenario file (prompt hash to reply, per line score rules) or from deterministic built-in rules. Every tool that calls a model takes `--dry-run` (fake provider, no key, no network) and `--fake-scenario FILE` |
+| Offline guard | the environment variable `GCL_OFFLINE=1` refuses every network call (the test suite sets it) |
+
+`providers.config.json` holds the provider endpoints, the name of the API key environment variable of each provider (`ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `DEEPSEEK_API_KEY`), the model ids with prices in USD per 1M tokens (`null` means the price is not entered yet), the roles (`pass1`, `pass2`, `roundtrip`, `literal`) and the three jury tiers `J1`, `J2`, `J3`. Every tier needs one member from each family, two members of one family in a tier is a config error (exit 2). `agreement`, `budget_caps` and `roundtrip` hold the jury thresholds. `providers.deepseek.thinking` maps a role (or `default`) to `true` or `false` to switch DeepSeek thinking mode, a missing role keeps the API default. API keys are never written to any file.
+
+## providers_check.py (provider config, API keys, model ping)
+
+```
+python providers_check.py providers.config.json [--roles J1,J2,J3] [--ping] [--dry-run] [--fake-scenario FILE] [--budget-log FILE]
+```
+
+| Flag | Meaning |
+|---|---|
+| `--input` (or positional) | the providers config to check, normally `scripts/providers.config.json` |
+| `--roles` | comma separated roles to check, default all (`pass1,pass2,roundtrip,literal,J1,J2,J3`) |
+| `--ping` | send one tiny JSON request to every model of the roles, real API unless `--dry-run` |
+| `--dry-run` | fake provider, needs no API key |
+| `--fake-scenario` | scenario JSON for the fake provider (for example `{"errors": {"deepseek-v4-pro": "not_found"}}`) |
+| `--budget-log` | append one JSON line per ping to this file |
+
+Exit codes. 0 config, keys and pings are fine. 1 a model was not found and its fallback answered. 2 config error, a missing API key environment variable, an unknown role, or a model that failed without a fallback.
+
+---
+
 ## localization_pipeline_template.workflow.py — Antigravity `/run-workflow` template
 
 Not a standalone Python module (uses the workflow DSL with top-level `await`). Run it from Antigravity:

@@ -16,5 +16,6 @@ pwsh tests/run_all.ps1          # runs the suite with every Python it finds (bun
 | `test_font_glyph.py` | synthetic TTF (cmap 4 + 12), TTC, WOFF, corrupt fonts → exit 2, TMP static vs dynamic (`--strict`), character collection, real `msgothic.ttc` when present |
 | `test_blind_slice_and_critique.py` | blind slice has no source column, leak refusal, CSV/TSV/PO/.asset inputs, CSV output; critique schema validation, parity, CLI |
 | `test_pipeline_and_cli.py` | workflow template compiles with top-level await and references existing scripts, orchestrator dry-run passes deterministically / fails on bad output, `--help`/`--version` for every script, CLI_REFERENCE.md documents every flag |
+| `test_providers.py` | provider config validation (model ids, one family per jury tier, missing keys), request shape of the three adapters, retry and backoff, model fallback, local urllib round trip, fake provider scenarios, budget log, `providers_check.py` exit codes |
 
 Fixtures live in `tests/fixtures/` (JSON, BOM-JSON, CSV, semicolon CSV, multi-line CSV, TSV, PO LF/CRLF, Unity StringTable `.asset`, TMP FontAsset `.asset` static/dynamic, fake font). Temporary files are created under the OS temp directory, never inside the repository.

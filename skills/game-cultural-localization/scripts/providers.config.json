@@ -1,0 +1,30 @@
+{
+  "_comment": "Model ids verified 2026-11-26 against the official model pages (see ARGE brief B3.2). Prices are USD per 1M tokens, null = price not entered yet. API keys are never stored here, only the environment variable names. deepseek.thinking maps a role (pass1, pass2, roundtrip, literal, J1, J2, J3) or 'default' to true / false; a missing entry keeps the API default (thinking on).",
+  "providers": {
+    "anthropic": {"env_key": "ANTHROPIC_API_KEY", "rps": 5, "endpoint": "https://api.anthropic.com/v1/messages"},
+    "google":    {"env_key": "GOOGLE_API_KEY",    "rps": 5, "endpoint": "https://generativelanguage.googleapis.com/v1beta"},
+    "deepseek":  {"env_key": "DEEPSEEK_API_KEY",  "rps": 5, "endpoint": "https://api.deepseek.com/chat/completions", "thinking": {}}
+  },
+  "models": {
+    "haiku":    {"provider": "anthropic", "id": "claude-haiku-5-5",  "price_in": 0.10, "price_out": 0.50},
+    "sonnet":   {"provider": "anthropic", "id": "claude-sonnet-5-5", "price_in": 2.0,  "price_out": 10.0},
+    "opus":     {"provider": "anthropic", "id": "claude-opus-5-5",   "price_in": 4.0,  "price_out": 20.0},
+    "hydrogen": {"provider": "google",    "id": "gemini-4-hydrogen", "price_in": null, "price_out": null},
+    "neon":     {"provider": "google",    "id": "gemini-4-neon",     "price_in": null, "price_out": null},
+    "carbon":   {"provider": "google",    "id": "gemini-4-carbon",   "price_in": 4.0,  "price_out": 20.0},
+    "v4flash":  {"provider": "deepseek",  "id": "deepseek-flash",    "price_in": 0.15, "price_out": 0.60},
+    "v4pro":    {"provider": "deepseek",  "id": "deepseek-v4-pro",   "price_in": 0.66, "price_out": 1.98, "fallback": "v4flash", "fallback_thinking": true}
+  },
+  "roles": {
+    "pass1":     "sonnet",
+    "pass2":     "opus",
+    "roundtrip": "v4flash",
+    "literal":   "v4flash",
+    "J1": ["haiku",  "v4flash", "hydrogen"],
+    "J2": ["sonnet", "v4pro",   "neon"],
+    "J3": ["opus",   "v4pro",   "carbon"]
+  },
+  "agreement": {"pass_min": 4, "max_spread": 1, "critical_max": 2},
+  "budget_caps": {"escalate_j2_ratio": 0.30, "escalate_j3_ratio": 0.10},
+  "roundtrip": {"min_words": 6, "registers": ["dialogue_casual", "dialogue_formal"]}
+}

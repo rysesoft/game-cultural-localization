@@ -10,6 +10,7 @@ venv/
 *.tmp
 *.log
 audit/
+ARGE_*.md
 undefined/
 _t.py
 
@@ -18,3 +19,9 @@ _t.py
 Thumbs.db
 .vscode/
 .idea/
+
+# R&D pipeline (local-only corpora, working files, translation memories)
+skills/game-cultural-localization/langpack/*/local/
+langpack/*/local/
+loc_work/
+*.sqlite
