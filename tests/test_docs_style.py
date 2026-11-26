@@ -35,6 +35,27 @@ class StyleTests(unittest.TestCase):
             self.assertEqual(problems, [], f"{path.relative_to(ROOT)}: {problems[:5]}")
 
 
+class PlaybookStyleTests(unittest.TestCase):
+    """Playbooks, agents and rules/AGENTS.md follow the house style. Target-language examples keep their own punctuation."""
+
+    def test_explanations_follow_the_house_style(self):
+        files = sorted(REFS.glob("*.md")) + sorted((ROOT / "agents").glob("*.md")) + [ROOT / "rules" / "AGENTS.md"]
+        for path in files:
+            problems = text_style.punctuation_problems(path.read_text(encoding="utf-8"), exempt_examples=True)
+            self.assertEqual(problems, [], f"{path.name}: {problems[:5]}")
+
+    def test_examples_keep_their_punctuation(self):
+        de = (REFS / "de-DE.md").read_text(encoding="utf-8")
+        self.assertIn("Mach die Kiste schnell wieder flott – das Podium hol ich mir zurück.", de)
+        ru = (REFS / "ru-RU.md").read_text(encoding="utf-8")
+        self.assertIn("`Реактор — источник энергии.`", ru)
+
+    def test_checker_exempt_mode(self):
+        md = '* **Label.** text with *"Beispiel; mit — Zeichen"* and 「例：テスト」 and "quoted: yes"\n* bad; here\n'
+        self.assertEqual([n for n, _ in text_style.punctuation_problems(md, exempt_examples=True)], [2])
+        self.assertEqual(text_style.punctuation_problems("* **Label:** text\n"), [(1, "colon inside a sentence")])
+
+
 class CoverageTests(unittest.TestCase):
     def test_new_tools_are_mapped_and_logged(self):
         skill = (SCRIPTS.parent / "SKILL.md").read_text(encoding="utf-8")
