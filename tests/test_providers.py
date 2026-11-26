@@ -130,7 +130,14 @@ class HttpAdapterTests(unittest.TestCase):
         self.assertTrue(req["body"]["system"].startswith("SYS"))
         self.assertIn("JSON", req["body"]["system"])
         self.assertEqual(req["body"]["messages"], [{"role": "user", "content": "USER"}])
-        self.assertEqual((req["body"]["max_tokens"], req["body"]["temperature"]), (99, 0.2))
+        self.assertNotIn("temperature", req["body"])                       # current Claude models reject sampling parameters
+        self.assertEqual(req["body"]["max_tokens"], 16000)                  # room for thinking, a larger request keeps its own value
+        thinking_reply = {"content": [{"type": "thinking", "thinking": "", "signature": "x"}, {"type": "text", "text": "{\"ok\": true}"}],
+                          "usage": {"input_tokens": 12, "output_tokens": 40}}
+        p2, t2, _ = self._make("anthropic", [(200, thinking_reply, {})], model="claude-opus-5-5")
+        res2 = p2.complete("SYS", "USER", max_tokens=32000)
+        self.assertEqual(t2.requests[0]["body"]["max_tokens"], 32000)
+        self.assertEqual(res2.text, "{\"ok\": true}")                     # thinking blocks are skipped
         self.assertEqual((res.text, res.input_tokens, res.output_tokens, res.model), ("{\"ok\": true}", 12, 3, "claude-haiku-5-5"))
         self.assertNotIn("secret", repr(p))
 

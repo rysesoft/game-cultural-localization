@@ -21,6 +21,7 @@ All notable changes to this plugin are documented here. The version number lives
 - The register names `dialogue_casual` and `dialogue_formal` count as dialogue for rule contexts, so jury evidence and the pack filter see dialogue rows as dialogue.
 
 ### Fixed
+- `providers/anthropic.py` no longer sends `temperature`, which current Claude models reject with HTTP 400, and asks for at least 16000 `max_tokens` so adaptive thinking leaves room for the answer. Thinking blocks are skipped when the reply is read. Checked live against `claude-haiku-5-5`, `claude-sonnet-5-5` and `claude-opus-5-5`.
 - The layer 1 report of `build_language_pack.py` counts the reference among the sources it read ("10 kept of 10" instead of "10 kept of 9").
 
 ## [2.2.0] 2026-11-26
