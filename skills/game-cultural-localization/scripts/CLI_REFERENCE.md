@@ -65,7 +65,7 @@ python lqa_linter.py --input <table> --locale <loc> [options]
 
 Finding codes are `EMPTY`, `FUZZY`, `PLURAL_FORMS`, `ENCODING`, `CONTROL_CHAR`, `FORBIDDEN_CHAR`, `SPACED_HYPHEN`, `PLACEHOLDER`, `RICH_TAG`, `LEADING_SPACE`, `TRAILING_SPACE`, `TRAILING_NEWLINE`, `UNTRANSLATED`, `GLOSSARY` and the locale rule ids (`DE-EHE`, `KO-PLACEHOLDER-PARTICLE` and so on).
 
-Rule files (`rules/<locale>.json`, schema in `rules/rules.schema.json`) hold `id`, `severity` (`ERR` or `WARN`), `pattern`, `flags` (`i m x s`), `message`, `context` (`any`, `ui`, `dialog`, `player`, `button`), `skip_variants`, `variant_severity` and `examples{match,nomatch}`.
+Rule files (`rules/<locale>.json`, schema in `rules/rules.schema.json`) hold `id`, `severity` (`ERR` or `WARN`), `pattern`, `flags` (`i m x s`), `message`, `context` (`any`, `ui`, `dialog`, `player`, `button`, `formal`), `skip_contexts`, `skip_variants`, `variant_severity` and `examples{match,nomatch}`. A row is `formal` when its category is `dialogue_formal`, `formal`, `official`, `news`, `announcement`, `press`, `lore`, `codex` or `encyclopedia`, or when its key has a `Codex`, `Lore` or `News` segment. The register names `dialogue_casual` and `dialogue_formal` count as dialogue. `skip_contexts` lists row contexts where a rule never applies, `tr-TR` uses it to allow report style (`-mektedir`, `sahip olmak`) in formal text, in-world news and codex lore.
 Row metadata drives contexts. `category`, `context` or `tags` containing ui, button, dialog or player, `player: true`, and keys containing `BTN` or `BUTTON`. Suppress a rule on one row with `"lqa_ignore": "DE-EHE, PROJ-1"`.
 
 JSON report `{tool, version, locale, variant, input, entries_checked, rules_loaded, summary{errors, warnings}, findings[{severity, code, key, message, target}], exit_code}`. Findings are in input order (deterministic).
@@ -255,7 +255,7 @@ Builds `langpack/<locale>/` from the corpora listed in `langpack/sources.manifes
 | `--offline` | never download, read every corpus file from the cache |
 | `--refresh` | download again even when a cached copy exists |
 | `--lock-hashes` | write the sha256 of every file into the manifest where it is still `null` |
-| `--reference` | the studio's EN and target table (`key`, `en`, `<locale>`, `category`, `speaker`), repeatable. Exempt from layers 3 to 5 |
+| `--reference` | the studio's EN and target table (`key`, `en`, `<locale>`, `category`, `speaker`), repeatable. Exempt from the length ratio and the ban list of layer 2 and from layers 3 to 5 |
 | `--src-field` / `--dst-field` | columns of `--reference` (defaults `en` and the locale code, then `dst`, `target`) |
 | `--mt-check` | run the back-translation check of layer 3 with the `roundtrip` model |
 | `--jury-screen` | run the J1 pre-screen of layer 5 with the three J1 models |
@@ -274,6 +274,8 @@ The five layers, with counts in `manifest.json` under `filters`.
 | 3 MT detection | more than 500 rows from one commit (`commit` column), and with `--mt-check` lines over `min_words` words whose back-translation equals the English source |
 | 4 cross consistency | short terms (up to 4 words) rendered the same by 3 or more sources are `trusted`, conflicting renderings are `disputed` and dropped unless they agree with the reference |
 | 5 jury pre-screen | with `--jury-screen` a line stays only when all three J1 members give 4 or 5, a seeded sample goes to `prescreen_sample.jsonl` |
+
+The professional reference wins over the heuristics of layer 2. Its lines stay even when they are far longer or shorter than the English or hit a ban list rule. `filters.layer2_mechanical.reference_exempt` in `manifest.json` lists these lines (`length_ratio`, `rule_hits` with key and rule, `by_rule`), and the report prints the counts. A rule that keeps hitting the reference fights the studio voice and is worth narrowing with `context` or `skip_contexts`.
 
 Output files. `manifest.json` (sources, versions, hashes, filter statistics, `langpack_version`), `trust_card.json` (trust level, sources, row counts, known limits, calibration slot), `warmup.jsonl` (bundle class lines `{text, register, source, license_class, key, consistency}`), `local/warmup.jsonl` (local class lines), `roundtrip_threshold.json` (default 0.85 until calibrated), `LICENSES.md`. Registers are `ui`, `tutorial`, `dialogue_casual` and `dialogue_formal`, taken from the row category or guessed from the text shape.
 

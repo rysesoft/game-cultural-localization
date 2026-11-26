@@ -183,6 +183,47 @@ class OptionTests(unittest.TestCase):
             code, out, _ = run_cli("lqa_linter.py", "--input", str(f), "--locale", "de-DE", "--rules", str(rules), "--no-builtin-rules")
             self.assertIn("with 1 rules", out)
 
+    def test_formal_context_and_skip_contexts(self):
+        rules = lqa_linter.load_rules("tr-TR")
+
+        def codes(key: str, dst: str, category: str) -> set:
+            row = Row(key, "", dst, {"category": category})
+            return {f.code for f in lqa_linter.lint_rows([row], rules, lqa_linter.LintOptions(locale="tr-TR", check_untranslated=False))}
+        report = "Galaktik Federasyon desteğinizden memnuniyet duymaktadır."
+        self.assertIn("TR-MAKTADIR", codes("TIP_1", report, "tutorial"))
+        self.assertIn("TR-MAKTADIR", codes("UI_1", report, "ui"))
+        self.assertNotIn("TR-MAKTADIR", codes("EVT_1", report, "dialogue_formal"))         # formal register
+        self.assertNotIn("TR-MAKTADIR", codes("Codex.Char.Desc.X", report, "tutorial"))   # codex lore by key
+        self.assertNotIn("TR-MAKTADIR", codes("NEWS_2", report, "news"))
+        owned = "Çalışanlar aynı haklara sahip olacak."
+        self.assertIn("TR-SAHIP-OLMAK", codes("UI_2", owned, "ui"))
+        self.assertIn("TR-SAHIP-OLMAK", codes("DLG_1", owned, "dialogue_casual"))
+        self.assertNotIn("TR-SAHIP-OLMAK", codes("Event.detail.Greyson", owned, "dialogue_formal"))
+        emphatic = "Sen çarkı bir döndür, ben de kontratları getiririm."
+        self.assertIn("TR-PRONOUN-SPAM", codes("UI_3", emphatic, "ui"))
+        self.assertIn("TR-PRONOUN-SPAM", codes("TUT_1", emphatic, "tutorial"))
+        self.assertNotIn("TR-PRONOUN-SPAM", codes("LTR_1", emphatic, "dialogue_casual"))   # register names count as dialogue
+        self.assertNotIn("TR-PRONOUN-SPAM", codes("LTR_2", emphatic, "letter"))
+        self.assertEqual(lqa_linter.row_contexts("PlayerMenu.Lore.Title", {"category": "ui"}), {"ui", "formal"})
+
+    def test_skip_contexts_validation(self):
+        with TempDir() as td:
+            rules = td / "rules"
+            rules.mkdir()
+            write_json(rules / "bad.json", {"locale": "tr-TR", "rules": [{"id": "X", "severity": "WARN", "pattern": "x", "message": "m",
+                                                                         "skip_contexts": ["lore"]}]})
+            f = write_json(td / "s.json", [{"key": "A", "en": "x", "dst": "x"}])
+            code, _, err = run_cli("lqa_linter.py", "--input", str(f), "--locale", "tr-TR", "--rules", str(rules))
+            self.assertEqual(code, 2)
+            self.assertIn("skip_contexts", err)
+            write_json(rules / "bad.json", {"locale": "tr-TR", "rules": [{"id": "X", "severity": "WARN", "pattern": "yap", "message": "m",
+                                                                         "skip_contexts": ["formal"]}]})
+            f = write_json(td / "s.json", [{"key": "A", "en": "do", "dst": "yap", "category": "ui"},
+                                           {"key": "B", "en": "do", "dst": "yap", "category": "dialogue_formal"}])
+            code, out, _ = run_cli("lqa_linter.py", "--input", str(f), "--locale", "tr-TR", "--rules", str(rules), "--no-builtin-rules", "--json")
+            keys = [x["key"] for x in json.loads(out)["findings"] if x["code"] == "X"]
+            self.assertEqual(keys, ["A"])
+
     def test_strict_whitespace_and_forbid(self):
         code, out, _ = run_cli("lqa_linter.py", "--input", str(FIXTURES / "tech.json"), "--locale", "de-DE", "--strict-whitespace", "--forbid-spaced-hyphen", "--forbid-chars", ";—")
         self.assertIn("[LEADING_SPACE]", out)

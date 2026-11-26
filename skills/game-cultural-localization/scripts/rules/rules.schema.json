@@ -55,9 +55,23 @@
               "ui",
               "dialog",
               "player",
-              "button"
+              "button",
+              "formal"
             ],
-            "description": "any (default); ui/dialog apply unless the row is tagged with the other context; player/button apply only to rows tagged player (meta player:true / tags contain 'player') or button (category button or key containing BTN/BUTTON)"
+            "description": "any (default); ui/dialog apply unless the row is tagged with the other context; player/button/formal apply only to rows tagged player (meta player:true / tags contain 'player'), button (category button or key containing BTN/BUTTON) or formal (category dialogue_formal, formal, official, news, announcement, press, lore, codex, encyclopedia, or a key segment Codex/Lore/News)"
+          },
+          "skip_contexts": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "ui",
+                "dialog",
+                "player",
+                "button",
+                "formal"
+              ]
+            },
+            "description": "Row contexts where the rule never applies, e.g. [\"formal\"] keeps report style allowed in formal text, news and codex lore"
           },
           "skip_variants": {
             "type": "array",

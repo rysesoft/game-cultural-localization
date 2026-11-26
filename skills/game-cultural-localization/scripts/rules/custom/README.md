@@ -24,3 +24,4 @@ rules for your own game. Each file follows [rules.schema.json](../rules.schema.j
 * Rule ids must be unique across built-in + custom files (a duplicate id aborts with exit 2).
 * `examples` are optional but recommended, `tests/test_rules_selftest.py` verifies every rule file found here as well.
 * To suppress a rule on one string, add an `lqa_ignore` field to that row (`"lqa_ignore": "DE-EHE, PROJ-DE-NO-SIE"`).
+* To keep a rule out of whole kinds of text, add `"skip_contexts": ["formal"]` (or `ui`, `dialog`, `player`, `button`). Formal rows are formal letters, in-world news and codex lore, see `CLI_REFERENCE.md` for how a row gets its contexts.

@@ -186,6 +186,7 @@ class BuildTests(unittest.TestCase):
             l1 = f["layer1_source_selection"]
             self.assertEqual([d["id"] for d in l1["dropped"]], ["noreview"])
             self.assertEqual(l1["sources_kept"], 5)  # 4 manifest sources + reference
+            self.assertEqual(l1["sources_in"], 6)    # 5 manifest sources for tr-TR + reference
             # layer 2: every mechanical reason drops at least one row, and rows pass
             l2 = f["layer2_mechanical"]
             for reason in ("empty", "fuzzy", "untranslated", "length_ratio", "ban_list", "technical", "duplicate"):
@@ -229,6 +230,30 @@ class BuildTests(unittest.TestCase):
             lic = (pack / "LICENSES.md").read_text(encoding="utf-8")
             self.assertIn("Godot like", lic)
             self.assertNotRegex(lic, r"[;–—]")
+
+    def test_reference_wins_over_ban_list_and_length_ratio(self):
+        with TempDir() as td:
+            paths = make_tr_corpus(td)
+            lines = {"TIP_1": "Reaktör hâlâ düşük güçte çalışmaktadır.",
+                     "Codex.Reactor.Desc": "Reaktör geminin kalbi olarak görev yapmaktadır.",
+                     "DLG_2": "Sen çarkı döndür, ben de kontratları getiririm.",
+                     "ITEM_TV": "Televizyon"}
+            write_text(paths["ref"], "key,en,tr-TR,category,speaker\n"
+                       f"TIP_1,The reactor is still running at low power.,{lines['TIP_1']},tutorial,\n"
+                       f"Codex.Reactor.Desc,The reactor is the heart of the ship.,{lines['Codex.Reactor.Desc']},tutorial,\n"
+                       f"DLG_2,\"You spin the wheel, I bring the contracts.\",\"{lines['DLG_2']}\",dialogue,Uncle\n"
+                       f"ITEM_TV,TV,{lines['ITEM_TV']},ui,\n")
+            build(paths, td)
+            pack = td / "packs" / "tr-TR"
+            l2 = json.loads((pack / "manifest.json").read_text(encoding="utf-8"))["filters"]["layer2_mechanical"]
+            ex = l2["reference_exempt"]
+            self.assertEqual(ex["length_ratio"], ["ITEM_TV"])
+            # the codex key is formal and the dialogue line may open with an emphatic 'Sen', so only the tip hits a rule
+            self.assertEqual(ex["rule_hits"], [{"key": "TIP_1", "rule": "TR-MAKTADIR"}])
+            self.assertEqual(ex["by_rule"], {"TR-MAKTADIR": 1})
+            self.assertGreaterEqual(l2["dropped"]["ban_list"], 1)   # open corpus rows still fall to the ban list
+            texts = {r["text"] for r in read_jsonl(pack / "warmup.jsonl") if r["source"] == "reference"}
+            self.assertEqual(texts, set(lines.values()))
 
     def test_local_class_never_leaves_local_dir(self):
         with TempDir() as td:

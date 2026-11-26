@@ -17,7 +17,9 @@ Five-layer filter (statistics land in manifest.json)
   4 cross consistency  short terms rendered identically by 3+ sources are 'trusted', conflicting renderings
                        are 'disputed' and left out (rows agreeing with the reference stay)
   5 jury pre-screen    with --jury-screen the three J1 members must all give 4 or 5, a seeded sample goes to the report
-The reference translation is exempt from layers 3 to 5.
+The reference translation is exempt from the length ratio and ban list of layer 2 and from layers 3 to 5.
+Its rule hits are listed in manifest.json (layer2_mechanical.reference_exempt), they point at rules that
+fight the studio voice.
 
 Output in <langpack-dir>/<locale>/
   manifest.json  trust_card.json  warmup.jsonl  roundtrip_threshold.json  LICENSES.md
@@ -346,9 +348,12 @@ def layer2_mechanical(cands: List[Dict[str, Any]], locale: str) -> Tuple[List[Di
     """Empty, fuzzy, untranslated, length ratio, ban list / technical (lqa_linter), duplicate within one source.
 
     Identical pairs from different sources stay until layer 4, they are the evidence of cross-source agreement.
+    The studio reference is exempt from the length ratio and the ban list (the professional translation wins over
+    the heuristics), its rule hits are listed under 'reference_exempt' so a rule that fights the studio voice shows up.
     """
     reasons: Counter = Counter()
     stage: List[Dict[str, Any]] = []
+    ref_ratio: List[str] = []
     for c in cands:
         en, tx = c["en"], c["text"]
         if not tx.strip() or not en.strip():
@@ -359,23 +364,36 @@ def layer2_mechanical(cands: List[Dict[str, Any]], locale: str) -> Tuple[List[Di
             reasons["untranslated"] += 1
         else:
             ratio = len(tx.strip()) / max(1, len(en.strip()))
-            if ratio < RATIO_MIN or ratio > RATIO_MAX:
+            if (ratio < RATIO_MIN or ratio > RATIO_MAX) and not c.get("reference"):
                 reasons["length_ratio"] += 1
             else:
+                if ratio < RATIO_MIN or ratio > RATIO_MAX:
+                    ref_ratio.append(c["key"])
                 stage.append(c)
     rules = lqa_linter.load_rules(locale)
     rule_ids = {r.id for r in rules}
-    rows = [Row(str(i), c["en"], c["text"], {"category": c["register"]}) for i, c in enumerate(stage)]
+    # row keys carry the original key so key based contexts (Codex, Lore, News, BTN) apply
+    row_keys = [f"{i}.{c.get('key', '')}" for i, c in enumerate(stage)]
+    index = {k: i for i, k in enumerate(row_keys)}
+    rows = [Row(row_keys[i], c["en"], c["text"], {"category": c["register"]}) for i, c in enumerate(stage)]
     findings = lqa_linter.lint_rows(rows, rules, lqa_linter.LintOptions(locale=locale, check_untranslated=False))
-    banned = {f.key for f in findings if f.code in rule_ids}
-    broken = {f.key for f in findings if f.severity == "ERR" and f.code not in rule_ids}
+    banned: Dict[int, List[str]] = {}
+    broken = set()
+    for f in findings:
+        if f.code in rule_ids:
+            banned.setdefault(index[f.key], []).append(f.code)
+        elif f.severity == "ERR":
+            broken.add(index[f.key])
     kept: List[Dict[str, Any]] = []
+    ref_hits: List[Dict[str, str]] = []
     seen = set()
     for i, c in enumerate(stage):
-        if str(i) in banned:
-            reasons["ban_list"] += 1
-            continue
-        if str(i) in broken:
+        if i in banned:
+            if not c.get("reference"):
+                reasons["ban_list"] += 1
+                continue
+            ref_hits.extend({"key": c["key"], "rule": code} for code in sorted(set(banned[i])))
+        if i in broken:
             reasons["technical"] += 1
             continue
         pair = (c["source"], norm_text(c["en"]), norm_text(c["text"]))
@@ -385,7 +403,9 @@ def layer2_mechanical(cands: List[Dict[str, Any]], locale: str) -> Tuple[List[Di
         seen.add(pair)
         kept.append(c)
     return kept, {"in": len(cands), "out": len(kept), "dropped": dict(sorted(reasons.items())),
-                  "length_ratio_bounds": [RATIO_MIN, RATIO_MAX]}
+                  "length_ratio_bounds": [RATIO_MIN, RATIO_MAX],
+                  "reference_exempt": {"length_ratio": ref_ratio, "rule_hits": ref_hits,
+                                       "by_rule": dict(sorted(Counter(h["rule"] for h in ref_hits).items()))}}
 
 
 def layer3_mt(cands: List[Dict[str, Any]], locale: str, provider: Any, min_words: int, bulk_limit: int = BULK_COMMIT_ROWS) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
@@ -693,6 +713,7 @@ def build_pack(manifest_path: Path, locale: str, langpack_dir: Path, cache_dir: 
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     cands = ref_rows + cands
     l1["rows_in"] = len(cands)
+    l1["sources_in"] += 1 if ref_rows else 0
     l1["sources_kept"] += 1 if ref_rows else 0
     records = ref_records[:1] + records if ref_records else records
     for c in cands:
@@ -775,6 +796,9 @@ def main() -> int:
         st = f[key]
         applied = "" if st.get("applied", True) else " (not applied)"
         lines.append(f"  {name}{applied}: {st['in']} -> {st['out']} " + (json.dumps(st.get("dropped", {}), ensure_ascii=False) if st.get("dropped") else ""))
+        ex = st.get("reference_exempt") or {}
+        if ex.get("rule_hits") or ex.get("length_ratio"):
+            lines.append(f"    reference kept despite: length ratio {len(ex.get('length_ratio', []))}, rule hits {json.dumps(ex.get('by_rule', {}))}")
     lines.append(f"  Rows: bundle {m['counts']['bundle']}, local {m['counts']['local']} (local rows stay in local/)")
     if empty:
         lines.append("  WARN: no row survived the filters")

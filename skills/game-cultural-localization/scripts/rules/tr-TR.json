@@ -40,6 +40,7 @@
       "pattern": "\\b\\w+m[ae]kt[ae]d[ıi]r(?:lar|ler)?\\b",
       "flags": "i",
       "message": "Report-style '-maktadır/-mektedir' ending: use plain present ('-ıyor') or a short clause",
+      "skip_contexts": ["formal"],
       "examples": {
         "match": [
           "Üretim devam etmektedir.",
@@ -71,6 +72,7 @@
       "pattern": "\\bsahip\\s+ol\\w*",
       "flags": "i",
       "message": "'sahip olmak' calque of 'to have': prefer 'var / elinde'",
+      "skip_contexts": ["formal"],
       "examples": {
         "match": [
           "Bir reaktöre sahip olmalısın."
@@ -160,6 +162,7 @@
       "severity": "WARN",
       "pattern": "(?:^|[.!?]\\s+)Sen(?:in)?\\s+\\w+(?:da|de|nda|nde|ın|in)?\\s",
       "flags": "",
+      "context": "ui",
       "message": "Redundant 'Sen/Senin' at sentence start: Turkish verb endings already carry person (pro-drop)",
       "examples": {
         "match": [

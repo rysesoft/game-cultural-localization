@@ -42,7 +42,8 @@ _MOJIBAKE_RE = re.compile(r"[ÃÂ][\u0080-\u00ff]|â€[\u0080-\u00ff\x9d\x9c\x9
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
-RULE_CONTEXTS = ("any", "ui", "dialog", "player", "button")
+RULE_CONTEXTS = ("any", "ui", "dialog", "player", "button", "formal")
+ROW_CONTEXTS = ("ui", "dialog", "player", "button", "formal")
 
 
 class Rule(NamedTuple):
@@ -50,9 +51,10 @@ class Rule(NamedTuple):
     severity: str
     regex: re.Pattern
     message: str
-    context: str        # any | ui | dialog | player | button
+    context: str        # any | ui | dialog | player | button | formal
     skip_variants: tuple
     source: str
+    skip_contexts: tuple = ()   # row contexts where the rule never applies, e.g. ("formal",)
 
 
 class Finding(NamedTuple):
@@ -108,6 +110,9 @@ def _compile_rule_file(path: Path, locale: str, variant: Optional[str]) -> List[
         skip = tuple(str(v).lower() for v in raw.get("skip_variants", []) or [])
         if variant and variant.lower() in skip:
             continue
+        skip_ctx = raw.get("skip_contexts", []) or []
+        if not isinstance(skip_ctx, list) or any(str(c) not in ROW_CONTEXTS for c in skip_ctx):
+            raise L10nError(f"{path}: rule {raw['id']} has invalid skip_contexts {skip_ctx!r} (list of {'|'.join(ROW_CONTEXTS)})")
         vsev = raw.get("variant_severity") or {}
         if not isinstance(vsev, dict):
             raise L10nError(f"{path}: rule {raw['id']}: 'variant_severity' must be an object like {{\"hk\": \"WARN\"}}")
@@ -115,7 +120,7 @@ def _compile_rule_file(path: Path, locale: str, variant: Optional[str]) -> List[
             sev = str({k.lower(): v for k, v in vsev.items()}[variant.lower()]).upper()
             if sev not in ("ERR", "WARN"):
                 raise L10nError(f"{path}: rule {raw['id']} variant_severity has invalid severity {sev!r}")
-        rules.append(Rule(str(raw["id"]), sev, rx, str(raw["message"]), ctx, skip, path.name))
+        rules.append(Rule(str(raw["id"]), sev, rx, str(raw["message"]), ctx, skip, path.name, tuple(str(c) for c in skip_ctx)))
     return rules
 
 
@@ -166,7 +171,11 @@ class LintOptions(NamedTuple):
 
 
 _UI_WORDS = ("ui", "button", "menu", "label", "tooltip", "hud", "toast", "warning", "tab", "badge", "prompt", "keybind")
-_DIALOG_WORDS = ("dialog", "dialogue", "speech", "letter", "story", "npc", "bark", "cutscene", "mail", "news")
+_DIALOG_WORDS = ("dialog", "dialogue", "speech", "letter", "story", "npc", "bark", "cutscene", "mail", "news",
+                 "dialogue_casual", "dialogue_formal")
+# formal register, in-world news and encyclopedic lore (codex), where report style is the native voice
+_FORMAL_WORDS = ("formal", "dialogue_formal", "official", "news", "announcement", "press", "lore", "codex", "encyclopedia")
+_FORMAL_KEY_RE = re.compile(r"(?i)(?:^|[_.])(?:codex|lore|news)(?:$|[_.])")
 
 
 def row_contexts(key: str, meta: Dict[str, Any]) -> set:
@@ -174,7 +183,9 @@ def row_contexts(key: str, meta: Dict[str, Any]) -> set:
 
     'ui' / 'dialog' come from category/context/type fields; 'button' from a button
     category or a key containing BTN/BUTTON; 'player' from a truthy 'player' field,
-    an 'audience'/'tags' value containing 'player', or category 'player'.
+    an 'audience'/'tags' value containing 'player', or category 'player'; 'formal' from a
+    formal, news or lore category (dialogue_formal, news, codex ...) or a key segment
+    Codex / Lore / News.
     """
     tags: set = set()
     values = []
@@ -194,18 +205,24 @@ def row_contexts(key: str, meta: Dict[str, Any]) -> set:
             tags.add("button")
         if "player" in parts:
             tags.add("player")
+        if parts & set(_FORMAL_WORDS):
+            tags.add("formal")
     if meta.get("player") in (True, 1, "1", "true", "True", "yes"):
         tags.add("player")
     if re.search(r"(?i)(?:^|[_.])(?:btn|button)(?:$|[_.])", key):
         tags.update({"button", "ui"})
+    if _FORMAL_KEY_RE.search(key):
+        tags.add("formal")
     return tags
 
 
 def rule_applies(rule: "Rule", contexts: set) -> bool:
-    """ui/dialog rules apply unless the row is tagged with the other context; player/button rules need an explicit tag."""
+    """skip_contexts win; ui/dialog rules apply unless the row is tagged with the other context; player/button/formal rules need an explicit tag."""
+    if set(rule.skip_contexts) & contexts:
+        return False
     if rule.context == "any":
         return True
-    if rule.context in ("player", "button"):
+    if rule.context in ("player", "button", "formal"):
         return rule.context in contexts
     if rule.context == "ui":
         return "ui" in contexts or "dialog" not in contexts
