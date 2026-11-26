@@ -24,9 +24,11 @@ Python 3.9+, standard library only.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from itertools import combinations
 from pathlib import Path
@@ -132,11 +134,13 @@ def _mean(xs: Sequence[float]) -> Optional[float]:
 
 def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dict[str, Any]], shots_pairs: Sequence[Dict[str, Any]],
              *, warmup: bool, pack_dir: Optional[Path], seed: int, warmup_count: int, pairwise_min: float,
-             langpack_version: Optional[str], workers: int = 1) -> Dict[str, Any]:
+             langpack_version: Optional[str], workers: int = 1, store: Optional[Path] = None) -> Dict[str, Any]:
     """Run the calibration once (with or without warm-up) and return the B3.6 report.
 
     With workers > 1 every distinct model is calibrated in its own thread and sends up to `workers`
     batches at once. Results are keyed, so the report does not depend on the worker count.
+    With a store file every finished model is saved under a signature of model, tier, prompt and items.
+    A failing model no longer throws away the others, and a rerun only calls the models that are missing.
     """
     regs = sorted({p.get("register") for p in pairs if p.get("register") in REGISTERS}) or list(REGISTERS)
     warm_text = ""
@@ -149,18 +153,45 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
         for m in router.jury(tier):
             unique.setdefault(m.model, (tier, m))  # a model in two tiers (deepseek-v4-pro in J2 and J3) is called once
 
-    def calibrate(item: Tuple[str, Tuple[str, Any]]) -> Tuple[str, Dict[str, Any]]:
+    stored: Dict[str, Any] = load_json_data(store) if store is not None and Path(store).is_file() else {}
+    lock = threading.Lock()
+
+    def signature(model: str, tier: str) -> str:
+        blob = json.dumps({"model": model, "tier": tier, "system": system, "pairs": pw, "entries": entries}, ensure_ascii=False, sort_keys=True)
+        return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+    def calibrate(item: Tuple[str, Tuple[str, Any]]) -> Tuple[str, Optional[Dict[str, Any]], Optional[str]]:
         model, (tier, m) = item
-        choices = pairwise_choices(m.provider, pw, locale, system=system, workers=workers)
-        votes = score_entries(m.provider, entries, locale, tier=tier, system=system, workers=workers)
-        return model, {"choices": choices, "scores": {k: v["score"] for k, v in votes.items()}}
+        sig = signature(model, tier)
+        if sig in stored:
+            return model, stored[sig], None
+        try:
+            choices = pairwise_choices(m.provider, pw, locale, system=system, workers=workers)
+            votes = score_entries(m.provider, entries, locale, tier=tier, system=system, workers=workers)
+        except Exception as exc:  # noqa: BLE001  one failing model must not throw away the finished ones
+            return model, None, f"{type(exc).__name__}: {exc}"
+        result = {"choices": choices, "scores": {k: v["score"] for k, v in votes.items()}}
+        if store is not None:
+            with lock:
+                stored[sig] = result
+                tmp = Path(store).with_suffix(".tmp")
+                tmp.parent.mkdir(parents=True, exist_ok=True)
+                tmp.write_text(json.dumps(stored, ensure_ascii=False) + "\n", encoding="utf-8")
+                tmp.replace(store)
+        return model, result, None
 
     todo = list(unique.items())
     if int(workers) > 1 and len(todo) > 1:
         with ThreadPoolExecutor(max_workers=len(todo)) as ex:
-            cache: Dict[str, Dict[str, Any]] = dict(ex.map(calibrate, todo))
+            outcomes = list(ex.map(calibrate, todo))
     else:
-        cache = dict(calibrate(it) for it in todo)
+        outcomes = [calibrate(it) for it in todo]
+    failed = [(model, err) for model, _res, err in outcomes if err]
+    if failed:
+        hint = (f" Finished models are kept in {Path(store).name}, run the same command again to resume." if store is not None
+                else " Pass --cache FILE to keep finished models for a rerun.")
+        raise L10nError("calibration failed for " + ", ".join(m for m, _ in failed) + f" ({failed[0][1]})." + hint)
+    cache: Dict[str, Dict[str, Any]] = {model: res for model, res, _err in outcomes if res is not None}
     members: List[Dict[str, Any]] = []
     for tier in tiers:
         for m in router.jury(tier):
@@ -220,6 +251,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--pairwise-min", type=float, default=PAIRWISE_MIN, help=f"Pairwise accuracy gate (default {PAIRWISE_MIN})")
     ap.add_argument("--update-trust-card", action="store_true", help="Store the result in langpack/<locale>/trust_card.json under 'calibration'")
     ap.add_argument("--workers", type=int, default=4, help="Batches in flight per model, models run in parallel when above 1 (default 4, 1 = one call at a time)")
+    ap.add_argument("--cache", default=None, help="JSON file that keeps every finished model; a rerun with the same pairs, seed and prompt only calls the missing models")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap
@@ -243,7 +275,7 @@ def main() -> int:
     if args.workers < 1:
         raise L10nError("--workers must be 1 or more")
     kw = {"pack_dir": pack_dir, "seed": args.seed, "warmup_count": args.warmup_count, "pairwise_min": args.pairwise_min, "langpack_version": version,
-          "workers": args.workers}
+          "workers": args.workers, "store": Path(args.cache) if args.cache else None}
     if args.compare_warmup:
         with_w = evaluate(router, locale, tiers, evald, shots, warmup=True, **kw)
         without_w = evaluate(router, locale, tiers, evald, shots, warmup=False, **kw)

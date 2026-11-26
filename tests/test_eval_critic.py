@@ -117,6 +117,61 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(calls[0], calls[1])                 # same calls, only their timing differs
         self.assertEqual(len(reps[0]["members"]), 9)
 
+    def test_keyed_call_survives_a_provider_error(self):
+        from llm_tasks import KEYED_ATTEMPTS, pairwise_choices
+        from providers import ChatResult
+        from providers.base import ProviderError
+        from l10n_common import L10nError
+
+        class Flaky:
+            model = "flaky"
+
+            def __init__(self, failures: int) -> None:
+                self.failures, self.calls = failures, 0
+
+            def complete(self, system, user, **kw):
+                self.calls += 1
+                if self.calls <= self.failures:
+                    raise ProviderError("deepseek/x: response has no choices")   # seen live on deepseek-v4-pro
+                payload = json.loads(user.split("\n---\n", 1)[1])
+                return ChatResult(json.dumps({"choices": [{"id": p["id"], "choice": "a"} for p in payload["pairs"]]}), 1, 1, "flaky", 1)
+
+        once = Flaky(1)
+        self.assertEqual(pairwise_choices(once, [{"id": "p1", "a": "x", "b": "y"}], "tr-TR"), {"p1": "a"})
+        self.assertEqual(once.calls, 2)
+        always = Flaky(99)
+        with self.assertRaises(L10nError) as ctx:
+            pairwise_choices(always, [{"id": "p1", "a": "x", "b": "y"}], "tr-TR")
+        self.assertEqual(always.calls, KEYED_ATTEMPTS)
+        self.assertIn("no choices", str(ctx.exception))
+
+    def test_failed_model_keeps_the_others_and_resumes(self):
+        from unittest import mock
+        from l10n_common import L10nError
+        shots, pairs = ec.split_shots(cset()["pairs"], 2, 0, 1)
+        real = ec.pairwise_choices
+
+        def google_breaks(provider, *a, **kw):
+            if str(getattr(provider, "model", "")).startswith("gemini"):
+                raise L10nError("pairwise: model gemini returned no valid answer")
+            return real(provider, *a, **kw)
+        kw = dict(warmup=False, pack_dir=None, seed=1, warmup_count=5, pairwise_min=0.85, langpack_version=None, workers=4)
+        with TempDir() as td:
+            store = td / "eval_cache.json"
+            router = Router(load_providers_config(), dry_run=True)
+            with mock.patch.object(ec, "pairwise_choices", google_breaks):
+                with self.assertRaises(L10nError) as ctx:
+                    ec.evaluate(router, "tr-TR", ["J1", "J2", "J3"], pairs, shots, store=store, **kw)
+            self.assertIn("gemini-4-hydrogen", str(ctx.exception))
+            self.assertIn("run the same command again", str(ctx.exception))
+            self.assertEqual(len(json.loads(store.read_text(encoding="utf-8"))), 5)   # the five non-Gemini models are kept
+            router2 = Router(load_providers_config(), dry_run=True)
+            rep = ec.evaluate(router2, "tr-TR", ["J1", "J2", "J3"], pairs, shots, store=store, **kw)
+            self.assertEqual({r["model"] for r in router2.budget.records}, {"gemini-4-hydrogen", "gemini-4-neon", "gemini-4-carbon"})
+            self.assertEqual(len(rep["members"]), 9)
+            full = ec.evaluate(Router(load_providers_config(), dry_run=True), "tr-TR", ["J1", "J2", "J3"], pairs, shots, **kw)
+            self.assertEqual(rep, full)   # resumed and uninterrupted runs give the same report
+
     def test_run_batches_keeps_order_and_raises(self):
         from llm_tasks import run_batches
         self.assertEqual(run_batches([[1, 2], [3], [4, 5]], lambda b: {str(x): x * 10 for x in b}, workers=3),

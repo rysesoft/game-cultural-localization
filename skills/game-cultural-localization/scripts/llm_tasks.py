@@ -28,6 +28,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from l10n_common import L10nError  # noqa: E402
 from providers import envelope, extract_json  # noqa: E402
+from providers.base import ProviderError  # noqa: E402
+
+KEYED_ATTEMPTS = 3  # one call and up to two re-asks for missing ids, an empty or broken reply counts as a failed attempt
 
 T = TypeVar("T")
 
@@ -100,14 +103,23 @@ def system_for(task: str, locale: str, template: Optional[str] = None) -> str:
 def _call_keyed(provider: Any, system: str, task: str, base_payload: Dict[str, Any], items: List[Dict[str, Any]],
                 list_field: str, reply_field: str, id_field: str, accept: Callable[[Dict[str, Any]], bool],
                 max_tokens: int) -> Dict[str, Dict[str, Any]]:
-    """Call once, re-ask once for missing ids, return id -> reply item."""
+    """Call, re-ask for missing ids up to KEYED_ATTEMPTS in total, return id -> reply item.
+
+    A provider error that survived the transport retries (for example a 200 reply without choices)
+    and a reply that is not JSON both count as a failed attempt instead of ending the whole run.
+    """
     got: Dict[str, Dict[str, Any]] = {}
     pending = items
-    for _attempt in range(2):
+    last_error = ""
+    for _attempt in range(KEYED_ATTEMPTS):
         payload = dict(base_payload)
         payload["task"] = task
         payload[list_field] = pending
-        res = provider.complete(system, envelope(INSTRUCTIONS[task], payload), max_tokens=max_tokens, json_mode=True)
+        try:
+            res = provider.complete(system, envelope(INSTRUCTIONS[task], payload), max_tokens=max_tokens, json_mode=True)
+        except ProviderError as exc:
+            last_error = str(exc)
+            continue
         try:
             data = extract_json(res.text)
         except L10nError:
@@ -120,7 +132,7 @@ def _call_keyed(provider: Any, system: str, task: str, base_payload: Dict[str, A
             return got
     model = getattr(provider, "model", "?")
     raise L10nError(f"{task}: model {model} returned no valid answer for {len(pending)} item(s), first ids "
-                    + ", ".join(str(p[id_field]) for p in pending[:5]))
+                    + ", ".join(str(p[id_field]) for p in pending[:5]) + (f" (last error: {last_error})" if last_error else ""))
 
 
 def translate_rows(provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, task: str = "pass1",

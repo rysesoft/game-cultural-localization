@@ -175,8 +175,8 @@ class HttpAdapterTests(unittest.TestCase):
         self.assertEqual(req["body"]["max_tokens"], 16000)   # thinking counts against the limit, 4096 was used up by thinking alone live
 
     def test_every_adapter_leaves_room_for_thinking(self):
-        for name, reply, field in (("anthropic", ANTHROPIC_OK, ("max_tokens",)), ("deepseek", DEEPSEEK_OK, ("max_tokens",)),
-                                   ("google", GOOGLE_OK, ("generationConfig", "maxOutputTokens"))):
+        for name, reply, field, floor in (("anthropic", ANTHROPIC_OK, ("max_tokens",), 16000), ("deepseek", DEEPSEEK_OK, ("max_tokens",), 16000),
+                                          ("google", GOOGLE_OK, ("generationConfig", "maxOutputTokens"), 32000)):  # gemini-4-carbon hit 16000 live
             p, t, _ = self._make(name, [(200, reply, {}), (200, reply, {})])
             p.complete("s", "u", max_tokens=1024)
             p.complete("s", "u", max_tokens=40000)
@@ -186,7 +186,7 @@ class HttpAdapterTests(unittest.TestCase):
                 for f in field:
                     v = v[f]
                 got.append(v)
-            self.assertEqual(got, [16000, 40000], name)
+            self.assertEqual(got, [floor, 40000], name)
 
     def test_bundled_config_runs_mechanical_deepseek_roles_without_thinking(self):
         cfg = load_providers_config()

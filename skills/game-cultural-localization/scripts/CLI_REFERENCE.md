@@ -208,7 +208,7 @@ Exit codes. 0 the gate passed and no line is unresolved. 1 the gate failed, the 
 
 ## LLM providers (providers/ and providers.config.json)
 
-The `providers/` package talks to Anthropic, Google Gemini and DeepSeek with `urllib` only, no SDK. Every adapter returns a `ChatResult(text, input_tokens, output_tokens, model, latency_ms)` through one interface, `complete(system, user, temperature, max_tokens, json_mode)`. The Anthropic adapter drops `temperature`, because current Claude models answer it with HTTP 400. Every adapter asks for at least 16000 output tokens, because current Claude, Gemini and DeepSeek models think before they answer and the thinking counts against that limit. Requests time out after 600 seconds. The Gemini key travels in the `x-goog-api-key` header. `as_legacy()` wraps a provider for the old `complete(system, user) -> str` interface of `orchestrator_stub.py`.
+The `providers/` package talks to Anthropic, Google Gemini and DeepSeek with `urllib` only, no SDK. Every adapter returns a `ChatResult(text, input_tokens, output_tokens, model, latency_ms)` through one interface, `complete(system, user, temperature, max_tokens, json_mode)`. The Anthropic adapter drops `temperature`, because current Claude models answer it with HTTP 400. Every adapter asks for at least 16000 output tokens, Gemini for at least 32000, because current Claude, Gemini and DeepSeek models think before they answer and the thinking counts against that limit. A batched task re-asks up to three times in total, and a reply without content counts as a failed attempt instead of ending the run. Requests time out after 600 seconds. The Gemini key travels in the `x-goog-api-key` header. `as_legacy()` wraps a provider for the old `complete(system, user) -> str` interface of `orchestrator_stub.py`.
 
 | Piece | Behaviour |
 |---|---|
@@ -382,6 +382,7 @@ The system prompt is `prompts/critic.<locale>.md` with a seeded warm-up sample f
 | `--limit` / `--seed` | seeded subset of the remaining pairs, seed for side order, subsets and warm-up (default 1234) |
 | `--pairwise-min` | gate, default 0.85 |
 | `--workers` | batches in flight per model, default 4. Above 1 every distinct model is calibrated in its own thread. The report is the same for every value, only the wall clock changes. A live full run with 8 models drops from hours to minutes |
+| `--cache` | JSON file that keeps the answers of every finished model under a signature of model, tier, prompt and items. When one model fails the others are kept and the run stops with a hint, the same command then only calls the missing models. Keep it out of the shipped pack, for example in `loc_work/` |
 | `--update-trust-card` | store the result under `calibration` in `langpack/<locale>/trust_card.json` |
 | `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
 
