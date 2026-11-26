@@ -164,21 +164,46 @@ with the slice target (an entry typed `placeholder_grammar` may deliberately rep
 
 ---
 
-## orchestrator_stub.py — API-independent Phase 0-3 runner
+## orchestrator_stub.py (Phase 0 to 3 runner)
 
 ```
-python orchestrator_stub.py --input <source table> --locale <loc> --workdir <dir> (--dry-run | --provider module:function) [options]
+python orchestrator_stub.py --input <source table> --locale <loc> --workdir <dir> (--dry-run | --live | --provider module:function) [options]
 ```
+
+Two flows share Phase 0 and Phase 3. One of `--dry-run`, `--live` or `--provider` is required, without any of them the run stops with exit 2.
+
+Jury flow (`--dry-run` with the offline fake provider, `--live` with the real APIs and the keys from `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `DEEPSEEK_API_KEY`).
+
+| Phase | What happens | Files in `--workdir` |
+|---|---|---|
+| 0 | locale, rules, bible stub, optional font scan, trust level of the language pack, warm-up sample, translation memory | `<LOCALE>_BIBLE.md` |
+| 1 | Pass 1 with the `pass1` model, warm-up in the system prompt, the closest approved TM lines per row (RAG) | `pass1_batch_NN.json` |
+| 2 | blind slice, J1 to J3 jury with deliberation, Pass 2 with three candidates and a blind J1 pick, `validate_critique`, change report | `blind_<loc>_NN.json`, `verdicts_<loc>_NN.json`, `rewrites_<loc>_NN.json`, `final_batch_NN.json`, `changes_<loc>_NN.json`, `changes_<loc>_NN.md` |
+| 3 | `lqa_linter`, `ui_expansion_checker`, optional `font_glyph_scanner` on the final batches | `lqa_<loc>_NN.json`, `budget.jsonl` |
+
+Validated Pass 2 lines replace the Pass 1 text in `final_batch_NN.json`, unresolved lines keep the Pass 1 text until the developer decides. When the budget cap stops the jury, the batch report is written, Phase 3 is skipped and the run exits 1.
+
+Legacy flow (`--provider module:function`). Any callable `complete(system: str, user: str) -> str` drives the 2.1 single critic flow (`critique_<loc>_NN.json`). Code callers keep `run_pipeline(..., DryRunProvider(locale))` for the old offline flow.
 
 | Flag | Meaning |
 |---|---|
-| `--input` | source table; the `--src-field` column (default `en`) holds the English text |
-| `--workdir` | receives `<LOCALE>_BIBLE.md` (stub if missing), `pass1_batch_NN.json`, `blind_<loc>_NN.json`, `critique_<loc>_NN.json`, `final_batch_NN.json`, `lqa_<loc>_NN.json` |
-| `--dry-run` | offline `DryRunProvider` (pseudo-translation, empty critique) — exercises the whole file flow and the gate without an LLM |
-| `--provider module:function` | any callable `complete(system: str, user: str) -> str` (OpenAI, Anthropic, Gemini, local…) |
+| `--input` | source table, the `--src-field` column (default `en`) holds the English text |
+| `--workdir` | scratch folder for every file above |
+| `--dry-run` | jury flow with the fake provider, no key and no network |
+| `--live` | jury flow with the real APIs |
+| `--provider module:function` | legacy single critic flow |
+| `--providers-config`, `--fake-scenario`, `--budget-log` | model access of the jury flow, the budget log defaults to `<workdir>/budget.jsonl` |
+| `--langpack-dir` | root of the language packs, default the skill's `langpack/` |
+| `--tm` | translation memory (`tm.py` SQLite) for Pass 1 RAG and the jury evidence |
+| `--no-deliberation` | leave J3 disagreements unresolved |
+| `--no-budget-caps` | never stop at the J2 or J3 cap |
+| `--candidates` | Pass 2 candidates per flagged line, default 3 |
+| `--seed` | seed of warm-up, few-shots and candidate order, default 1234 |
 | `--key-field`, `--placeholder-style`, `--tag-style`, `--batch-size`, `--font` | pipeline options |
 
-Phases: 0 pre-flight (locale, rules, bible, optional font scan) → 1 Pass-1 → 2 blind slice → critic → `validate_critique` → Pass-2 → 3 gate (linter + UI checker + font scan). Exit 1 when the gate fails or a critique is invalid.
+JSON report. `{passed, flow (jury or legacy), summary (gate), log, finals, batches[{batch, verdicts, rewrites, final, report, unresolved, stats}], halted, unresolved, trust_level, notes, exit_code}`.
+
+Exit codes. 0 the gate passed and no line is unresolved. 1 the gate failed, the budget cap stopped the run, a line is unresolved, or a legacy critique is invalid. 2 usage or input error.
 
 ---
 

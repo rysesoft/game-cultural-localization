@@ -1,27 +1,30 @@
 #!/usr/bin/env python3
-"""API-independent orchestration stub for the 4-phase culturalization pipeline.
+"""API-independent orchestration of the 4-phase culturalization pipeline.
 
-This is the R&D starting point for running the pipeline against ANY LLM API:
-implement the Provider protocol (one method: complete(system, user) -> str) for
-OpenAI / Anthropic / Gemini / a local model, and the phases below do the rest.
-Nothing here depends on Antigravity; the agent prompt bodies are loaded from
-agents/*.md (frontmatter stripped) and references/<locale>.md so they can be
-sent as plain system prompts.
+Two flows share Phase 0 and Phase 3. The agent prompt bodies come from agents/*.md
+(frontmatter stripped) and references/<locale>.md, so any LLM API can serve them.
 
-Pipeline (canonical numbering):
-  Phase 0  pre-flight: locale validation, bible check, optional font scan
-  Phase 1  Pass-1 clean-room culturalization (provider call per batch)
-  Phase 2  blind slice -> critic (provider call, target-only) -> validate_critique -> Pass-2 rewrite
+Jury flow (default since 2.2). Model access through providers/ and providers.config.json.
+  Phase 0  pre-flight: locale, rules, bible, optional font scan, language pack trust level,
+           warm-up sample, translation memory
+  Phase 1  Pass 1 with the 'pass1' model, warm-up in the system prompt, the closest approved
+           TM lines per row (RAG)
+  Phase 2  blind slice -> J1/J2/J3 mixed-family jury (+ deliberation) -> Pass 2 with three
+           candidates and a blind J1 pick -> validate_critique -> change report for the developer
   Phase 3  automated LQA gate (lqa_linter + ui_expansion_checker [+ font_glyph_scanner])
+  --dry-run uses the deterministic fake provider (no key, no network), --live the real APIs
+  (keys from ANTHROPIC_API_KEY, GOOGLE_API_KEY, DEEPSEEK_API_KEY).
 
-Dry run (no LLM): DryRunProvider echoes a deterministic pseudo-translation so the
-whole file flow and the gate can be exercised offline:
+    python orchestrator_stub.py --dry-run --locale tr-TR --input strings.json --workdir out/ --json
 
-    python orchestrator_stub.py --dry-run --locale de-DE --input strings.json --workdir out/
-    python orchestrator_stub.py --dry-run --locale de-DE --input strings.json --workdir out/ --json
+Legacy flow (2.1). One single critic through any complete(system, user) -> str callable:
 
-Exit codes: 0 pipeline passed, 1 a phase failed (gate findings / invalid critique),
-2 usage / input error.  Python 3.9+, standard library only.
+    python orchestrator_stub.py --provider mymodule:complete --locale de-DE --input strings.json --workdir out/
+
+run_pipeline(..., DryRunProvider(locale)) keeps the old offline flow for code callers.
+
+Exit codes: 0 pipeline passed, 1 a phase failed (gate findings, invalid critique, budget cap,
+unresolved jury lines), 2 usage / input error.  Python 3.9+, standard library only.
 """
 
 from __future__ import annotations
@@ -32,7 +35,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Protocol
+from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -286,19 +289,191 @@ def run_pipeline(input_path: Path, locale: str, workdir: Path, provider: Provide
     return {"passed": summary["passed"], "summary": summary, "log": state.log, "finals": [str(f) for f in finals]}
 
 
+# --------------------------------------------------------------------------- #
+# Jury flow (2.2)
+# --------------------------------------------------------------------------- #
+
+def _register(row: Row) -> str:
+    from build_language_pack import infer_register
+    reg = str(row.meta.get("register") or "")
+    return reg if reg else infer_register(str(row.meta.get("category") or ""), row.src, "game")
+
+
+def _write_report(report_changes: Any, verdict_doc: Dict[str, Any], locale: str, n: int, tag: str, workdir: Path,
+                  rewrites: Optional[Dict[str, Any]], sources: Dict[str, Dict[str, str]], pack_dir: Path) -> Dict[str, Any]:
+    rep = report_changes.build_report(verdict_doc, locale, f"{n:02d}", rewrites=rewrites, sources=sources, pack_dir=pack_dir, budget=None)
+    (workdir / f"changes_{tag}.json").write_text(json.dumps(rep, ensure_ascii=False, indent=2), encoding="utf-8")
+    (workdir / f"changes_{tag}.md").write_text(report_changes.render_markdown(rep), encoding="utf-8")
+    return rep
+
+
+def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any, *, src_field: str = "en", key_field: str = "key",
+                      ph_style: str = "auto", tag_style: str = "auto", batch_size: int = 50, fonts: Optional[List[Path]] = None,
+                      langpack_dir: Optional[Path] = None, tm_path: Optional[Path] = None, deliberation: bool = True,
+                      budget_caps: bool = True, candidates: int = 3, seed: int = 1234) -> Dict[str, Any]:
+    """Phase 0-3 with the multi-family jury. Returns {'passed', 'flow', 'summary', 'log', 'finals', 'batches', 'halted', ...}."""
+    import deliberate
+    import jury
+    import pass2_rewrite
+    import report_changes
+    from build_language_pack import LANGPACK_DIR
+    from llm_tasks import translate_rows
+    from roundtrip_check import load_threshold, roundtrip_evidence
+    from warmup_loader import load_warmup, render_warmup
+
+    workdir.mkdir(parents=True, exist_ok=True)
+    rows = [Row(r.key, r.dst, "", r.meta) for r in load_table(input_path, src_field, src_field, key_field, target_only=True)]
+    if not rows:
+        raise L10nError(f"{input_path}: no rows to localize")
+    state = PipelineState(locale, workdir, src_field, src_field, key_field, ph_style, tag_style)
+    phase0_preflight(state, rows, fonts or [])
+    packs = Path(langpack_dir) if langpack_dir else LANGPACK_DIR
+    pack_dir = packs / locale
+    level, version = report_changes.trust_level(pack_dir)
+    state.say(f"Phase 0: trust level {level}" + (f", language pack {version}" if version else ", no language pack"))
+    tm = None
+    if tm_path is not None:
+        from tm import TranslationMemory
+        if not Path(tm_path).is_file():
+            raise L10nError(f"translation memory not found: {tm_path}")
+        tm = TranslationMemory(Path(tm_path))
+        state.say(f"Phase 0: translation memory {Path(tm_path).name}")
+    regs = sorted({_register(r) for r in rows})
+    warm = ""
+    if pack_dir.is_dir() and ((pack_dir / "warmup.jsonl").is_file() or (pack_dir / "local" / "warmup.jsonl").is_file()):
+        sample = load_warmup(pack_dir, regs, 40, seed)
+        warm = render_warmup(sample)
+        state.say(f"Phase 0: warm-up {len(sample)} lines for {', '.join(regs)}")
+    pass1_system = system_prompt("game-culturalizer", locale, state.bible)
+    if warm:
+        pass1_system += "\n\n# Native warm-up (read aloud before translating)\n" + warm
+    rt_cfg = router.config.roundtrip
+    threshold, _thr_src = load_threshold(locale, packs)
+    finals: List[Path] = []
+    batches: List[Dict[str, Any]] = []
+    halted: Optional[Dict[str, Any]] = None
+    try:
+        for i in range(0, len(rows), batch_size):
+            batch = rows[i:i + batch_size]
+            n = i // batch_size + 1
+            tag = f"{locale}_{n:02d}"
+            # Phase 1 ------------------------------------------------------- #
+            payload_rows = []
+            for r in batch:
+                pr: Dict[str, Any] = {"key": r.key, "source": r.src, "register": _register(r)}
+                for k in ("category", "speaker", "archetype", "max_chars"):
+                    if r.meta.get(k) not in (None, ""):
+                        pr[k] = r.meta[k]
+                if tm is not None:
+                    nb = tm.neighbors(locale, r.src, category=str(r.meta.get("category") or ""), speaker=str(r.meta.get("speaker") or ""), k=3)
+                    if nb:
+                        pr["tm"] = [{"source": x["src"], "target": x["dst"], "similarity": x["similarity"]} for x in nb]
+                payload_rows.append(pr)
+            targets = translate_rows(router.for_role("pass1"), payload_rows, locale, task="pass1", system=pass1_system,
+                                     extra={"placeholder_style": ph_style, "tag_style": tag_style})
+            p1 = workdir / f"pass1_batch_{n:02d}.json"
+            p1_rows = [{"key": r.key, "category": r.meta.get("category", ""), "speaker": r.meta.get("speaker", ""),
+                        src_field: r.src, locale: targets[r.key]} for r in batch]
+            p1.write_text(json.dumps(p1_rows, ensure_ascii=False, indent=2), encoding="utf-8")
+            rag = sum(1 for pr in payload_rows if pr.get("tm"))
+            state.say(f"Phase 1: batch {n:02d} -> {p1.name} ({len(batch)} rows" + (f", TM neighbours for {rag}" if tm is not None else "") + ")")
+            # Phase 2: blind slice + jury ----------------------------------- #
+            slice_rows = load_table(p1, src_field, locale, key_field, target_only=True)
+            entries = make_blind_slice.build_slice(slice_rows, ["category", "speaker"], src_field, False, 0)
+            make_blind_slice.verify_no_leak(entries, load_table(p1, src_field, locale, key_field), src_field)
+            blind = workdir / f"blind_{tag}.json"
+            make_blind_slice.write_slice(entries, blind, locale, p1.name)
+            jentries, _sf = jury.load_blind_slice(blind)
+            critic_system, info = jury.build_system_prompt(locale, jentries, pack_dir, warmup=True, warmup_count=40, shots=6, seed=seed)
+            src_by_key = {r.key: r.src for r in batch}
+
+            def rt_fn(lines: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+                rws = [{"key": e["key"], "en": src_by_key.get(e["key"], ""), "target": e["target"], "register": e["register"]} for e in lines]
+                return roundtrip_evidence(rws, locale, router.for_role("roundtrip"), min_words=int(rt_cfg["min_words"]),
+                                          registers=rt_cfg["registers"], threshold=threshold)
+
+            def tm_fn(entry: Dict[str, Any]) -> List[Dict[str, Any]]:
+                return tm.neighbors(locale, src_by_key.get(entry["key"], entry["target"]), category=str(entry.get("category") or ""),
+                                    speaker=str(entry.get("speaker") or ""), exclude_key=entry["key"])
+            res = jury.run_jury(jentries, locale, router, system=critic_system, budget_caps=budget_caps, roundtrip_fn=rt_fn,
+                                tm_lookup=tm_fn if tm is not None else None,
+                                deliberator=deliberate.make_deliberator(router, locale, critic_system) if deliberation else None)
+            verdict_doc = {"locale": locale, "source_file": p1.name, "langpack_version": info.get("langpack_version"),
+                           "prompt": {"warmup_lines": info.get("warmup_lines", 0), "shots": info.get("shots", 0)},
+                           "stats": res["stats"], "halted": res["halted"], "verdicts": res["verdicts"], "pending": res["pending"],
+                           "notes": router.notes}
+            vpath = workdir / f"verdicts_{tag}.json"
+            vpath.write_text(json.dumps(verdict_doc, ensure_ascii=False, indent=2), encoding="utf-8")
+            st = res["stats"]["status"]
+            state.say(f"Phase 2: batch {n:02d} jury " + ", ".join(f"{k} {v}" for k, v in st.items() if v) + f" -> {vpath.name}")
+            batch_info: Dict[str, Any] = {"batch": n, "verdicts": vpath.name, "stats": res["stats"]}
+            if res["halted"]:
+                halted = {"batch": n, **res["halted"]}
+                state.say(f"Phase 2: batch {n:02d} STOPPED by the budget cap at {res['halted']['stage']}. {res['halted']['reason']}")
+                _write_report(report_changes, verdict_doc, locale, n, tag, workdir, None,
+                              {r.key: {"en": r.src, "target": targets[r.key]} for r in batch}, pack_dir)
+                batch_info["report"] = f"changes_{tag}.md"
+                batches.append(batch_info)
+                break
+            # Phase 2: Pass 2 candidates + blind J1 pick + validate_critique -- #
+            sources = pass2_rewrite.load_source_table(p1, src_field, locale, key_field, locale)
+            p2_system, pick_system = pass2_rewrite.build_systems(locale, pack_dir, regs, warmup=True, seed=seed)
+            rw = pass2_rewrite.rewrite_lines(res["verdicts"], sources, locale, router, pass2_system=p2_system, pick_system=pick_system,
+                                             n=candidates, seed=seed, ph_style=ph_style, tag_style=tag_style, source_file=p1.name)
+            rpath = workdir / f"rewrites_{tag}.json"
+            rpath.write_text(json.dumps({"locale": locale, "source_file": p1.name, "verdicts": vpath.name, **rw, "notes": router.notes},
+                                        ensure_ascii=False, indent=2), encoding="utf-8")
+            status_by_key = {v["key"]: v["status"] for v in res["verdicts"]}
+            applied = {l["key"]: l["new"] for l in rw["lines"] if l["valid"] and status_by_key.get(l["key"]) != "unresolved"}
+            final = workdir / f"final_batch_{n:02d}.json"
+            final.write_text(json.dumps([{**row, locale: applied.get(row["key"], row[locale])} for row in p1_rows], ensure_ascii=False, indent=2),
+                             encoding="utf-8")
+            finals.append(final)
+            kept = sum(1 for l in rw["lines"] if not l["valid"])
+            state.say(f"Phase 2: batch {n:02d} Pass 2 rewrote {len(applied)} rows, {kept} kept the old text -> {final.name}")
+            rep = _write_report(report_changes, verdict_doc, locale, n, tag, workdir, {"lines": rw["lines"]}, {}, pack_dir)
+            state.say(f"Phase 2: batch {n:02d} change report changes_{tag}.md ({rep['changed']} changes, {len(rep['unresolved'])} unresolved)")
+            batch_info.update({"rewrites": rpath.name, "final": final.name, "report": f"changes_{tag}.md", "unresolved": len(rep["unresolved"])})
+            batches.append(batch_info)
+    finally:
+        if tm is not None:
+            tm.close()
+    if halted:
+        summary: Dict[str, Any] = {"errors": 0, "warnings": 0, "high": 0, "warn": 0, "missing_glyphs": 0, "passed": False, "halted": True}
+        state.say("Phase 3: skipped, the run stopped at the budget cap")
+    else:
+        summary = phase3_gate(state, finals, fonts or [])
+    unresolved = sum(b.get("unresolved", 0) for b in batches)
+    if unresolved:
+        state.say(f"Phase 2: {unresolved} unresolved line(s) wait for a developer decision")
+    passed = bool(summary["passed"]) and not halted and unresolved == 0
+    return {"passed": passed, "flow": "jury", "summary": summary, "log": state.log, "finals": [str(f) for f in finals],
+            "batches": batches, "halted": halted, "unresolved": unresolved, "trust_level": level, "notes": list(router.notes)}
+
+
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog=TOOL, description="API-independent Phase 0-3 orchestration stub (--dry-run needs no LLM)")
+    ap = argparse.ArgumentParser(prog=TOOL, description="API-independent Phase 0-3 orchestration (jury flow with --dry-run or --live, legacy flow with --provider)")
     add_input_argument(ap, "Source string table (JSON/CSV/TSV/PO/.asset); the --src-field column holds English")
     ap.add_argument("--locale", required=True, help="Target locale")
-    ap.add_argument("--workdir", required=True, help="Scratch directory for batches, slices, critiques and reports")
+    ap.add_argument("--workdir", required=True, help="Scratch directory for batches, slices, verdicts and reports")
     ap.add_argument("--src-field", default=None, help="Source column (default en)")
     ap.add_argument("--key-field", default=None, help="Key column (default key)")
     ap.add_argument("--placeholder-style", default=None, help="unity|unreal|godot|icu|printf|python|auto")
     ap.add_argument("--tag-style", default=None, help="tmp|html|bbcode|auto")
-    ap.add_argument("--batch-size", type=int, default=50, help="Rows per provider call (default 50)")
+    ap.add_argument("--batch-size", type=int, default=50, help="Rows per batch (default 50)")
     ap.add_argument("--font", action="append", default=[], help="Font file(s) for the glyph gate (repeatable)")
-    ap.add_argument("--dry-run", action="store_true", help="Use the offline DryRunProvider (no LLM call)")
-    ap.add_argument("--provider", help="Python path 'module:function' of a complete(system, user) -> str callable")
+    ap.add_argument("--dry-run", action="store_true", help="Jury flow with the offline fake provider (no API key, no network)")
+    ap.add_argument("--live", action="store_true", help="Jury flow with the real APIs (keys from the environment)")
+    ap.add_argument("--provider", help="Legacy single-critic flow: Python path 'module:function' of a complete(system, user) -> str callable")
+    ap.add_argument("--providers-config", default=None, help="providers.config.json (default: the bundled one)")
+    ap.add_argument("--fake-scenario", help="Fake provider scenario JSON (with --dry-run)")
+    ap.add_argument("--budget-log", default=None, help="budget.jsonl (default: <workdir>/budget.jsonl)")
+    ap.add_argument("--langpack-dir", default=None, help="Root of the language packs (default: the skill's langpack/)")
+    ap.add_argument("--tm", default=None, help="Translation memory (tm.py SQLite) for Pass 1 RAG and jury evidence")
+    ap.add_argument("--no-deliberation", action="store_true", help="Leave J3 disagreements unresolved")
+    ap.add_argument("--no-budget-caps", action="store_true", help="Do not stop at the J2 or J3 escalation cap")
+    ap.add_argument("--candidates", type=int, default=3, help="Pass 2 candidates per flagged line (default 3)")
+    ap.add_argument("--seed", type=int, default=1234, help="Seed of warm-up, few-shots and candidate order (default 1234)")
     add_common_args(ap, TOOL)
     return ap
 
@@ -309,28 +484,49 @@ def main() -> int:
     resolve_input(ap, args)
     cfg = load_config(Path(args.config)) if args.config else {}
     locale, _v = normalize_locale(args.locale)
-    if args.dry_run:
-        provider: Provider = DryRunProvider(locale)
-    elif args.provider:
-        mod_name, _, fn_name = args.provider.partition(":")
-        if not fn_name:
-            raise L10nError("--provider must be 'module:function'")
-        import importlib
-        try:
-            fn = getattr(importlib.import_module(mod_name), fn_name)
-        except (ImportError, AttributeError) as exc:
-            raise L10nError(f"cannot load provider {args.provider}: {exc}")
-        provider = CallableProvider(fn)
-    else:
-        raise L10nError("choose --dry-run or --provider module:function (no LLM adapter is bundled)")
+    modes = [m for m, on in (("--dry-run", args.dry_run), ("--live", args.live), ("--provider", bool(args.provider))) if on]
+    if len(modes) > 1:
+        raise L10nError(f"choose one of --dry-run, --live or --provider (got {', '.join(modes)})")
     src_field = pick(args.src_field, cfg, "src_field", "en")
+    key_field = pick(args.key_field, cfg, "key_field", "key")
+    ph_style = pick(args.placeholder_style, cfg, "placeholder_style", "auto")
+    tag_style = pick(args.tag_style, cfg, "tag_style", "auto")
+    if args.dry_run or args.live:
+        from llm_tasks import make_router
+        workdir = Path(args.workdir)
+        if not args.budget_log:
+            args.budget_log = str(workdir / "budget.jsonl")
+        router = make_router(args, ["pass1", "pass2", "roundtrip", "J1", "J2", "J3"])
+        result = run_jury_pipeline(
+            Path(args.input), locale, workdir, router, src_field=src_field, key_field=key_field, ph_style=ph_style, tag_style=tag_style,
+            batch_size=args.batch_size, fonts=[Path(f) for f in args.font], langpack_dir=Path(args.langpack_dir) if args.langpack_dir else None,
+            tm_path=Path(args.tm) if args.tm else None, deliberation=not args.no_deliberation, budget_caps=not args.no_budget_caps,
+            candidates=args.candidates, seed=args.seed)
+        exit_code = EXIT_OK if result["passed"] else EXIT_FINDINGS
+        text = "\n".join([f"Orchestrator run (jury flow, {'dry run' if args.dry_run else 'live'}):"] + ["  " + l for l in result["log"]]
+                         + [f"  NOTE: {n}" for n in result["notes"]] + [f"  Exit code: {exit_code}"])
+        payload = {"tool": TOOL, "version": __version__, "locale": locale, "workdir": str(args.workdir), **result, "exit_code": exit_code}
+        emit_report(text, payload, args.json, args.output)
+        return exit_code
+    if not args.provider:
+        raise L10nError("choose --dry-run (offline fake providers), --live (real APIs, keys from ANTHROPIC_API_KEY, GOOGLE_API_KEY, "
+                        "DEEPSEEK_API_KEY) or --provider module:function (legacy single-critic flow)")
+    mod_name, _, fn_name = args.provider.partition(":")
+    if not fn_name:
+        raise L10nError("--provider must be 'module:function'")
+    import importlib
+    try:
+        fn = getattr(importlib.import_module(mod_name), fn_name)
+    except (ImportError, AttributeError) as exc:
+        raise L10nError(f"cannot load provider {args.provider}: {exc}")
+    provider: Provider = CallableProvider(fn)
     result = run_pipeline(
         Path(args.input), locale, Path(args.workdir), provider, src_field=src_field, dst_field=src_field,
-        key_field=pick(args.key_field, cfg, "key_field", "key"), ph_style=pick(args.placeholder_style, cfg, "placeholder_style", "auto"),
-        tag_style=pick(args.tag_style, cfg, "tag_style", "auto"), batch_size=args.batch_size, fonts=[Path(f) for f in args.font],
+        key_field=key_field, ph_style=ph_style, tag_style=tag_style, batch_size=args.batch_size, fonts=[Path(f) for f in args.font],
     )
+    result["flow"] = "legacy"
     exit_code = EXIT_OK if result["passed"] else EXIT_FINDINGS
-    text = "\n".join(["Orchestrator run:"] + ["  " + l for l in result["log"]] + [f"  Exit code: {exit_code}"])
+    text = "\n".join(["Orchestrator run (legacy flow):"] + ["  " + l for l in result["log"]] + [f"  Exit code: {exit_code}"])
     payload = {"tool": TOOL, "version": __version__, "locale": locale, "workdir": str(args.workdir), **result, "exit_code": exit_code}
     emit_report(text, payload, args.json, args.output)
     return exit_code

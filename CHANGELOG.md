@@ -23,6 +23,7 @@ R&D release. Multi-family LLM jury, language packs and measured nativeness, see 
 - `scripts/tm.py` SQLite translation memory. Character trigram neighbours in category and speaker tiers (top 5), approved and candidate rows, approval flow back from change reports. `jury.py --tm` puts the closest approved lines into the evidence (P11).
 - `scripts/pass2_rewrite.py` and `prompts/pass2.tr-TR.md`, `prompts/pass2.de-DE.md`, `prompts/pass2.generic.md`. The pass2 model writes three candidates per flagged line, the J1 members pick one blind (majority), and the pick is checked with `validate_critique` before it replaces the old line (P12).
 - `scripts/report_changes.py` developer report `changes_<locale>_<batch>.json` and `.md` (B3.8) with trust level (A9), language pack version, budget summary, confidence per line, votes per tier, a decision field for `tm.py --mode approve` and an unresolved section with three rationales. The Markdown is checked against the house punctuation style (P13).
+- `scripts/orchestrator_stub.py` jury flow. Phase 0 adds the trust level, warm-up and translation memory, Phase 1 uses the `pass1` model with warm-up and TM retrieval, Phase 2 runs blind slice, jury with deliberation, Pass 2 candidates with a blind J1 pick and the change report, Phase 3 keeps the gate. `--dry-run` runs it end to end with the fake provider, `--live` with the real APIs, the legacy `--provider module:function` flow is unchanged (P14).
 
 ## [2.1.0] — 2026-11-26
 
