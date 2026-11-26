@@ -48,7 +48,7 @@ Model access goes through [providers/](./scripts/providers/) and [providers.conf
 * [tm.py](./scripts/tm.py) is the SQLite translation memory with n-gram neighbours for Pass 1 RAG and the jury evidence.
 * [pass2_rewrite.py](./scripts/pass2_rewrite.py) writes three Pass 2 candidates, lets J1 pick one blind and validates it.
 * [report_changes.py](./scripts/report_changes.py) writes the developer change report (JSON and Markdown), [budget_report.py](./scripts/budget_report.py) the token, call and cost report with a project projection.
-* [prompts/](./prompts/) holds the native critic and Pass 2 prompts (`critic.tr-TR.md`, `critic.de-DE.md`, `pass2.tr-TR.md`, `pass2.de-DE.md`), the English fallbacks and `literal.md`.
+* [prompts/](./prompts/) holds the native critic and Pass 2 prompts of all 15 locales (`critic.<locale>.md`, `pass2.<locale>.md`, each written in its own language), the English fallbacks and `literal.md`.
 
 ### 15 Language Culturalization & Golden-Voice Playbooks (`references/`)
 * **Source Polish.** [en.md](./references/en.md)

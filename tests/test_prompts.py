@@ -67,9 +67,11 @@ class CriticPromptTests(unittest.TestCase):
         self.assertIn("keine Gegenpaare", empty)
 
     def test_generic_fallback_for_other_locales(self):
-        tpl = pt.find_prompt("critic", "fr")
-        self.assertFalse(tpl.native)
-        text = pt.render_prompt("critic", "fr")
+        with TempDir() as td:  # every bundled locale has its own prompt, so the fallback is tested in a folder with only the generic one
+            write_text(td / "critic.generic.md", (PROMPTS / "critic.generic.md").read_text(encoding="utf-8"))
+            tpl = pt.find_prompt("critic", "fr", prompts_dir=td)
+            self.assertFalse(tpl.native)
+            text = pt.render_prompt("critic", "fr", prompts_dir=td)
         self.assertIn("fr game text jury", text)
         self.assertNotIn("{{", text)
 
@@ -119,6 +121,65 @@ class PunctuationStyleTests(unittest.TestCase):
         self.assertEqual(lines, [1, 2, 3])
         self.assertEqual(text_style.sanitize_prose("Calque: English order; stiff — rewrite."), "Calque, English order, stiff, rewrite.")
         self.assertEqual(text_style.punctuation_problems(text_style.sanitize_prose("a: b; c – d")), [])
+
+
+# characteristic characters of each locale's script and the minimum count per prompt file
+SCRIPT_MARKS = {
+    "en": (r"[A-Za-z]", 400), "tr-TR": (r"[çğışöüİ]", 30), "de-DE": (r"[äöüß]", 20), "fr": (r"[éèàçêù]", 20),
+    "es-ES": (r"[ñáéíóú¿¡]", 20), "it-IT": (r"[àèéìòù]", 3), "pt-BR": (r"[ãõçáéâêó]", 20), "pt-PT": (r"[ãõçáéâêó]", 20),
+    "pl-PL": (r"[ąęłńóśźż]", 20), "lt-LT": (r"[ąčęėįšųūž]", 20), "ru-RU": (r"[а-яё]", 300), "ja-JP": (r"[぀-ゟ]", 100),
+    "ko-KR": (r"[가-힯]", 200), "zh-CN": (r"[一-鿿]", 200), "zh-Hant": (r"[一-鿿]", 200),
+}
+SIMPLIFIED_ONLY = "这们说时语为个么给们还"
+TRADITIONAL_ONLY = "這們說時語為個麼給還"
+FULLWIDTH_BANNED = ("；", "：", "——", "―")
+PASS2_INPUTS = ("source", "target", "register", "category", "speaker", "rationales", "suggestions", "tm")
+
+
+class AllLocalePromptTests(unittest.TestCase):
+    """Every supported locale has a native critic and Pass 2 prompt with the same structure."""
+
+    def test_every_locale_has_native_prompts(self):
+        from l10n_common import CANONICAL_LOCALES
+        for loc in CANONICAL_LOCALES:
+            for name in ("critic", "pass2"):
+                with self.subTest(locale=loc, prompt=name):
+                    tpl = pt.find_prompt(name, loc)
+                    self.assertTrue(tpl.native, f"{name}.{loc}.md missing")
+                    self.assertEqual(tpl.meta.get("locale"), loc)
+                    self.assertEqual(tpl.meta.get("name"), name)
+                    body = tpl.body
+                    prose = text_style.prose_only(body)
+                    self.assertEqual(body.count("{{WARMUP}}"), 1)
+                    self.assertEqual(body.count("{{CONTRASTIVE}}"), 1)
+                    self.assertEqual(set(pt.SLOT_RE.findall(body)), {"WARMUP", "CONTRASTIVE"} | ({"LOCALE"} if "{{LOCALE}}" in body else set()))
+                    self.assertEqual(re.findall(r"(?m)^(\d)\. ", body), [str(i) for i in range(1, 8)])
+                    rx, minimum = SCRIPT_MARKS[loc]
+                    self.assertGreaterEqual(len(re.findall(rx, prose)), minimum, f"{name}.{loc}.md is not written in the target script")
+                    if loc != "en":
+                        for marker in ENGLISH_PROMPT_MARKERS:
+                            self.assertFalse(marker in prose, f"{name}.{loc}.md: English prompt text '{marker}'")
+                    for ch in FULLWIDTH_BANNED:
+                        self.assertNotIn(ch, prose, f"{name}.{loc}.md: banned punctuation {ch!r}")
+                    if loc == "zh-CN":
+                        self.assertFalse(set(TRADITIONAL_ONLY) & set(prose), "zh-CN prompt uses traditional characters")
+                    if loc == "zh-Hant":
+                        self.assertFalse(set(SIMPLIFIED_ONLY) & set(prose), "zh-Hant prompt uses simplified characters")
+                    if name == "critic":
+                        for score in range(1, 6):
+                            self.assertRegex(body, rf"(?m)^\| {score} \|")
+                        for it in ISSUE_TYPES:
+                            self.assertIn(f"`{it}`", body)
+                        for field in ("votes", "key", "score", "issue_type", "reason", "suggested"):
+                            self.assertIn(f'"{field}"', body)
+                        for field in ("tier", "member", "family", "model"):
+                            self.assertIn(f"`{field}`", body)
+                    else:
+                        self.assertIn('"candidates"', body)
+                        for field in PASS2_INPUTS:
+                            self.assertIn(f"`{field}`", body)
+                    rendered = pt.render_prompt(name, loc, warmup="- x", contrastive="1. ✓ a")
+                    self.assertNotIn("{{", rendered)
 
 
 if __name__ == "__main__":

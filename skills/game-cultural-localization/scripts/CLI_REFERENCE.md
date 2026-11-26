@@ -509,7 +509,7 @@ python pass2_rewrite.py verdicts_tr-TR_01.json --source-table pass1_tr-TR_01.jso
 
 For every verdict with status `rewrite_light`, `rewrite`, `critical` or `unresolved` (the last one as a proposal for the developer).
 
-1. The `pass2` model (default Opus) writes three different candidates with `prompts/pass2.<locale>.md` (native Turkish and German prompts, `pass2.generic.md` elsewhere). It sees the English source, the current line, the context, the jury rationales and suggestions and the closest approved translation memory lines.
+1. The `pass2` model (default Opus) writes three different candidates with `prompts/pass2.<locale>.md` (a native prompt for each of the 15 locales, `pass2.generic.md` only as a fallback). It sees the English source, the current line, the context, the jury rationales and suggestions and the closest approved translation memory lines.
 2. The three J1 members see only the candidates (seeded order, ids `c1` to `c3`) and the context, never the source, and each picks the most natural one. Most picks wins, a tie goes to the earlier candidate.
 3. The winner goes through `validate_critique` (fixed critique schema, placeholder and tag parity with the current line, not identical to it). When it fails, the next candidate by votes is tried. When none passes, the old line stays and the line is reported.
 
@@ -567,9 +567,9 @@ Exit codes. 0 report written. 1 report written and some lines are unresolved or 
 
 | File | Use |
 |---|---|
-| `prompts/critic.tr-TR.md`, `prompts/critic.de-DE.md` | native critic prompt written in the target language. A concrete player persona (not a translator), warm-up slot, contrastive pair slot, 1 to 5 rubric, issue types, task order and the vote schema `{"votes": [{key, score, issue_type, reason, suggested}]}` |
-| `prompts/critic.generic.md` | English fallback for locales without a native critic prompt, verdicts made with it count as estimated |
-| `prompts/pass2.tr-TR.md`, `prompts/pass2.de-DE.md`, `prompts/pass2.generic.md` | Pass 2 rewrite prompt (writer persona, warm-up and contrastive slots, seven step task order, three candidates per line) |
+| `prompts/critic.<locale>.md` (all 15 locales) | native critic prompt written in the target language. A concrete player persona (not a translator), warm-up slot, contrastive pair slot, 1 to 5 rubric, issue types, task order and the vote schema `{"votes": [{key, score, issue_type, reason, suggested}]}` |
+| `prompts/critic.generic.md` | English fallback, used only when a project adds a locale without its own critic prompt |
+| `prompts/pass2.<locale>.md` (all 15 locales), `prompts/pass2.generic.md` | Pass 2 rewrite prompt (writer persona, warm-up and contrastive slots, seven step task order, three candidates per line) |
 | `prompts/literal.md` | instruction for the robot side of contrastive pairs (word for word, English word order, no idioms, placeholders kept) |
 
 A template starts with a short frontmatter block (`name`, `locale`, `language`, `empty_warmup`, `empty_contrastive`) and uses the slots `{{LOCALE}}`, `{{WARMUP}}` and `{{CONTRASTIVE}}`. `prompt_templates.render_prompt(name, locale, warmup, contrastive)` picks `<name>.<locale>.md`, then `<name>.generic.md`, then `<name>.md`, fills the slots and rejects unknown ones. `render_contrastive(pairs, count, seed)` builds the seeded few-shot block, one `✓` native line and one `✗` robot line per pair. The jurors never write `tier`, `member`, `family` or `model`, the harness adds them.

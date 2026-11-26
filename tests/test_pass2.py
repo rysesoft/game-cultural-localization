@@ -67,7 +67,8 @@ class PromptTests(unittest.TestCase):
             self.assertEqual(re.findall(r"(?m)^(\d)\. ", tpl.body), [str(i) for i in range(1, 8)])
             self.assertIn('"candidates"', tpl.body)
             self.assertNotIn("Reply with", prose)
-        self.assertFalse(pt.find_prompt("pass2", "fr").native)
+        self.assertTrue(pt.find_prompt("pass2", "fr").native)
+        self.assertTrue((SCRIPTS.parent / "prompts" / "pass2.generic.md").is_file())
         for path in sorted((SCRIPTS.parent / "prompts").glob("pass2.*.md")):
             self.assertEqual(text_style.punctuation_problems(path.read_text(encoding="utf-8")), [], path.name)
 

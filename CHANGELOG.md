@@ -2,7 +2,18 @@
 
 All notable changes to this plugin are documented here. The version number lives in `plugin.json` and `scripts/l10n_common.py`.
 
+## [Unreleased]
+
+### Added
+- Native critic and Pass 2 prompts for the remaining 13 locales (`en`, `fr`, `es-ES`, `it-IT`, `pt-BR`, `pt-PT`, `pl-PL`, `lt-LT`, `ru-RU`, `ja-JP`, `ko-KR`, `zh-CN`, `zh-Hant`), each written in its own language with a local player or writer persona, so every locale now has `prompts/critic.<locale>.md` and `prompts/pass2.<locale>.md`. The English generic prompts stay as a fallback for locales a project adds.
+- The KDE source of `langpack/sources.manifest.json` lists the Turkish and German translations of five KDE games (KPatience, KMines, KNavalBattle, KSudoku, KBounce), pinned to a Subversion revision.
+- `text_style.punctuation_problems(..., exempt_examples=True)` checks explanations while quoted, italic and non-Latin target-language examples keep their own punctuation.
+
+### Changed
+- The 15 playbooks, the transcreation ledger guide, both agents and `rules/AGENTS.md` follow the house punctuation style in their explanations. Target-language examples are unchanged.
+
 ## [2.2.0] 2026-11-26
+
 
 R&D release. A multi-family LLM jury, language packs and measured nativeness, built in the work packages P1 to P15. Every model call can run offline with `--dry-run` (deterministic fake provider), the test suite never calls a real API.
 
