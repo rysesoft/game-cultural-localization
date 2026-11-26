@@ -507,6 +507,38 @@ Rewrite file. `{locale, source_file, verdicts, lines[{key, en, old, new, status,
 
 Exit codes. 0 every rewritten line has a validated new text. 1 at least one line kept its old text because no candidate passed. 2 usage or input error.
 
+## report_changes.py (developer change report)
+
+```
+python report_changes.py verdicts_tr-TR_01.json --locale tr-TR [--rewrites rewrites_tr-TR_01.json] [--source-table pass1_tr-TR_01.json] [--budget-log loc_work/]
+```
+
+Writes `changes_<locale>_<batch>.json` and `changes_<locale>_<batch>.md` (B3.8). The header holds the trust level, the language pack version and the budget summary of the batch. Every flagged line carries `key`, `en`, `old`, `new`, `status`, `reason`, `evidence`, `confidence` (0 to 1), the votes per tier and an empty `decision`. The developer sets `decision` to `accept` or `reject` and stores the result with `tm.py --mode approve`. Unresolved lines get their own section with the three rationales of the last round. Lines are sorted critical, unresolved, rewrite, rewrite light, then by confidence. Pass lines are counted but not listed.
+
+| Trust level (A9) | When |
+|---|---|
+| `measured` | the pack has a professional reference and a passing `eval_critic.py` calibration in `trust_card.json` |
+| `estimated` | a language pack is installed, judgement rests on proxy signals |
+| `rule_based` | no language pack, only the rule based gates speak for the line |
+
+Confidence is the tier base (J1 0.90, J2 0.80, J3 0.70, deliberation 0.60, unresolved 0.30), minus 0.10 per point of spread among the settling votes, plus 0.05 for a ban list hit and 0.05 for a back-translation calque flag, halved when no Pass 2 candidate passed validation, clamped to 0 and 1.
+
+The Markdown follows the house punctuation style. Model text is rewritten to that style, game text stays verbatim in code spans (pipes escaped), and the tool refuses to write a report that breaks the style.
+
+| Flag | Meaning |
+|---|---|
+| `--input` (or positional) | verdict file of `jury.py` (deliberated or not) |
+| `--locale` | target locale |
+| `--rewrites` | rewrite file of `pass2_rewrite.py`, gives `new` |
+| `--source-table` | Pass 1 table for `en`, `old`, `category` and `speaker` of lines without a rewrite |
+| `--budget-log` | `budget.jsonl` file or folder for the budget summary |
+| `--providers-config` | config with the prices |
+| `--langpack-dir` | root of the packs, for the trust level and version |
+| `--batch` | batch id of the file names, default taken from `verdicts_<locale>_<batch>.json` |
+| `--out-dir` | output folder, default next to the verdicts |
+
+Exit codes. 0 report written. 1 report written and some lines are unresolved or kept their old text. 2 usage or input error.
+
 ## Prompt templates (prompts/)
 
 | File | Use |

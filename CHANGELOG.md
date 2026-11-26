@@ -22,6 +22,7 @@ R&D release. Multi-family LLM jury, language packs and measured nativeness, see 
 - `scripts/deliberate.py` J3 deliberation round. Anonymous rationales (model and family names scrubbed), evidence package (ban hits, three approved TM lines, back-translation signal), one re-vote, majority decides, three different scores stay unresolved. `jury.py` runs it by default (`--no-deliberation` to skip) (P10).
 - `scripts/tm.py` SQLite translation memory. Character trigram neighbours in category and speaker tiers (top 5), approved and candidate rows, approval flow back from change reports. `jury.py --tm` puts the closest approved lines into the evidence (P11).
 - `scripts/pass2_rewrite.py` and `prompts/pass2.tr-TR.md`, `prompts/pass2.de-DE.md`, `prompts/pass2.generic.md`. The pass2 model writes three candidates per flagged line, the J1 members pick one blind (majority), and the pick is checked with `validate_critique` before it replaces the old line (P12).
+- `scripts/report_changes.py` developer report `changes_<locale>_<batch>.json` and `.md` (B3.8) with trust level (A9), language pack version, budget summary, confidence per line, votes per tier, a decision field for `tm.py --mode approve` and an unresolved section with three rationales. The Markdown is checked against the house punctuation style (P13).
 
 ## [2.1.0] — 2026-11-26
 
