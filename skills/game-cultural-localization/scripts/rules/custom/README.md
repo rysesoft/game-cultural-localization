@@ -1,7 +1,7 @@
 # Project-specific linter rules
 
 Drop any `*.json` file in this folder (or pass `--rules <dir>` / `"rules_dir"` in `l10n.config.json`) to add
-rules for your own game. Each file follows [rules.schema.json](../rules.schema.json):
+rules for your own game. Each file follows [rules.schema.json](../rules.schema.json).
 
 ```json
 {
@@ -20,7 +20,7 @@ rules for your own game. Each file follows [rules.schema.json](../rules.schema.j
 }
 ```
 
-* The `locale` field selects which `--locale` run loads the file; aliases (`de`, `de_DE`) are accepted.
+* The `locale` field selects which `--locale` run loads the file. Aliases (`de`, `de_DE`) are accepted.
 * Rule ids must be unique across built-in + custom files (a duplicate id aborts with exit 2).
-* `examples` are optional but recommended: `tests/test_rules_selftest.py` verifies every rule file found here as well.
+* `examples` are optional but recommended, `tests/test_rules_selftest.py` verifies every rule file found here as well.
 * To suppress a rule on one string, add an `lqa_ignore` field to that row (`"lqa_ignore": "DE-EHE, PROJ-DE-NO-SIE"`).

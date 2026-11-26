@@ -2,7 +2,7 @@
 
 **Game localization plugin for AI coding agents and LLM tools.** It turns machine or LLM first drafts into natural, native sounding game text in 15 locales. Built for localization leads, narrative teams, and indie developers who ship with AI assisted translation and refuse to ship translationese. Antigravity is the primary target. Claude Code, Gemini CLI, Cursor, Codex, and any plain LLM API are supported through the open Agent Skills format.
 
-[![CI](https://github.com/rysesoft/game-cultural-localization/actions/workflows/tests.yml/badge.svg)](https://github.com/rysesoft/game-cultural-localization/actions/workflows/tests.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB.svg)](#specification) [![Languages 15](https://img.shields.io/badge/languages-15-success.svg)](#supported-languages) [![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](#specification)
+[![CI](https://github.com/rysesoft/game-cultural-localization/actions/workflows/tests.yml/badge.svg)](https://github.com/rysesoft/game-cultural-localization/actions/workflows/tests.yml) [![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB.svg)](#specification) [![Languages 15](https://img.shields.io/badge/languages-15-success.svg)](#supported-languages) [![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](#specification)
 
 Maintained by [Rysesoft](https://github.com/rysesoft) at [github.com/rysesoft/game-cultural-localization](https://github.com/rysesoft/game-cultural-localization).
 
@@ -11,6 +11,7 @@ Maintained by [Rysesoft](https://github.com/rysesoft) at [github.com/rysesoft/ga
 1. **15 culturalization playbooks** with Golden Voice Anchors tagged with five voice archetypes (A1 to A5).
 2. **Two agent prompts.** A culturalizer for Pass 1 and Pass 2, and a blind native ear critic that only ever reads a target only slice.
 3. **Deterministic gates.** Linter, UI overflow checker, font tofu scanner, blind slice generator, and critique validator, all pure Python with zero dependencies.
+4. **Mixed-family LLM jury.** Claude, Gemini and DeepSeek judge every line blind in three tiers, settle disagreements by anonymous deliberation and hand the developer a change report with reasons, evidence and confidence.
 
 ## Supported Languages
 
@@ -52,7 +53,7 @@ Examples come from the Golden Voice Anchors in the playbooks, so agents and huma
 
 | Locale | Source (EN) | Typical MT or LLM output | What this suite expects | Why |
 |---|---|---|---|---|
-| `tr-TR` A1 Mentor | Start with whatever you can salvage and get the workshop running again. Do that, and I'll send a few contracts your way. | Mevcut malzemeleri geri dönüştürerek atölye operasyonlarını yeniden tesis et; ardından sana sözleşmeler aktaracağım. | Eldeki hurdadan ne çıkarabiliyorsan onunla başla, şu dükkânı yeniden ayağa kaldır. Çarkı bir döndür, kendi işlerimden birkaçını sana paslarım. | Bureaucratic verbs replaced with workshop talk, warm senior register kept |
+| `tr-TR` A1 Mentor | Start with whatever you can salvage and get the workshop running again. Do that, and I'll send a few contracts your way. | Mevcut malzemeleri geri dönüştürerek atölye operasyonlarını yeniden tesis et, ardından sana sözleşmeler aktaracağım. | Eldeki hurdadan ne çıkarabiliyorsan onunla başla, şu dükkânı yeniden ayağa kaldır. Çarkı bir döndür, kendi işlerimden birkaçını sana paslarım. | Bureaucratic verbs replaced with workshop talk, warm senior register kept |
 | `de-DE` A1 Mentor | Same line | Beginne mit der Verwertung verfügbarer Materialien, um den Werkstattbetrieb wiederherzustellen, und ich werde Aufträge an dich übertragen. | Fang mit dem an, was du aus dem Schrott rausholen kannst, und bring den Laden wieder zum Laufen. Dann schieb ich dir ein paar von meinen Aufträgen rüber. | Spoken du register, no nominal style, no calqued future tense |
 | `ja-JP` A4 Engineer | The generator's output is unstable. Don't run it above 80% until I've recalibrated the coils. | 発電機の出力は不安定です。私がコイルを再調整するまで、それを80%以上で稼働させないでください。 | 発電機の出力が安定してません。コイルを調整し直すまで、80%以上は出さないでくださいね。 | Redundant 私 and それ dropped, conversational 丁寧語 instead of manual speak |
 
@@ -66,6 +67,21 @@ Examples come from the Golden Voice Anchors in the playbooks, so agents and huma
 | 3 Automated gate | `lqa_linter.py --fail-on-error`, `ui_expansion_checker.py --fail-on-high`, `font_glyph_scanner.py`, write back, checksum scope check | All exit 0, only target locale files changed |
 
 The five archetypes are A1 Mentor, A2 Hotshot Rival, A3 Rookie, A4 Scientist, and A5 Antagonist. UI text uses the locked UI register of the locale instead. The full runbook with per phase inputs and outputs is in [methodology_and_qa.md](./skills/game-cultural-localization/references/methodology_and_qa.md).
+
+## Multi-Family Jury (2.2)
+
+Version 2.2 adds an optional R&D layer that replaces the single critic with a jury of three model families and measures how native the result sounds, without a human native reviewer in the loop.
+
+| Step | What happens |
+|---|---|
+| Language pack | `build_language_pack.py` builds `langpack/<locale>/` from licensed game and UI corpora plus the studio's own translation. Copyleft sources stay on the local machine |
+| Warm-up and pairs | `warmup_loader.py` puts 30 to 50 native lines into every prompt, `build_contrastive_set.py` pairs native lines with deliberately literal robot lines |
+| Calibration | `eval_critic.py` checks that every juror prefers the native line in at least 85 % of the pairs |
+| Jury | `jury.py` runs three tiers of Claude, Gemini and DeepSeek on a blind slice. Clear lines settle early, critical lines go straight to the strongest tier, disagreements go through anonymous deliberation |
+| Rewrite | `pass2_rewrite.py` writes three candidates, the cheapest tier picks one blind, `validate_critique` checks it |
+| Report | `report_changes.py` lists every change with old and new text, reason, evidence, confidence and votes. The developer accepts or rejects, `tm.py` remembers the decision |
+
+API keys come only from `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` and `DEEPSEEK_API_KEY`, model ids from `scripts/providers.config.json`. Every tool runs offline with `--dry-run`, and `python scripts/orchestrator_stub.py --dry-run --locale tr-TR --input strings.json --workdir out/` shows the whole flow without any key. `budget_report.py` turns the logged calls into a cost estimate for a full project. Details are in [methodology_and_qa.md](./skills/game-cultural-localization/references/methodology_and_qa.md) and [CLI_REFERENCE.md](./skills/game-cultural-localization/scripts/CLI_REFERENCE.md).
 
 ## Install
 
@@ -107,7 +123,7 @@ The skill's `name` and `description` are loaded at session start and the body on
 3. Run `make_blind_slice.py`, send only the slice to the critic in a fresh conversation, save `critique_<locale>_<batch>.json`, and run `validate_critique.py`.
 4. Send the Pass 1 file plus the validated critique for Pass 2, then run the Phase 3 gate.
 
-`scripts/orchestrator_stub.py` runs the same loop against any provider that implements `complete(system, user) -> str` (start with `--dry-run`).
+`scripts/orchestrator_stub.py` runs the same loop. `--provider module:function` takes any `complete(system, user) -> str` callable, `--dry-run` runs the multi-family jury offline and `--live` runs it with the real APIs.
 
 ## CLI Summary
 
@@ -159,7 +175,9 @@ agents/                     game-culturalizer.md, native-ear-critic.md
 skills/game-cultural-localization/
   SKILL.md                  Agent Skills entry point, archetypes, 8 laws, minimal instructions
   references/               15 playbooks, methodology_and_qa.md, transcreation_ledger_guide.md
-  scripts/                  CLI tools, rules/<locale>.json, CLI_REFERENCE.md, workflow template, orchestrator stub
+  scripts/                  CLI tools, rules/<locale>.json, CLI_REFERENCE.md, workflow template, orchestrator, providers/ and the jury tools
+  prompts/                  native critic and Pass 2 prompts, literal.md
+  langpack/                 sources.manifest.json and the built language packs (local/ stays on the machine)
 tests/                      python -m unittest discover tests
 .github/                    CI workflow, issue and PR templates
 ```

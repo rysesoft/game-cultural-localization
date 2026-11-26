@@ -1,6 +1,6 @@
 # Tests
 
-Standard-library `unittest` only. Run from the repository root:
+Standard library `unittest` only. Run it from the repository root. No test calls a real API, every model call goes to the fake provider and `GCL_OFFLINE=1` blocks the network in the CLI tests.
 
 ```
 python -B -m unittest discover tests      # -B keeps __pycache__ out of the source tree
@@ -14,7 +14,7 @@ pwsh tests/run_all.ps1          # runs the suite with every Python it finds (bun
 | `test_lqa_linter.py` | exit codes 0/1/2, 15 locales, BOM/CSV/TSV/PO/Unity inputs, `--json` schema + file, determinism, `--max-report`, Windows cp1252 pipe, glossary + config, placeholder/tag styles, custom rules, strict whitespace, 50k-row performance (< 10 s) |
 | `test_ui_expansion.py` | audit cases (ON→EINGESCHALTET …), locale factors, CJK/ambiguous width, budgets (`max_chars`, `--max-width`, config table), line-count, sorting, CLI/JSON/config |
 | `test_font_glyph.py` | synthetic TTF (cmap 4 + 12), TTC, WOFF, corrupt fonts → exit 2, TMP static vs dynamic (`--strict`), character collection, real `msgothic.ttc` when present |
-| `test_blind_slice_and_critique.py` | blind slice has no source column, leak refusal, CSV/TSV/PO/.asset inputs, CSV output; critique schema validation, parity, CLI |
+| `test_blind_slice_and_critique.py` | blind slice has no source column, leak refusal, CSV/TSV/PO/.asset inputs, CSV output, critique schema validation, parity, CLI |
 | `test_pipeline_and_cli.py` | workflow template compiles with top-level await and references existing scripts, orchestrator dry-run passes deterministically / fails on bad output, `--help`/`--version` for every script, CLI_REFERENCE.md documents every flag |
 | `test_providers.py` | provider config validation (model ids, one family per jury tier, missing keys), request shape of the three adapters, retry and backoff, model fallback, local urllib round trip, fake provider scenarios, budget log, `providers_check.py` exit codes |
 | `test_language_pack.py` | bundled manifest (no OpenSubtitles, license classes, https URLs), corpus parsers (PO, properties, Fluent, OpenTTD, nested JSON), register inference, tr-TR and de-DE packs built offline, one dropped and one passing row per filter layer, local class rows never outside `local/`, hash pin and lock, determinism, exit codes |
@@ -29,6 +29,7 @@ pwsh tests/run_all.ps1          # runs the suite with every Python it finds (bun
 | `test_tm.py` | trigram similarity, neighbour tiers by category and speaker, approved only by default, key exclusion, target side search, upsert rules, persistence, corrupt file, long text, add, query, approve and stats from the CLI, jury evidence |
 | `test_pass2.py` | native pass2 prompts, three candidates, majority of the blind J1 picks, fallback to the next candidate when the pick breaks a placeholder, old line kept when none passes, jurors never see the source, critique file valid against the blind slice, exit codes |
 | `test_report.py` | confidence formula, trust levels, reasons in house style, B3.8 JSON fields and order, Markdown free of semicolons, dashes and sentence colons with game text verbatim, budget summary, decisions flowing into `tm.py --mode approve`, exit codes |
+| `test_docs_style.py` | README, SKILL.md, the methodology, CLI_REFERENCE, this file, the custom rules README and the changelog follow the house punctuation style, every new script is in the SKILL.md map, CLI_REFERENCE and the changelog, versions agree |
 | `test_orchestrator_jury.py` | jury flow end to end with `--dry-run` (every Phase 0 to 3 file, rewrite applied, report style, budget roles), determinism, budget cap stop with report and skipped gate, unresolved line, TM retrieval and evidence, language pack warm-up, legacy `--provider` flow, mode errors |
 
 Fixtures live in `tests/fixtures/` (JSON, BOM-JSON, CSV, semicolon CSV, multi-line CSV, TSV, PO LF/CRLF, Unity StringTable `.asset`, TMP FontAsset `.asset` static/dynamic, fake font). Temporary files are created under the OS temp directory, never inside the repository.
