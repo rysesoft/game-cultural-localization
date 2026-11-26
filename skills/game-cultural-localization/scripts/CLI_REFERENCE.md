@@ -416,6 +416,7 @@ Evidence per line. `ban_hits` (locale rules of `rules/<locale>.json` on the targ
 | `--batch-size` | lines per model call, default 40 |
 | `--no-budget-caps` | never stop at the J2 or J3 cap |
 | `--no-deliberation` | leave J3 disagreements `unresolved` instead of running the deliberation round |
+| `--tm` | translation memory (`tm.py` SQLite file) for the `tm_neighbors` evidence, queried by the English source when `--source-table` is given, else by the target |
 | `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
 
 Vote (B3.3). `{key, tier, member, family, model, score, issue_type, reason, suggested}`. Verdict (B3.4). `{key, final_tier (J1, J2, J3 or deliberation), score, status (pass, rewrite_light, rewrite, critical, unresolved), votes, evidence{ban_hits, tm_neighbors, roundtrip}, rationales}`. The verdict file holds `locale`, `source_file`, `langpack_version`, `prompt`, `stats` (lines per tier, escalation ratios, status counts), `halted`, `verdicts`, `pending` and `notes`.
@@ -447,6 +448,34 @@ For lines the J3 tier disagrees on (spread of 2 or more). `jury.py` runs it auto
 Every deliberated verdict gets three extra votes with `tier` `deliberation` and a `deliberation` block `{first, revote, majority}`.
 
 Exit codes. 0 no line left unresolved. 1 at least one line stays unresolved. 2 usage or input error.
+
+## tm.py (SQLite translation memory and retrieval)
+
+```
+python tm.py loc_work/reference/tr.csv --db loc_work/tm.sqlite --locale tr-TR --mode add --status approved
+python tm.py pass1_tr-TR_01.json --db loc_work/tm.sqlite --locale tr-TR --mode query [--top 5]
+python tm.py changes_tr-TR_01.json --db loc_work/tm.sqlite --locale tr-TR --mode approve
+python tm.py --db loc_work/tm.sqlite --mode stats
+```
+
+One row per locale, key and source text, with `status` `approved` (studio reference, lines the developer accepted) or `candidate` (machine output). A candidate never replaces an approved row. Neighbours are found with character trigram similarity (Dice coefficient on case-folded text), standard library only. The closest rows come in three tiers, same `category` and `speaker` first, then same `category`, then any row, each tier ordered by similarity. Only approved rows count unless `--include-candidates` is given, the queried key itself is left out and the default floor is 0.3. `--mode approve` is the flow back. Every accepted change is stored as approved with its new text, a rejected change stores the kept old text as approved, lines without a decision are counted and left alone. `*.sqlite` files are gitignored.
+
+| Flag | Meaning |
+|---|---|
+| `--input` (or positional) | table to add or query, or a change report (`report_changes.py`, or a list of `{key, en, old, new, decision}`) to approve. Not needed with `--mode stats` |
+| `--db` | SQLite file, created when missing |
+| `--locale` | target locale, required except with `--mode stats` |
+| `--mode` | `add`, `query` (default), `approve` or `stats` |
+| `--status` | status of added rows, `candidate` (default) or `approved` |
+| `--origin` | free text origin label of added rows, default the input file name |
+| `--src-field` / `--dst-field` / `--key-field` | columns, defaults `en`, the locale code (then `dst`, `target`) and `key` |
+| `--top` | neighbours per row, default 5 |
+| `--min-similarity` | lowest similarity, default 0.3 |
+| `--include-candidates` | query candidate rows too |
+
+Query report. `results[{key, en, neighbors[{key, src, dst, category, speaker, status, similarity, match}]}]` where `match` is `category+speaker`, `category` or `any`.
+
+Exit codes. 0 done. 1 findings (rows skipped by `add`, rows without any neighbour in `query`, lines still without a decision in `approve`). 2 usage or input error.
 
 ## Prompt templates (prompts/)
 

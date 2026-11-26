@@ -315,6 +315,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--batch-size", type=int, default=40, help="Lines per model call (default 40)")
     ap.add_argument("--no-budget-caps", action="store_true", help="Do not stop when the J2 or J3 escalation ratio is above the cap")
     ap.add_argument("--no-deliberation", action="store_true", help="Leave J3 disagreements unresolved instead of running the deliberation round")
+    ap.add_argument("--tm", default=None, help="Translation memory (tm.py SQLite) for the evidence: closest approved lines")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap
@@ -343,12 +344,29 @@ def main() -> int:
             rows = [{"key": e["key"], "en": sources.get(e["key"], ""), "target": e["target"], "register": e["register"]} for e in lines]
             return roundtrip_evidence(rows, locale, router.for_role("roundtrip"), min_words=int(rt["min_words"]),
                                       registers=rt["registers"], threshold=threshold)
+    tm = None
+    tm_lookup = None
+    if args.tm:
+        from tm import TranslationMemory
+        if not Path(args.tm).is_file():
+            raise L10nError(f"--tm file not found: {args.tm}")
+        tm = TranslationMemory(Path(args.tm))
+        src_by_key = load_source_rows(Path(args.source_table), args.src_field, args.dst_field, args.key_field) if args.source_table else {}
+
+        def tm_lookup(entry: Dict[str, Any]) -> List[Dict[str, Any]]:
+            src = src_by_key.get(entry["key"], "")
+            return tm.neighbors(locale, src if src else entry["target"], on="src" if src else "dst",
+                                category=str(entry.get("category") or ""), speaker=str(entry.get("speaker") or ""), exclude_key=entry["key"])
     deliberator = None
     if not args.no_deliberation:
         from deliberate import make_deliberator  # local import: deliberate.py imports this module
         deliberator = make_deliberator(router, locale, system)
-    res = run_jury(entries, locale, router, system=system, batch_size=args.batch_size, budget_caps=not args.no_budget_caps,
-                   roundtrip_fn=roundtrip_fn, deliberator=deliberator)
+    try:
+        res = run_jury(entries, locale, router, system=system, batch_size=args.batch_size, budget_caps=not args.no_budget_caps,
+                       roundtrip_fn=roundtrip_fn, deliberator=deliberator, tm_lookup=tm_lookup)
+    finally:
+        if tm is not None:
+            tm.close()
     return write_report(args, locale, out, source_file, info, router, res)
 
 

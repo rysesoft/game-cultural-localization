@@ -20,6 +20,7 @@ R&D release. Multi-family LLM jury, language packs and measured nativeness, see 
 - `scripts/budget_report.py` aggregates `budget.jsonl` by role, provider and model (calls, tokens, latency, cost from the config prices, "price not set" for null prices) and projects the cost to 20,000 lines in 15 locales (P8).
 - `scripts/jury.py` tiered mixed-family jury (J1, J2, J3) over a blind slice with the A4 agreement rule, the critical shortcut to J3, budget caps that stop the run (30 % to J2, 10 % to J3), ban list, TM and back-translation evidence, B3.3 votes and B3.4 verdicts (P9).
 - `scripts/deliberate.py` J3 deliberation round. Anonymous rationales (model and family names scrubbed), evidence package (ban hits, three approved TM lines, back-translation signal), one re-vote, majority decides, three different scores stay unresolved. `jury.py` runs it by default (`--no-deliberation` to skip) (P10).
+- `scripts/tm.py` SQLite translation memory. Character trigram neighbours in category and speaker tiers (top 5), approved and candidate rows, approval flow back from change reports. `jury.py --tm` puts the closest approved lines into the evidence (P11).
 
 ## [2.1.0] — 2026-11-26
 
