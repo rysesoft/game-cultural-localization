@@ -10,10 +10,12 @@ All notable changes to this plugin are documented here. The version number lives
 - `text_style.punctuation_problems(..., exempt_examples=True)` checks explanations while quoted, italic and non-Latin target-language examples keep their own punctuation.
 
 - `lqa_linter` rules take `skip_contexts`, and rows have a new `formal` context (formal register, in-world news, codex lore, from the category or a `Codex`, `Lore` or `News` key segment).
+- `README_TR.md`, the full Turkish README. Both READMEs link each other and `test_docs_style.py` checks that their sections and code blocks stay in step.
 - `langpack/tr-TR/` is built with the studio's professional reference (`loc_work/reference/tr.csv`, kept out of git), so its warm-up lines include about 1400 lines of the studio's own human translation.
 
 ### Changed
 - The 15 playbooks, the transcreation ledger guide, both agents and `rules/AGENTS.md` follow the house punctuation style in their explanations. Target-language examples are unchanged.
+- README opens with the problem (typical LLM output next to native text), then the three layers that fix it, the jury with its agreement rules, budget caps and trust levels, and the Turkish language pack. The short Turkish summary moved into `README_TR.md`.
 - `scripts/build_language_pack.py` keeps reference lines that fail the length ratio or hit a ban list rule, the professional translation wins over the heuristics. These lines are listed in `manifest.json` under `layer2_mechanical.reference_exempt` and counted in the report.
 - `tr-TR` rules follow the studio reference. `TR-PRONOUN-SPAM` (sentence-initial "Sen/Senin") checks UI text only, an emphatic "Sen" stays free in dialogue and letters. `TR-MAKTADIR` and `TR-SAHIP-OLMAK` skip formal text, news and codex lore, where report style is the native voice.
 - The register names `dialogue_casual` and `dialogue_formal` count as dialogue for rule contexts, so jury evidence and the pack filter see dialogue rows as dialogue.

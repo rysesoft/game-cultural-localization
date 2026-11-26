@@ -15,6 +15,7 @@ import text_style  # noqa: E402
 
 STYLED_DOCS = (
     ROOT / "README.md",
+    ROOT / "README_TR.md",
     ROOT / "CHANGELOG.md",
     SCRIPTS.parent / "SKILL.md",
     REFS / "methodology_and_qa.md",
@@ -70,6 +71,20 @@ class CoverageTests(unittest.TestCase):
             self.assertIn(word, methodology)
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("## Multi-Family Jury (2.2)", readme)
+
+    def test_readme_translations_move_together(self):
+        en = (ROOT / "README.md").read_text(encoding="utf-8")
+        tr = (ROOT / "README_TR.md").read_text(encoding="utf-8")
+
+        def headings(text: str, level: str) -> list:
+            body = re.sub(r"(?ms)^```.*?^```", "", text)   # a '# comment' inside a code block is not a heading
+            return re.findall(rf"(?m)^{level} \S.*$", body)
+        self.assertEqual(len(headings(en, "##")), len(headings(tr, "##")), "README.md and README_TR.md have different sections")
+        self.assertEqual(len(headings(en, "###")), len(headings(tr, "###")))
+        self.assertIn("](./README_TR.md)", en)
+        self.assertIn("](./README.md)", tr)
+        self.assertIn("## Çok Aileli Jüri (2.2)", tr)
+        self.assertEqual(re.findall(r"```(\w*)", en), re.findall(r"```(\w*)", tr), "code blocks differ")
 
     def test_every_test_module_is_listed(self):
         listing = (TESTS_DIR / "README.md").read_text(encoding="utf-8")
