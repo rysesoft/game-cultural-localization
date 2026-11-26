@@ -23,5 +23,6 @@ pwsh tests/run_all.ps1          # runs the suite with every Python it finds (bun
 | `test_contrastive.py` | reference loading and registers, B3.5 pair schema, `literal.md` used for robot lines, identical and broken robot lines dropped, seeded subset, fake provider dry run, budget log roles, exit codes |
 | `test_roundtrip.py` | calque score range, register and word count eligibility (no call for ineligible rows), threshold search, calibration from a contrastive set, weak calibration, check mode with the calibrated pack threshold, exit codes |
 | `test_eval_critic.py` | weighted kappa, seeded and mixed side order, held out few-shots, B3.6 report, failing gate, one evaluation per model across tiers, warm-up comparison, trust card update, determinism, exit codes |
+| `test_budget_report.py` | cost from config prices, missing prices, grouping by role, provider and model, projection, router budget lines, folder input, `--max-cost`, broken logs, exit codes |
 
 Fixtures live in `tests/fixtures/` (JSON, BOM-JSON, CSV, semicolon CSV, multi-line CSV, TSV, PO LF/CRLF, Unity StringTable `.asset`, TMP FontAsset `.asset` static/dynamic, fake font). Temporary files are created under the OS temp directory, never inside the repository.

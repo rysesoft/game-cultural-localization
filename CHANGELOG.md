@@ -17,6 +17,7 @@ R&D release. Multi-family LLM jury, language packs and measured nativeness, see 
 - `scripts/build_contrastive_set.py` writes `contrastive.json` (native, robot and unknown lines per reference row, B3.5). Robot lines come from the `literal` model with `prompts/literal.md`, unknown lines from the `pass1` model or `--unknown-models` (P5).
 - `scripts/roundtrip_check.py` back-translation calque score (0 to 1) for dialogue lines over `min_words` words, `"applied": false` elsewhere, and `--calibrate` to derive `roundtrip_threshold.json` from the contrastive set (P6).
 - `scripts/eval_critic.py` calibrates every jury member on the contrastive set. Seeded pairwise preference with the 0.85 phase A gate, absolute native, robot and unknown means, inter and intra family kappa, warm-up on and off compared in one command, result stored in the trust card (B3.6, P7).
+- `scripts/budget_report.py` aggregates `budget.jsonl` by role, provider and model (calls, tokens, latency, cost from the config prices, "price not set" for null prices) and projects the cost to 20,000 lines in 15 locales (P8).
 
 ## [2.1.0] — 2026-11-26
 

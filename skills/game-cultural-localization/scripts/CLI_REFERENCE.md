@@ -362,6 +362,26 @@ Report (B3.6). `{locale, langpack_version, warmup, members[{tier, family, model,
 
 Exit codes. 0 every member reached the gate. 1 at least one member is below it. 2 usage or input error.
 
+## budget_report.py (tokens, calls, latency, cost and projection)
+
+```
+python budget_report.py loc_work/budget.jsonl [--rows 400] [--project-rows 20000] [--project-locales 15] [--max-cost 500]
+```
+
+Aggregates the `budget.jsonl` lines of every model call by role, by provider, by model and by role and model. Cost uses `price_in` and `price_out` (USD per 1M tokens) of `providers.config.json`. A model with a `null` price is shown as `price not set (fiyat girilmedi)` and its cost is left out of every total, so a total that contains such a model is a lower bound. Calls made with `--dry-run` are counted and flagged, their tokens are estimates.
+
+| Flag | Meaning |
+|---|---|
+| `--input` (or positional) | a `budget.jsonl` file, or a folder whose `budget*.jsonl` files are all read |
+| `--providers-config` | config with the prices, default the bundled one |
+| `--rows` | source lines the logged run processed, enables the projection |
+| `--project-rows` / `--project-locales` | projection size, default 20000 lines and 15 locales |
+| `--max-cost` | exit 1 when the projected cost (or the actual cost without `--rows`) in USD is above this |
+
+JSON report. `{files, records, dry_run_records, totals, by_role, by_provider, by_model, by_role_model, projection{calls_per_row, cost_per_row_usd, calls, input_tokens, output_tokens, cost_usd, complete, note}, missing_prices, fallbacks}`. Every group has `calls`, `errors`, `input_tokens`, `output_tokens`, `latency_ms`, `mean_latency_ms`, `cost_usd` and `priced`.
+
+Exit codes. 0 report written. 1 cost above `--max-cost`. 2 usage or input error (no log, broken line).
+
 ## Prompt templates (prompts/)
 
 | File | Use |
