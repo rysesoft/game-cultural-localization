@@ -25,5 +25,6 @@ pwsh tests/run_all.ps1          # runs the suite with every Python it finds (bun
 | `test_eval_critic.py` | weighted kappa, seeded and mixed side order, held out few-shots, B3.6 report, failing gate, one evaluation per model across tiers, warm-up comparison, trust card update, determinism, exit codes |
 | `test_budget_report.py` | cost from config prices, missing prices, grouping by role, provider and model, projection, router budget lines, folder input, `--max-cost`, broken logs, exit codes |
 | `test_jury.py` | agreement rule, pass at J1 and J2, escalation, critical shortcut skipping J2, J3 agreement and disagreement, B3.3 and B3.4 schema, ban list and back-translation evidence, deliberation hook, budget caps at J2 and J3, source column refused, same family rejected, determinism, exit codes |
+| `test_deliberate.py` | majority, unresolved with three rationales, no model or family name in what members see, evidence package without source text, jury integration, CLI on a verdict file, exit codes |
 
 Fixtures live in `tests/fixtures/` (JSON, BOM-JSON, CSV, semicolon CSV, multi-line CSV, TSV, PO LF/CRLF, Unity StringTable `.asset`, TMP FontAsset `.asset` static/dynamic, fake font). Temporary files are created under the OS temp directory, never inside the repository.

@@ -22,7 +22,7 @@ Evidence per line: ban list hits (lqa_linter rules on the target), translation m
 source table, which only the harness reads).
 
 Usage:
-  python jury.py blind_tr-TR_01.json --locale tr-TR [--source-table pass1_tr-TR_01.json] [--dry-run]
+  python jury.py blind_tr-TR_01.json --locale tr-TR [--source-table pass1_tr-TR_01.json] [--no-deliberation] [--dry-run]
 
 Exit codes: 0 every line settled, 1 the budget cap stopped the run or a line is unresolved,
 2 usage or input error (source column in the slice, same family twice in a tier, missing key).
@@ -273,7 +273,8 @@ def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, sys
                 settle(k, "J3", min(scores), "unresolved", [v["reason"] for v in j3])
             else:
                 votes[k].extend(result.get("revotes", []))
-                settle(k, "deliberation", int(result["score"]), str(result["status"]), result.get("rationales", []))
+                settle(k, "deliberation", int(result["score"]), str(result["status"]), result.get("rationales", []),
+                       {"deliberation": result["deliberation"]} if "deliberation" in result else None)
         stats["J3"] = {"lines": len(to_j3), "agreed": len(to_j3) - disputed, "disputed": disputed}
     pending = [k for k in order if k not in settled]
     verdicts = [settled[k] for k in order if k in settled]
@@ -313,6 +314,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--seed", type=int, default=1234, help="Seed of the warm-up and few-shot sample (default 1234)")
     ap.add_argument("--batch-size", type=int, default=40, help="Lines per model call (default 40)")
     ap.add_argument("--no-budget-caps", action="store_true", help="Do not stop when the J2 or J3 escalation ratio is above the cap")
+    ap.add_argument("--no-deliberation", action="store_true", help="Leave J3 disagreements unresolved instead of running the deliberation round")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap
@@ -341,8 +343,12 @@ def main() -> int:
             rows = [{"key": e["key"], "en": sources.get(e["key"], ""), "target": e["target"], "register": e["register"]} for e in lines]
             return roundtrip_evidence(rows, locale, router.for_role("roundtrip"), min_words=int(rt["min_words"]),
                                       registers=rt["registers"], threshold=threshold)
+    deliberator = None
+    if not args.no_deliberation:
+        from deliberate import make_deliberator  # local import: deliberate.py imports this module
+        deliberator = make_deliberator(router, locale, system)
     res = run_jury(entries, locale, router, system=system, batch_size=args.batch_size, budget_caps=not args.no_budget_caps,
-                   roundtrip_fn=roundtrip_fn)
+                   roundtrip_fn=roundtrip_fn, deliberator=deliberator)
     return write_report(args, locale, out, source_file, info, router, res)
 
 

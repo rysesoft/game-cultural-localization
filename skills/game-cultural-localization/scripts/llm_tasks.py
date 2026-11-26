@@ -54,6 +54,10 @@ INSTRUCTIONS: Dict[str, str] = {
              'regional_leak|gender_leak|ui_verb|placeholder_grammar|terminology|other|none", "reason": "...", "suggested": "..."}]}. '
              'Use issue_type "none" and empty reason and suggested for score 5.'),
     "pairwise": 'For every pair reply with {"choices": [{"id": "...", "choice": "a" or "b"}]} and nothing else.',
+    "deliberate": ('You already scored this line ("own"). "others" are the anonymous votes of two other jurors and "evidence" is the '
+                   'mechanical evidence package (ban list hits, closest approved translation memory lines, back-translation signal). '
+                   'Weigh them and vote once more. You may keep or change your score. Reply with {"score": 1-5, "issue_type": "...", '
+                   '"reason": "...", "suggested": "..."} and nothing else.'),
 }
 
 
@@ -163,6 +167,24 @@ def pairwise_choices(provider: Any, pairs: Sequence[Dict[str, Any]], locale: str
                           lambda it: str(it.get("choice", "")).strip().lower() in ("a", "b"), max_tokens)
         out.update({k: str(v["choice"]).strip().lower() for k, v in got.items()})
     return out
+
+
+def revote(provider: Any, payload: Dict[str, Any], locale: str, *, system: Optional[str] = None, max_tokens: int = 1024) -> Dict[str, Any]:
+    """One deliberation re-vote; asked twice at most, then L10nError. Returns a normalized vote."""
+    sys_prompt = system_for("jury", locale, system)
+    body = dict(payload)
+    body["task"] = "deliberate"
+    body["locale"] = locale
+    for _attempt in range(2):
+        res = provider.complete(sys_prompt, envelope(INSTRUCTIONS["deliberate"], body), max_tokens=max_tokens, json_mode=True)
+        try:
+            data = extract_json(res.text)
+        except L10nError:
+            continue
+        vote = normalize_vote(data) if isinstance(data, dict) else None
+        if vote is not None:
+            return vote
+    raise L10nError(f"deliberate: model {getattr(provider, 'model', '?')} returned no valid vote for {payload.get('key')}")
 
 
 def word_count(text: str) -> int:

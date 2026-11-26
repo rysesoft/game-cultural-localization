@@ -415,11 +415,38 @@ Evidence per line. `ban_hits` (locale rules of `rules/<locale>.json` on the targ
 | `--seed` | seed of the warm-up and few-shot sample, default 1234 |
 | `--batch-size` | lines per model call, default 40 |
 | `--no-budget-caps` | never stop at the J2 or J3 cap |
+| `--no-deliberation` | leave J3 disagreements `unresolved` instead of running the deliberation round |
 | `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
 
 Vote (B3.3). `{key, tier, member, family, model, score, issue_type, reason, suggested}`. Verdict (B3.4). `{key, final_tier (J1, J2, J3 or deliberation), score, status (pass, rewrite_light, rewrite, critical, unresolved), votes, evidence{ban_hits, tm_neighbors, roundtrip}, rationales}`. The verdict file holds `locale`, `source_file`, `langpack_version`, `prompt`, `stats` (lines per tier, escalation ratios, status counts), `halted`, `verdicts`, `pending` and `notes`.
 
 Exit codes. 0 every line settled. 1 the budget cap stopped the run or a line is unresolved. 2 usage or input error, including a source column in the slice, two members of one family in a tier and a missing API key.
+
+## deliberate.py (J3 deliberation round)
+
+```
+python deliberate.py verdicts_tr-TR_01.json --slice blind_tr-TR_01.json --locale tr-TR [--out FILE] [--dry-run]
+```
+
+For lines the J3 tier disagrees on (spread of 2 or more). `jury.py` runs it automatically unless `--no-deliberation` is given, the CLI deliberates the J3 lines still marked `unresolved` in a verdict file.
+
+1. The three J3 members have voted.
+2. Each member sees the other two scores, issue types, reasons and suggestions as juror A and juror B. Model and family names are never shown and are scrubbed from the reason text. The evidence package holds the ban list hits, the three closest approved translation memory lines (target text only) and the back-translation signal (`applied`, `calque_score`, `suspect`). No source text reaches the jurors.
+3. Each member votes once more.
+4. Two equal scores decide (`final_tier` `deliberation`, status from the score). Three different scores leave the line `unresolved`, it reaches the developer with the three rationales.
+
+| Flag | Meaning |
+|---|---|
+| `--input` (or positional) | verdict file written by `jury.py` |
+| `--slice` | the blind slice the jury read |
+| `--locale` | target locale |
+| `--out` | write the updated verdicts here, default update the input file |
+| `--langpack-dir` / `--no-warmup` / `--seed` | critic prompt warm-up as for `jury.py` |
+| `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
+
+Every deliberated verdict gets three extra votes with `tier` `deliberation` and a `deliberation` block `{first, revote, majority}`.
+
+Exit codes. 0 no line left unresolved. 1 at least one line stays unresolved. 2 usage or input error.
 
 ## Prompt templates (prompts/)
 
