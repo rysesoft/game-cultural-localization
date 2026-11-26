@@ -14,10 +14,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Tuple
 
-from .base import JSON_ONLY_HINT, HttpProvider, ProviderError
+from .base import JSON_ONLY_HINT, MIN_MAX_TOKENS, HttpProvider, ProviderError
 
 ANTHROPIC_VERSION = "2023-06-01"
-MIN_MAX_TOKENS = 16000
 
 
 class AnthropicProvider(HttpProvider):

@@ -27,7 +27,12 @@ from l10n_common import L10nError
 MAX_ATTEMPTS = 5            # 429 / 5xx / network errors are retried, at most 5 attempts in total
 BACKOFF_BASE_S = 1.0        # 1, 2, 4, 8 seconds between the attempts
 BACKOFF_CAP_S = 30.0
-DEFAULT_TIMEOUT_S = 120.0
+DEFAULT_TIMEOUT_S = 600.0   # a long JSON answer after thinking can take minutes, 10 minutes like the vendor SDKs
+# Current models of all three families think before they answer and the thinking counts against the output
+# limit. Every adapter asks for at least this many tokens so a batch answer is never cut off. Only generated
+# tokens are billed, the ceiling itself costs nothing. Checked live: Claude, DeepSeek (up to 131072) and
+# Gemini (up to 65536) accept it.
+MIN_MAX_TOKENS = 16000
 PAYLOAD_SEP = "\n---\n"     # user prompt = instruction + PAYLOAD_SEP + JSON payload
 OFFLINE_ENV = "GCL_OFFLINE"  # "1" refuses every network call (tests set it as a safety net)
 

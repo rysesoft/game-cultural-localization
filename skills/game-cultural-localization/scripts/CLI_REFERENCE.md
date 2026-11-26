@@ -208,7 +208,7 @@ Exit codes. 0 the gate passed and no line is unresolved. 1 the gate failed, the 
 
 ## LLM providers (providers/ and providers.config.json)
 
-The `providers/` package talks to Anthropic, Google Gemini and DeepSeek with `urllib` only, no SDK. Every adapter returns a `ChatResult(text, input_tokens, output_tokens, model, latency_ms)` through one interface, `complete(system, user, temperature, max_tokens, json_mode)`. The Anthropic adapter drops `temperature`, because current Claude models answer it with HTTP 400, and asks for at least 16000 `max_tokens`, because they think before they answer and the thinking counts against that limit. `as_legacy()` wraps a provider for the old `complete(system, user) -> str` interface of `orchestrator_stub.py`.
+The `providers/` package talks to Anthropic, Google Gemini and DeepSeek with `urllib` only, no SDK. Every adapter returns a `ChatResult(text, input_tokens, output_tokens, model, latency_ms)` through one interface, `complete(system, user, temperature, max_tokens, json_mode)`. The Anthropic adapter drops `temperature`, because current Claude models answer it with HTTP 400. Every adapter asks for at least 16000 output tokens, because current Claude, Gemini and DeepSeek models think before they answer and the thinking counts against that limit. Requests time out after 600 seconds. The Gemini key travels in the `x-goog-api-key` header. `as_legacy()` wraps a provider for the old `complete(system, user) -> str` interface of `orchestrator_stub.py`.
 
 | Piece | Behaviour |
 |---|---|

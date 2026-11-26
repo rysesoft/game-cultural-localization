@@ -7,6 +7,8 @@ body {systemInstruction: {parts: [{text}]}, contents: [{role: "user", parts: [{t
 
 The key travels in the x-goog-api-key header, as in Google's own examples. That works for the classic
 project keys and for the auth keys AI Studio creates since May 2026, and keeps the key out of URLs.
+Gemini 4 models think before they answer and the thoughts count against maxOutputTokens, so every request
+asks for at least MIN_MAX_TOKENS. Thought parts are skipped when the reply is read.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from __future__ import annotations
 import urllib.parse
 from typing import Any, Dict, Optional, Tuple
 
-from .base import HttpProvider, ProviderError
+from .base import MIN_MAX_TOKENS, HttpProvider, ProviderError
 
 
 class GoogleProvider(HttpProvider):
@@ -33,7 +35,7 @@ class GoogleProvider(HttpProvider):
         return {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
-            "generationConfig": {"temperature": float(temperature), "maxOutputTokens": int(max_tokens),
+            "generationConfig": {"temperature": float(temperature), "maxOutputTokens": max(int(max_tokens), MIN_MAX_TOKENS),
                                  "responseMimeType": "application/json" if json_mode else "text/plain"},
         }
 

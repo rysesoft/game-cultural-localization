@@ -1,9 +1,9 @@
 {
-  "_comment": "Model ids verified 2026-11-26 against the official model pages (see ARGE brief B3.2). Prices are USD per 1M tokens, null = price not entered yet. API keys are never stored here, only the environment variable names. deepseek.thinking maps a role (pass1, pass2, roundtrip, literal, J1, J2, J3) or 'default' to true / false; a missing entry keeps the API default (thinking on).",
+  "_comment": "Model ids verified 2026-11-26 against the official model pages (see ARGE brief B3.2). Prices are USD per 1M tokens, null = price not entered yet. API keys are never stored here, only the environment variable names. deepseek.thinking maps a role (pass1, pass2, roundtrip, literal, J1, J2, J3) or 'default' to true / false, a missing entry keeps the API default (thinking on). literal and roundtrip are mechanical tasks and run without thinking, live runs showed thinking alone can use up the output limit there.",
   "providers": {
     "anthropic": {"env_key": "ANTHROPIC_API_KEY", "rps": 5, "endpoint": "https://api.anthropic.com/v1/messages"},
     "google":    {"env_key": "GOOGLE_API_KEY",    "rps": 5, "endpoint": "https://generativelanguage.googleapis.com/v1beta"},
-    "deepseek":  {"env_key": "DEEPSEEK_API_KEY",  "rps": 5, "endpoint": "https://api.deepseek.com/chat/completions", "thinking": {}}
+    "deepseek":  {"env_key": "DEEPSEEK_API_KEY",  "rps": 5, "endpoint": "https://api.deepseek.com/chat/completions", "thinking": {"literal": false, "roundtrip": false}}
   },
   "models": {
     "haiku":    {"provider": "anthropic", "id": "claude-haiku-5-5",  "price_in": 0.10, "price_out": 0.50},

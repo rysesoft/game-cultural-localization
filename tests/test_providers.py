@@ -172,6 +172,32 @@ class HttpAdapterTests(unittest.TestCase):
         p2, t2, _ = self._make("deepseek", [(200, DEEPSEEK_OK, {})], options={"thinking": False})
         p2.complete("s", "u")
         self.assertEqual(t2.requests[0]["body"]["thinking"], {"type": "disabled"})
+        self.assertEqual(req["body"]["max_tokens"], 16000)   # thinking counts against the limit, 4096 was used up by thinking alone live
+
+    def test_every_adapter_leaves_room_for_thinking(self):
+        for name, reply, field in (("anthropic", ANTHROPIC_OK, ("max_tokens",)), ("deepseek", DEEPSEEK_OK, ("max_tokens",)),
+                                   ("google", GOOGLE_OK, ("generationConfig", "maxOutputTokens"))):
+            p, t, _ = self._make(name, [(200, reply, {}), (200, reply, {})])
+            p.complete("s", "u", max_tokens=1024)
+            p.complete("s", "u", max_tokens=40000)
+            got = []
+            for r in t.requests:
+                v = r["body"]
+                for f in field:
+                    v = v[f]
+                got.append(v)
+            self.assertEqual(got, [16000, 40000], name)
+
+    def test_bundled_config_runs_mechanical_deepseek_roles_without_thinking(self):
+        cfg = load_providers_config()
+        router = Router(cfg, env={"ANTHROPIC_API_KEY": "a", "GOOGLE_API_KEY": "g", "DEEPSEEK_API_KEY": "d"})
+        for role in ("literal", "roundtrip"):
+            spec = cfg.role_model(role)
+            self.assertEqual(spec.provider, "deepseek")
+            self.assertIs(router._thinking(spec, role, False), False, role)
+        for tier in ("J1", "J2", "J3"):
+            spec = next(s for s in cfg.jury(tier) if s.provider == "deepseek")
+            self.assertIsNone(router._thinking(spec, tier, False), tier)   # jurors keep the API default, thinking on
 
     def test_retry_on_429_and_5xx_with_exponential_backoff(self):
         p, t, sleeps = self._make("anthropic", [(429, {"error": "rate"}, {}), (503, b"busy", {}), (200, ANTHROPIC_OK, {})])
