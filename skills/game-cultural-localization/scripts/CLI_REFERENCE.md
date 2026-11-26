@@ -382,6 +382,45 @@ JSON report. `{files, records, dry_run_records, totals, by_role, by_provider, by
 
 Exit codes. 0 report written. 1 cost above `--max-cost`. 2 usage or input error (no log, broken line).
 
+## jury.py (tiered mixed-family jury)
+
+```
+python jury.py blind_tr-TR_01.json --locale tr-TR [--source-table pass1_tr-TR_01.json] [--out verdicts_tr-TR_01.json] [--dry-run]
+```
+
+Three tiers of three members, one from each family (`J1` Haiku, V4 Flash, Hydrogen, `J2` Sonnet, V4 Pro, Neon, `J3` Opus, V4 Pro, Carbon by default). The members read only the blind slice (key, `register`, `category`, `speaker`, `archetype`, target). A slice that carries a source column (`en`, `source`, `src`) is refused with exit 2. The system prompt is `prompts/critic.<locale>.md` with the pack's seeded warm-up and contrastive few-shots.
+
+| Outcome of one tier | Rule | Next |
+|---|---|---|
+| pass | every score 4 or 5 and a spread of at most 1 | settled, line score is the minimum, 5 gives `pass`, 4 gives `rewrite_light` |
+| escalate | any score 3 or lower, or a spread of 2 or more | next tier |
+| critical | any score 2 or lower | straight to J3 from any tier |
+| J3 agreement | spread of at most 1 | settled with the minimum, 3 gives `rewrite`, 2 or 1 give `critical` |
+| J3 disagreement | spread of 2 or more | deliberation round (`deliberate.py`), without it `unresolved` with three rationales |
+
+Budget caps from `budget_caps` of the providers config. When more than 30 % of the batch would go to J2, or more than 10 % to J3, the run stops before calling that tier, writes the report with the settled lines and lists the rest under `pending`. The problem is then in Pass 1 or the prompt.
+
+Evidence per line. `ban_hits` (locale rules of `rules/<locale>.json` on the target), `tm_neighbors` (when a translation memory is attached) and, for lines that reach J3, `roundtrip` (back-translation calque score, needs `--source-table`, which only the harness reads).
+
+| Flag | Meaning |
+|---|---|
+| `--input` (or positional) | blind slice from `make_blind_slice.py` |
+| `--locale` | target locale |
+| `--out` | verdict file, default `verdicts_<locale>_<batch>.json` next to the slice |
+| `--source-table` | harness side table with the English source, enables the back-translation evidence |
+| `--src-field` / `--dst-field` / `--key-field` | columns of `--source-table` (defaults `en`, `dst` or `target`, `key`) |
+| `--langpack-dir` | root of the packs for warm-up and few-shots |
+| `--no-warmup` / `--warmup-count` | leave out the warm-up, or set its size (default 40) |
+| `--shots` | contrastive few-shot pairs, default 6 |
+| `--seed` | seed of the warm-up and few-shot sample, default 1234 |
+| `--batch-size` | lines per model call, default 40 |
+| `--no-budget-caps` | never stop at the J2 or J3 cap |
+| `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
+
+Vote (B3.3). `{key, tier, member, family, model, score, issue_type, reason, suggested}`. Verdict (B3.4). `{key, final_tier (J1, J2, J3 or deliberation), score, status (pass, rewrite_light, rewrite, critical, unresolved), votes, evidence{ban_hits, tm_neighbors, roundtrip}, rationales}`. The verdict file holds `locale`, `source_file`, `langpack_version`, `prompt`, `stats` (lines per tier, escalation ratios, status counts), `halted`, `verdicts`, `pending` and `notes`.
+
+Exit codes. 0 every line settled. 1 the budget cap stopped the run or a line is unresolved. 2 usage or input error, including a source column in the slice, two members of one family in a tier and a missing API key.
+
 ## Prompt templates (prompts/)
 
 | File | Use |
