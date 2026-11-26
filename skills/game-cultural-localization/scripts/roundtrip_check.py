@@ -72,7 +72,7 @@ def eligible(target: str, register: str, min_words: int, registers: Sequence[str
 
 
 def roundtrip_evidence(rows: Sequence[Dict[str, Any]], locale: str, provider: Any, *, min_words: int, registers: Sequence[str],
-                       threshold: float, batch_size: int = 30) -> Dict[str, Dict[str, Any]]:
+                       threshold: float, batch_size: int = 30, workers: int = 1) -> Dict[str, Dict[str, Any]]:
     """rows [{key, en, target, register}] -> key -> {applied, calque_score, back, suspect} (model calls only for eligible rows)."""
     out: Dict[str, Dict[str, Any]] = {}
     todo: List[Tuple[str, Dict[str, Any]]] = []
@@ -82,7 +82,8 @@ def roundtrip_evidence(rows: Sequence[Dict[str, Any]], locale: str, provider: An
             out[str(r["key"])] = {"applied": False, "reason": why or "no_source"}
         else:
             todo.append((str(i), r))
-    backs = backtranslate_rows(provider, [{"key": k, "target": r["target"]} for k, r in todo], locale, batch_size=batch_size) if todo else {}
+    backs = backtranslate_rows(provider, [{"key": k, "target": r["target"]} for k, r in todo], locale, batch_size=batch_size,
+                               workers=workers) if todo else {}
     for k, r in todo:
         back = backs[k]
         score = calque_score(str(r["en"]), back)

@@ -223,32 +223,31 @@ def revote(provider: Any, payload: Dict[str, Any], locale: str, *, system: Optio
 
 
 def pass2_candidates(provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, n: int = 3, system: Optional[str] = None,
-                     batch_size: int = 10, max_tokens: int = 4096) -> Dict[str, List[str]]:
+                     batch_size: int = 10, max_tokens: int = 4096, workers: int = 1) -> Dict[str, List[str]]:
     """Ask the Pass 2 model for n candidates per row [{key, source, target, ...}]; returns key -> distinct non-empty candidates."""
     sys_prompt = system or DEFAULT_SYSTEM["pass1"].format(locale=locale)
 
     def ok(it: Dict[str, Any]) -> bool:
         c = it.get("candidates")
         return isinstance(c, list) and any(isinstance(x, str) and x.strip() for x in c)
-    out: Dict[str, List[str]] = {}
-    for batch in chunked(list(rows), batch_size):
+
+    def one(batch: List[Dict[str, Any]]) -> Dict[str, List[str]]:
         got = _call_keyed(provider, sys_prompt, "pass2", {"locale": locale, "n_candidates": n}, batch, "rows", "rows", "key", ok, max_tokens)
-        for k, v in got.items():
-            out[k] = ordered_unique(str(x) for x in v["candidates"] if isinstance(x, str) and x.strip())[:n]
-    return out
+        return {k: ordered_unique(str(x) for x in v["candidates"] if isinstance(x, str) and x.strip())[:n] for k, v in got.items()}
+    return run_batches(list(chunked(list(rows), batch_size)), one, workers)
 
 
 def pick_candidates(provider: Any, items: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
-                    batch_size: int = 20, max_tokens: int = 2048) -> Dict[str, str]:
+                    batch_size: int = 20, max_tokens: int = 2048, workers: int = 1) -> Dict[str, str]:
     """Blind choice among candidates: items [{key, context..., candidates: [{id, text}]}] -> key -> chosen id."""
     sys_prompt = system_for("jury", locale, system)
     ids = {str(it["key"]): {str(c["id"]) for c in it["candidates"]} for it in items}
-    out: Dict[str, str] = {}
-    for batch in chunked(list(items), batch_size):
+
+    def one(batch: List[Dict[str, Any]]) -> Dict[str, str]:
         got = _call_keyed(provider, sys_prompt, "pick", {"locale": locale}, batch, "items", "picks", "key",
                           lambda it: str(it.get("choice")) in ids.get(str(it.get("key")), set()), max_tokens)
-        out.update({k: str(v["choice"]) for k, v in got.items()})
-    return out
+        return {k: str(v["choice"]) for k, v in got.items()}
+    return run_batches(list(chunked(list(items), batch_size)), one, workers)
 
 
 def word_count(text: str) -> int:

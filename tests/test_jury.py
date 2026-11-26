@@ -119,6 +119,21 @@ class RunTests(unittest.TestCase):
         v = {x["key"]: x for x in res["verdicts"]}
         self.assertEqual((v["DIS"]["final_tier"], v["DIS"]["status"], v["DIS"]["score"]), ("deliberation", "rewrite", 3))
 
+    def test_parallel_workers_give_the_same_verdicts(self):
+        from deliberate import make_deliberator
+        outs = []
+        for workers in (1, 4):
+            router = Router(load_providers_config(), dry_run=True, scenario=FakeScenario(SCENARIO))
+            with TempDir() as td:
+                entries, _ = jury.load_blind_slice(write_json(td / "blind_tr-TR_01.json", slice_doc()))
+            res = jury.run_jury(entries, "tr-TR", router, system="SYS", budget_caps=False,
+                                deliberator=make_deliberator(router, "tr-TR", "SYS"), workers=workers)
+            outs.append((res["verdicts"], res["stats"], sorted((r["model"], r["role"]) for r in router.budget.records)))
+        self.assertEqual(outs[0], outs[1])   # same verdicts, votes in member order and the same calls
+        tiers = {v["key"]: v["final_tier"] for v in outs[1][0]}
+        self.assertEqual((tiers["OK"], tiers["ESC"], tiers["CRIT"]), ("J1", "J2", "J3"))
+        self.assertEqual(tiers["DIS"], "deliberation")
+
     def test_budget_cap_stops_the_run(self):
         doc = slice_doc(extra_fillers=4)   # 10 lines, ESC + DIS escalate (20 %), CRIT + DIS reach J3 (20 % > 10 %)
         res = run(SCENARIO, doc)

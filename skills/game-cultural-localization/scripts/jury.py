@@ -35,6 +35,7 @@ import argparse
 import json
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -176,15 +177,25 @@ def build_system_prompt(locale: str, entries: Sequence[Dict[str, Any]], pack_dir
 Deliberator = Callable[[Dict[str, Any], List[Dict[str, Any]], Dict[str, Any]], Optional[Dict[str, Any]]]
 
 
-def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], locale: str, system: str, batch_size: int) -> Dict[str, List[Dict[str, Any]]]:
+def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], locale: str, system: str, batch_size: int,
+                workers: int = 1) -> Dict[str, List[Dict[str, Any]]]:
+    """Votes of the three members of one tier. With workers > 1 the members run at the same time and each
+    sends up to `workers` batches at once. Votes are appended in member order, the result does not change."""
     members = router.jury(tier)
     fams = [m.family for m in members]
     if len(set(fams)) != len(fams):
         raise L10nError(f"jury {tier} has two members from the same family ({', '.join(fams)})")
     view = [juror_view(e) for e in entries]
     out: Dict[str, List[Dict[str, Any]]] = {e["key"]: [] for e in entries}
-    for m in members:
-        votes = score_entries(m.provider, view, locale, tier=tier, system=system, batch_size=batch_size)
+
+    def one(m: Any) -> Dict[str, Dict[str, Any]]:
+        return score_entries(m.provider, view, locale, tier=tier, system=system, batch_size=batch_size, workers=workers)
+    if int(workers) > 1 and len(members) > 1:
+        with ThreadPoolExecutor(max_workers=len(members)) as ex:
+            results = list(ex.map(one, members))
+    else:
+        results = [one(m) for m in members]
+    for m, votes in zip(members, results):
         for key, v in votes.items():
             out[key].append({"key": key, "tier": tier, "member": m.index, "family": m.family, "model": m.provider.model, **v})
     return out
@@ -193,8 +204,11 @@ def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], local
 def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, system: str, batch_size: int = 40,
              budget_caps: bool = True, tm_lookup: Optional[Callable[[Dict[str, Any]], List[Dict[str, Any]]]] = None,
              roundtrip_fn: Optional[Callable[[Sequence[Dict[str, Any]]], Dict[str, Dict[str, Any]]]] = None,
-             deliberator: Optional[Deliberator] = None) -> Dict[str, Any]:
-    """Run J1 to J3 (+ deliberation) and return {'verdicts', 'pending', 'halted', 'stats'}."""
+             deliberator: Optional[Deliberator] = None, workers: int = 1) -> Dict[str, Any]:
+    """Run J1 to J3 (+ deliberation) and return {'verdicts', 'pending', 'halted', 'stats'}.
+
+    workers > 1 runs the members of a tier and the disputed J3 lines of the deliberation round in parallel.
+    """
     cfg = router.config
     agreement = {k: int(v) for k, v in cfg.agreement.items()}
     caps = cfg.budget_caps
@@ -222,7 +236,7 @@ def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, sys
         return None
 
     # J1 ------------------------------------------------------------------- #
-    tv = _tier_votes(router, "J1", entries, locale, system, batch_size)
+    tv = _tier_votes(router, "J1", entries, locale, system, batch_size, workers)
     to_j2: List[str] = []
     to_j3: List[str] = []
     for k in order:
@@ -239,7 +253,7 @@ def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, sys
     halted = cap_check("J2", to_j2, float(caps["escalate_j2_ratio"])) or cap_check("J3", to_j3, float(caps["escalate_j3_ratio"]))
     # J2 ------------------------------------------------------------------- #
     if halted is None and to_j2:
-        tv = _tier_votes(router, "J2", [by_key[k] for k in to_j2], locale, system, batch_size)
+        tv = _tier_votes(router, "J2", [by_key[k] for k in to_j2], locale, system, batch_size, workers)
         moved = 0
         for k in to_j2:
             votes[k].extend(tv[k])
@@ -258,17 +272,28 @@ def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, sys
             for k, ev in roundtrip_fn([by_key[k] for k in to_j3]).items():
                 if k in evidence:
                     evidence[k]["roundtrip"] = ev
-        tv = _tier_votes(router, "J3", [by_key[k] for k in to_j3], locale, system, batch_size)
-        disputed = 0
+        tv = _tier_votes(router, "J3", [by_key[k] for k in to_j3], locale, system, batch_size, workers)
         for k in to_j3:
             votes[k].extend(tv[k])
+        open_keys = [k for k in to_j3 if not agrees([v["score"] for v in tv[k]], agreement)]
+        # every disputed line deliberates on its own, so the lines can run side by side
+        if deliberator is not None and open_keys:
+            if int(workers) > 1 and len(open_keys) > 1:
+                with ThreadPoolExecutor(max_workers=int(workers)) as ex:
+                    outcomes = dict(zip(open_keys, ex.map(lambda key: deliberator(by_key[key], tv[key], evidence[key]), open_keys)))
+            else:
+                outcomes = {key: deliberator(by_key[key], tv[key], evidence[key]) for key in open_keys}
+        else:
+            outcomes = {}
+        disputed = 0
+        for k in to_j3:
             j3 = tv[k]
             scores = [v["score"] for v in j3]
             if agrees(scores, agreement):
                 settle(k, "J3", min(scores), status_for(min(scores)), [v["reason"] for v in j3])
                 continue
             disputed += 1
-            result = deliberator(by_key[k], j3, evidence[k]) if deliberator else None
+            result = outcomes.get(k)
             if result is None:
                 settle(k, "J3", min(scores), "unresolved", [v["reason"] for v in j3])
             else:
@@ -316,6 +341,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--no-budget-caps", action="store_true", help="Do not stop when the J2 or J3 escalation ratio is above the cap")
     ap.add_argument("--no-deliberation", action="store_true", help="Leave J3 disagreements unresolved instead of running the deliberation round")
     ap.add_argument("--tm", default=None, help="Translation memory (tm.py SQLite) for the evidence: closest approved lines")
+    ap.add_argument("--workers", type=int, default=4, help="Batches in flight per member, the three members of a tier and the disputed lines run in parallel (default 4, 1 = one call at a time)")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap
@@ -329,6 +355,8 @@ def main() -> int:
     inp = Path(args.input)
     entries, source_file = load_blind_slice(inp)
     out = Path(args.out) if args.out else default_out(inp)
+    if args.workers < 1:
+        raise L10nError("--workers must be 1 or more")
     router = make_router(args, list(TIERS), default_budget_path(out))
     pack_dir = (Path(args.langpack_dir) if args.langpack_dir else LANGPACK_DIR) / locale
     system, info = build_system_prompt(locale, entries, pack_dir, warmup=not args.no_warmup, warmup_count=args.warmup_count,
@@ -343,7 +371,7 @@ def main() -> int:
         def roundtrip_fn(lines: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
             rows = [{"key": e["key"], "en": sources.get(e["key"], ""), "target": e["target"], "register": e["register"]} for e in lines]
             return roundtrip_evidence(rows, locale, router.for_role("roundtrip"), min_words=int(rt["min_words"]),
-                                      registers=rt["registers"], threshold=threshold)
+                                      registers=rt["registers"], threshold=threshold, workers=args.workers)
     tm = None
     tm_lookup = None
     if args.tm:
@@ -363,7 +391,7 @@ def main() -> int:
         deliberator = make_deliberator(router, locale, system)
     try:
         res = run_jury(entries, locale, router, system=system, batch_size=args.batch_size, budget_caps=not args.no_budget_caps,
-                       roundtrip_fn=roundtrip_fn, deliberator=deliberator, tm_lookup=tm_lookup)
+                       roundtrip_fn=roundtrip_fn, deliberator=deliberator, tm_lookup=tm_lookup, workers=args.workers)
     finally:
         if tm is not None:
             tm.close()

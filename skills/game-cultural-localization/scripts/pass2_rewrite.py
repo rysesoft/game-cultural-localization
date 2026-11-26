@@ -30,6 +30,7 @@ import random
 import re
 import sys
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -87,8 +88,12 @@ def main_issue(verdict: Dict[str, Any]) -> str:
 
 def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[str, Any]], locale: str, router: Any, *,
                   pass2_system: str, pick_system: str, n: int = 3, seed: int = 1234, ph_style: str = "auto",
-                  tag_style: str = "auto", statuses: Sequence[str] = DEFAULT_STATUSES, source_file: str = "") -> Dict[str, Any]:
-    """Generate, pick blind, validate. Returns {'lines', 'critique'}."""
+                  tag_style: str = "auto", statuses: Sequence[str] = DEFAULT_STATUSES, source_file: str = "",
+                  workers: int = 1) -> Dict[str, Any]:
+    """Generate, pick blind, validate. Returns {'lines', 'critique'}.
+
+    workers > 1 sends up to `workers` batches at once and lets the three J1 pickers run side by side.
+    """
     todo = [v for v in verdicts if v.get("status") in statuses]
     missing = [v["key"] for v in todo if v["key"] not in sources]
     if missing:
@@ -102,7 +107,7 @@ def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[st
                      "suggestions": [x.get("suggested") for x in fv if x.get("suggested")],
                      "suggested": next((x.get("suggested") for x in fv if x.get("suggested")), ""),
                      "tm": [{"target": t.get("dst", ""), "category": t.get("category", "")} for t in (v.get("evidence", {}).get("tm_neighbors") or [])[:3]]})
-    cands = pass2_candidates(router.for_role("pass2"), rows, locale, n=n, system=pass2_system) if rows else {}
+    cands = pass2_candidates(router.for_role("pass2"), rows, locale, n=n, system=pass2_system, workers=workers) if rows else {}
     rng = random.Random(seed)
     items: List[Dict[str, Any]] = []
     id_maps: Dict[str, Dict[str, int]] = {}
@@ -115,8 +120,15 @@ def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[st
                       "candidates": [{"id": f"c{i + 1}", "text": texts[idx]} for i, idx in enumerate(order)]})
     picks_by_member: List[Tuple[Any, Dict[str, str]]] = []
     if items:
-        for m in router.jury("J1"):
-            picks_by_member.append((m, pick_candidates(m.provider, items, locale, system=pick_system)))
+        pickers = router.jury("J1")
+
+        def pick(m: Any) -> Dict[str, str]:
+            return pick_candidates(m.provider, items, locale, system=pick_system, workers=workers)
+        if int(workers) > 1 and len(pickers) > 1:
+            with ThreadPoolExecutor(max_workers=len(pickers)) as ex:
+                picks_by_member = list(zip(pickers, ex.map(pick, pickers)))
+        else:
+            picks_by_member = [(m, pick(m)) for m in pickers]
     lines: List[Dict[str, Any]] = []
     entries: List[Dict[str, Any]] = []
     for v, r in zip(todo, rows):
@@ -186,6 +198,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--langpack-dir", default=None, help="Root of the language packs, for warm-up and few-shots (default: the skill's langpack/)")
     ap.add_argument("--no-warmup", action="store_true", help="Leave the warm-up block out of the prompts")
     ap.add_argument("--seed", type=int, default=1234, help="Seed of the candidate order and the warm-up sample (default 1234)")
+    ap.add_argument("--workers", type=int, default=4, help="Batches in flight per model, the three J1 pickers run in parallel (default 4, 1 = one call at a time)")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap
@@ -214,7 +227,7 @@ def main() -> int:
     pass2_system, pick_system = build_systems(locale, pack_dir, regs, warmup=not args.no_warmup, seed=args.seed)
     res = rewrite_lines(doc["verdicts"], sources, locale, router, pass2_system=pass2_system, pick_system=pick_system, n=args.candidates,
                         seed=args.seed, ph_style=args.placeholder_style, tag_style=args.tag_style, statuses=statuses,
-                        source_file=str(doc.get("source_file") or Path(args.source_table).name))
+                        source_file=str(doc.get("source_file") or Path(args.source_table).name), workers=args.workers)
     result = {"locale": locale, "source_file": doc.get("source_file"), "verdicts": str(inp), "lines": res["lines"], "critique": res["critique"],
               "notes": router.notes}
     out.parent.mkdir(parents=True, exist_ok=True)

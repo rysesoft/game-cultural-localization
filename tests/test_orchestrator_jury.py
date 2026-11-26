@@ -65,8 +65,8 @@ class JuryFlowTests(unittest.TestCase):
             src = write_json(td / "src.json", SOURCE)
             router_a = Router(load_providers_config(), dry_run=True, scenario=FakeScenario(SCENARIO))
             router_b = Router(load_providers_config(), dry_run=True, scenario=FakeScenario(SCENARIO))
-            a = orch.run_jury_pipeline(src, "tr-TR", td / "a", router_a, budget_caps=False, langpack_dir=td / "np")
-            b = orch.run_jury_pipeline(src, "tr-TR", td / "b", router_b, budget_caps=False, langpack_dir=td / "np")
+            a = orch.run_jury_pipeline(src, "tr-TR", td / "a", router_a, budget_caps=False, langpack_dir=td / "np", workers=1)
+            b = orch.run_jury_pipeline(src, "tr-TR", td / "b", router_b, budget_caps=False, langpack_dir=td / "np", workers=4)  # parallel run, same files
             self.assertEqual(a["summary"], b["summary"])
             for name in ("final_batch_01.json", "verdicts_tr-TR_01.json", "changes_tr-TR_01.md"):
                 self.assertEqual((td / "a" / name).read_text(encoding="utf-8"), (td / "b" / name).read_text(encoding="utf-8"), name)

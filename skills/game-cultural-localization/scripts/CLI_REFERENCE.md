@@ -198,6 +198,7 @@ Legacy flow (`--provider module:function`). Any callable `complete(system: str, 
 | `--no-budget-caps` | never stop at the J2 or J3 cap |
 | `--candidates` | Pass 2 candidates per flagged line, default 3 |
 | `--seed` | seed of warm-up, few-shots and candidate order, default 1234 |
+| `--workers` | model calls in flight per step, default 4, 1 sends one call at a time. Pass 1, the jury members, the deliberation round and the Pass 2 pickers run in parallel and the files stay the same. Each batch of `--batch-size` lines runs as one unit, so a live run of a whole game wants a larger batch such as `--batch-size 200` |
 | `--key-field`, `--placeholder-style`, `--tag-style`, `--batch-size`, `--font` | pipeline options |
 
 JSON report. `{passed, flow (jury or legacy), summary (gate), log, finals, batches[{batch, verdicts, rewrites, final, report, unresolved, stats}], halted, unresolved, trust_level, notes, exit_code}`.
@@ -445,6 +446,7 @@ Evidence per line. `ban_hits` (locale rules of `rules/<locale>.json` on the targ
 | `--no-budget-caps` | never stop at the J2 or J3 cap |
 | `--no-deliberation` | leave J3 disagreements `unresolved` instead of running the deliberation round |
 | `--tm` | translation memory (`tm.py` SQLite file) for the `tm_neighbors` evidence, queried by the English source when `--source-table` is given, else by the target |
+| `--workers` | batches in flight per member, default 4. The three members of a tier, the back-translations and the disputed J3 lines of the deliberation round run in parallel, the verdicts are the same as with 1 |
 | `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
 
 Vote (B3.3). `{key, tier, member, family, model, score, issue_type, reason, suggested}`. Verdict (B3.4). `{key, final_tier (J1, J2, J3 or deliberation), score, status (pass, rewrite_light, rewrite, critical, unresolved), votes, evidence{ban_hits, tm_neighbors, roundtrip}, rationales}`. The verdict file holds `locale`, `source_file`, `langpack_version`, `prompt`, `stats` (lines per tier, escalation ratios, status counts), `halted`, `verdicts`, `pending` and `notes`.
@@ -526,6 +528,7 @@ For every verdict with status `rewrite_light`, `rewrite`, `critical` or `unresol
 | `--critique-out` | also write the selected lines as a critique file in the fixed schema (`summary.total` is the number of judged lines, so it validates against the blind slice) |
 | `--src-field` / `--dst-field` / `--key-field` | columns of `--source-table` |
 | `--candidates` | candidates per line, default 3 (1 to 6) |
+| `--workers` | batches in flight per model, default 4. The three J1 pickers run in parallel, the result is the same as with 1 |
 | `--statuses` | verdict statuses to rewrite, default `rewrite_light,rewrite,critical,unresolved` |
 | `--placeholder-style` / `--tag-style` | token syntax for the parity check |
 | `--langpack-dir` / `--no-warmup` / `--seed` | warm-up and few-shots of the prompts, seed of the candidate order |

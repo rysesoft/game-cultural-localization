@@ -116,6 +116,9 @@ class RewriteTests(unittest.TestCase):
         b = run(seed=1)
         self.assertEqual(a, b)
 
+    def test_parallel_workers_give_the_same_result(self):
+        self.assertEqual(run(seed=1, workers=1), run(seed=1, workers=4))
+
     def test_status_filter(self):
         res = run(statuses=("critical",))
         self.assertEqual([l["key"] for l in res["lines"]], ["BAD"])

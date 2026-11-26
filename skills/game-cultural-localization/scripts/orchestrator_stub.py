@@ -310,8 +310,11 @@ def _write_report(report_changes: Any, verdict_doc: Dict[str, Any], locale: str,
 def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any, *, src_field: str = "en", key_field: str = "key",
                       ph_style: str = "auto", tag_style: str = "auto", batch_size: int = 50, fonts: Optional[List[Path]] = None,
                       langpack_dir: Optional[Path] = None, tm_path: Optional[Path] = None, deliberation: bool = True,
-                      budget_caps: bool = True, candidates: int = 3, seed: int = 1234) -> Dict[str, Any]:
-    """Phase 0-3 with the multi-family jury. Returns {'passed', 'flow', 'summary', 'log', 'finals', 'batches', 'halted', ...}."""
+                      budget_caps: bool = True, candidates: int = 3, seed: int = 1234, workers: int = 1) -> Dict[str, Any]:
+    """Phase 0-3 with the multi-family jury. Returns {'passed', 'flow', 'summary', 'log', 'finals', 'batches', 'halted', ...}.
+
+    workers > 1 sends model calls in parallel inside Pass 1, the jury and Pass 2, the result does not change.
+    """
     import deliberate
     import jury
     import pass2_rewrite
@@ -370,7 +373,7 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
                         pr["tm"] = [{"source": x["src"], "target": x["dst"], "similarity": x["similarity"]} for x in nb]
                 payload_rows.append(pr)
             targets = translate_rows(router.for_role("pass1"), payload_rows, locale, task="pass1", system=pass1_system,
-                                     extra={"placeholder_style": ph_style, "tag_style": tag_style})
+                                     extra={"placeholder_style": ph_style, "tag_style": tag_style}, workers=workers)
             p1 = workdir / f"pass1_batch_{n:02d}.json"
             p1_rows = [{"key": r.key, "category": r.meta.get("category", ""), "speaker": r.meta.get("speaker", ""),
                         src_field: r.src, locale: targets[r.key]} for r in batch]
@@ -390,14 +393,15 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
             def rt_fn(lines: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
                 rws = [{"key": e["key"], "en": src_by_key.get(e["key"], ""), "target": e["target"], "register": e["register"]} for e in lines]
                 return roundtrip_evidence(rws, locale, router.for_role("roundtrip"), min_words=int(rt_cfg["min_words"]),
-                                          registers=rt_cfg["registers"], threshold=threshold)
+                                          registers=rt_cfg["registers"], threshold=threshold, workers=workers)
 
             def tm_fn(entry: Dict[str, Any]) -> List[Dict[str, Any]]:
                 return tm.neighbors(locale, src_by_key.get(entry["key"], entry["target"]), category=str(entry.get("category") or ""),
                                     speaker=str(entry.get("speaker") or ""), exclude_key=entry["key"])
             res = jury.run_jury(jentries, locale, router, system=critic_system, budget_caps=budget_caps, roundtrip_fn=rt_fn,
                                 tm_lookup=tm_fn if tm is not None else None,
-                                deliberator=deliberate.make_deliberator(router, locale, critic_system) if deliberation else None)
+                                deliberator=deliberate.make_deliberator(router, locale, critic_system) if deliberation else None,
+                                workers=workers)
             verdict_doc = {"locale": locale, "source_file": p1.name, "langpack_version": info.get("langpack_version"),
                            "prompt": {"warmup_lines": info.get("warmup_lines", 0), "shots": info.get("shots", 0)},
                            "stats": res["stats"], "halted": res["halted"], "verdicts": res["verdicts"], "pending": res["pending"],
@@ -419,7 +423,8 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
             sources = pass2_rewrite.load_source_table(p1, src_field, locale, key_field, locale)
             p2_system, pick_system = pass2_rewrite.build_systems(locale, pack_dir, regs, warmup=True, seed=seed)
             rw = pass2_rewrite.rewrite_lines(res["verdicts"], sources, locale, router, pass2_system=p2_system, pick_system=pick_system,
-                                             n=candidates, seed=seed, ph_style=ph_style, tag_style=tag_style, source_file=p1.name)
+                                             n=candidates, seed=seed, ph_style=ph_style, tag_style=tag_style, source_file=p1.name,
+                                             workers=workers)
             rpath = workdir / f"rewrites_{tag}.json"
             rpath.write_text(json.dumps({"locale": locale, "source_file": p1.name, "verdicts": vpath.name, **rw, "notes": router.notes},
                                         ensure_ascii=False, indent=2), encoding="utf-8")
@@ -474,6 +479,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--no-budget-caps", action="store_true", help="Do not stop at the J2 or J3 escalation cap")
     ap.add_argument("--candidates", type=int, default=3, help="Pass 2 candidates per flagged line (default 3)")
     ap.add_argument("--seed", type=int, default=1234, help="Seed of warm-up, few-shots and candidate order (default 1234)")
+    ap.add_argument("--workers", type=int, default=4, help="Model calls in flight per step of the jury flow (default 4, 1 = one call at a time); "
+                                                         "combine with a larger --batch-size such as 200 so every step has enough batches")
     add_common_args(ap, TOOL)
     return ap
 
@@ -491,6 +498,8 @@ def main() -> int:
     key_field = pick(args.key_field, cfg, "key_field", "key")
     ph_style = pick(args.placeholder_style, cfg, "placeholder_style", "auto")
     tag_style = pick(args.tag_style, cfg, "tag_style", "auto")
+    if args.workers < 1:
+        raise L10nError("--workers must be 1 or more")
     if args.dry_run or args.live:
         from llm_tasks import make_router
         workdir = Path(args.workdir)
@@ -501,7 +510,7 @@ def main() -> int:
             Path(args.input), locale, workdir, router, src_field=src_field, key_field=key_field, ph_style=ph_style, tag_style=tag_style,
             batch_size=args.batch_size, fonts=[Path(f) for f in args.font], langpack_dir=Path(args.langpack_dir) if args.langpack_dir else None,
             tm_path=Path(args.tm) if args.tm else None, deliberation=not args.no_deliberation, budget_caps=not args.no_budget_caps,
-            candidates=args.candidates, seed=args.seed)
+            candidates=args.candidates, seed=args.seed, workers=args.workers)
         exit_code = EXIT_OK if result["passed"] else EXIT_FINDINGS
         text = "\n".join([f"Orchestrator run (jury flow, {'dry run' if args.dry_run else 'live'}):"] + ["  " + l for l in result["log"]]
                          + [f"  NOTE: {n}" for n in result["notes"]] + [f"  Exit code: {exit_code}"])
