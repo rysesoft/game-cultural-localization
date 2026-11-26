@@ -300,6 +300,32 @@ Output (`contrastive.json`). `{locale, source_ref, seed, limit, generated_with, 
 
 Exit codes. 0 set written. 1 set written with fewer usable pairs than `--min-pairs`. 2 usage or input error, including a missing API key.
 
+## roundtrip_check.py (back-translation calque check)
+
+```
+python roundtrip_check.py pass1_tr-TR_01.json --locale tr-TR [--dst-field dst] [--threshold 0.85] [--dry-run]
+python roundtrip_check.py ../langpack/tr-TR/contrastive.json --locale tr-TR --calibrate [--dry-run]
+```
+
+The `roundtrip` model translates a target line back into English as literally as it can. The calque score (0 to 1, mean of word sequence and character similarity) says how closely the back translation follows the English source. Native writing drifts away from the English, a calque comes back almost verbatim. The test carries information only for longer dialogue, so it applies only to rows whose register is in `roundtrip.registers` of the providers config (`dialogue_casual`, `dialogue_formal`) and whose target has more than `roundtrip.min_words` words (6). Every other row is reported with `"applied": false` and costs no call.
+
+| Flag | Meaning |
+|---|---|
+| `--input` (or positional) | translated table (`key`, `en`, target, `category` or `register`), or a `contrastive.json` with `--calibrate` |
+| `--locale` | target locale |
+| `--calibrate` | score the native and robot lines of the contrastive set and write the threshold with the best balanced accuracy |
+| `--src-field` / `--dst-field` / `--key-field` | columns, defaults `en`, then `dst`, the locale code or `target`, and `key` |
+| `--threshold` | calque threshold, default the pack's `roundtrip_threshold.json`, else 0.85 |
+| `--min-words` | override `roundtrip.min_words` |
+| `--langpack-dir` | root of the packs, default the skill's `langpack/` |
+| `--out` | calibration output, default `langpack/<locale>/roundtrip_threshold.json` |
+| `--batch-size` | lines per model call, default 30 |
+| `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
+
+Check report. `rows[{key, applied, calque_score, back, suspect}]` (`reason` `register` or `short` when not applied) and `summary{rows, applied, suspects}`. Calibration file. `{locale, threshold, calibrated, weak, balanced_accuracy, n_native, n_robot, native_mean, robot_mean, min_words, registers, source}`.
+
+Exit codes. Check mode 0 no suspect, 1 at least one line at or above the threshold. Calibrate mode 0 written, 1 written but weak (fewer than 5 lines per class or balanced accuracy below 0.75). 2 usage or input error.
+
 ## Prompt templates (prompts/)
 
 | File | Use |

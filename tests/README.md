@@ -21,5 +21,6 @@ pwsh tests/run_all.ps1          # runs the suite with every Python it finds (bun
 | `test_warmup.py` | same seed gives the same sample, register filter, local toggle, source balancing with the reference first, cleaning of engine codes, prompt block, exit codes |
 | `test_prompts.py` | critic prompts are written in Turkish and German with persona, slots, rubric, seven step task order and vote schema, generic fallback, `literal.md`, slot rendering, seeded contrastive block, punctuation style of every prompt file |
 | `test_contrastive.py` | reference loading and registers, B3.5 pair schema, `literal.md` used for robot lines, identical and broken robot lines dropped, seeded subset, fake provider dry run, budget log roles, exit codes |
+| `test_roundtrip.py` | calque score range, register and word count eligibility (no call for ineligible rows), threshold search, calibration from a contrastive set, weak calibration, check mode with the calibrated pack threshold, exit codes |
 
 Fixtures live in `tests/fixtures/` (JSON, BOM-JSON, CSV, semicolon CSV, multi-line CSV, TSV, PO LF/CRLF, Unity StringTable `.asset`, TMP FontAsset `.asset` static/dynamic, fake font). Temporary files are created under the OS temp directory, never inside the repository.

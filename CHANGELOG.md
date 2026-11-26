@@ -15,6 +15,7 @@ R&D release. Multi-family LLM jury, language packs and measured nativeness, see 
 - `scripts/warmup_loader.py` seeded, register filtered and source balanced warm-up sample (30 to 50 lines) from a language pack, as a prompt block or JSON lines (P3).
 - `prompts/critic.tr-TR.md` and `prompts/critic.de-DE.md`, native critic prompts written in the target language with a player persona, warm-up and contrastive slots, rubric, task order and the vote schema. `prompts/literal.md` for robot lines and an English `prompts/critic.generic.md` fallback. `scripts/prompt_templates.py` renders them, `scripts/text_style.py` checks the house punctuation style (P4).
 - `scripts/build_contrastive_set.py` writes `contrastive.json` (native, robot and unknown lines per reference row, B3.5). Robot lines come from the `literal` model with `prompts/literal.md`, unknown lines from the `pass1` model or `--unknown-models` (P5).
+- `scripts/roundtrip_check.py` back-translation calque score (0 to 1) for dialogue lines over `min_words` words, `"applied": false` elsewhere, and `--calibrate` to derive `roundtrip_threshold.json` from the contrastive set (P6).
 
 ## [2.1.0] — 2026-11-26
 
