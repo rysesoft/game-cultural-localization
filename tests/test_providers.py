@@ -145,7 +145,9 @@ class HttpAdapterTests(unittest.TestCase):
         p, t, _ = self._make("google", [(200, GOOGLE_OK, {})], model="gemini-4-neon")
         res = p.complete("SYS", "USER", json_mode=True)
         req = t.requests[0]
-        self.assertEqual(req["url"], "https://generativelanguage.googleapis.com/v1beta/models/gemini-4-neon:generateContent?key=secret-key-123")
+        self.assertEqual(req["url"], "https://generativelanguage.googleapis.com/v1beta/models/gemini-4-neon:generateContent")
+        self.assertEqual(req["headers"]["x-goog-api-key"], "secret-key-123")   # header, never the URL
+        self.assertNotIn("secret-key-123", req["url"])
         self.assertEqual(req["body"]["systemInstruction"], {"parts": [{"text": "SYS"}]})
         self.assertEqual(req["body"]["contents"], [{"role": "user", "parts": [{"text": "USER"}]}])
         self.assertEqual(req["body"]["generationConfig"]["responseMimeType"], "application/json")
@@ -291,7 +293,9 @@ class UrllibIntegrationTests(unittest.TestCase):
             self.assertEqual(d.complete("s", "u").text, "hallo")
         paths = [s["path"] for s in _MockApi.seen]
         self.assertEqual(paths[0], paths[1])  # retried request
-        self.assertTrue(any(p.startswith("/google/models/gemini-4-neon:generateContent?key=k2") for p in paths))
+        self.assertIn("/google/models/gemini-4-neon:generateContent", paths)
+        google_req = next(s for s in _MockApi.seen if s["path"].startswith("/google/"))
+        self.assertEqual(google_req["headers"]["x-goog-api-key"], "k2")
         self.assertEqual(_MockApi.seen[0]["headers"]["x-api-key"], "k1")
         self.assertEqual(_MockApi.seen[-1]["headers"]["authorization"], "Bearer k3")
 

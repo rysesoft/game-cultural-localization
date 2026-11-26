@@ -1,8 +1,12 @@
 """Google Gemini generateContent adapter (urllib, no SDK).
 
-POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key=...
+POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
+headers x-goog-api-key
 body {systemInstruction: {parts: [{text}]}, contents: [{role: "user", parts: [{text}]}],
       generationConfig: {temperature, maxOutputTokens, responseMimeType}}
+
+The key travels in the x-goog-api-key header, as in Google's own examples. That works for the classic
+project keys and for the auth keys AI Studio creates since May 2026, and keeps the key out of URLs.
 """
 
 from __future__ import annotations
@@ -20,10 +24,10 @@ class GoogleProvider(HttpProvider):
 
     def _url(self) -> str:
         model = urllib.parse.quote(self.model, safe="-._")
-        return f"{self.endpoint}/models/{model}:generateContent?key={urllib.parse.quote(self._key, safe='')}"
+        return f"{self.endpoint}/models/{model}:generateContent"
 
     def _headers(self) -> Dict[str, str]:
-        return {"content-type": "application/json"}
+        return {"x-goog-api-key": self._key, "content-type": "application/json"}
 
     def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> Dict[str, Any]:
         return {
