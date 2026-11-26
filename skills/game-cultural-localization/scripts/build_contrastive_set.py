@@ -10,7 +10,7 @@ Pairs where the robot line equals the native line, or where the robot line broke
 placeholder, carry no contrast and are left out (counted in 'dropped').
 
 Output (B3.5):
-  {"locale": "tr-TR", "source_ref": "loc_work/reference/...", "pairs": [
+  {"locale": "tr-TR", "source_ref": "tr.csv", "pairs": [
      {"key", "en", "native", "robot", "unknown": {"<model id>": "..."}, "register", "speaker", "archetype"}]}
 
 Usage:
@@ -141,7 +141,7 @@ def main() -> int:
             unknown[prov.model] = prov
     selected = select_rows(rows, args.limit, args.seed)
     pairs, stats = build_contrastive(selected, locale, router.for_role("literal"), unknown, args.batch_size)
-    payload_file = {"locale": locale, "source_ref": str(args.input), "seed": args.seed, "limit": args.limit,
+    payload_file = {"locale": locale, "source_ref": Path(args.input).name, "seed": args.seed, "limit": args.limit,  # no local path in a shipped file
                     "generated_with": {"robot": stats["robot_model"], "unknown": stats["unknown_models"], "prompt": "prompts/literal.md"},
                     "pairs": pairs}
     out.parent.mkdir(parents=True, exist_ok=True)

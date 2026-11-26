@@ -94,7 +94,7 @@ class CliTests(unittest.TestCase):
             first = (td / "c.json").read_text(encoding="utf-8")
             data = json.loads(first)
             self.assertEqual(data["locale"], "tr-TR")
-            self.assertEqual(data["source_ref"], str(ref))
+            self.assertEqual(data["source_ref"], ref.name)   # file name only, the set ships with the plugin
             self.assertEqual(len(data["pairs"]), 4)
             self.assertEqual(data["pairs"][0]["robot"], "[tr-TR literal] Save")
             self.assertEqual(data["pairs"][0]["unknown"], {"claude-sonnet-5-5": "[tr-TR] Save"})
