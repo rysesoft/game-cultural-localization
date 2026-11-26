@@ -24,13 +24,13 @@ Target feel. **Gyva, šilta šnekamoji lietuvių kalba + tikras žaidėjų žody
 
 | Speaker | Address | Notes |
 |---|---|---|
-| UI, tutorials, toasts | `tu` (imperative `spausk`, `pasirink`) **or** impersonal infinitive/`Jūs` (`spauskite`) | Lithuanian storefronts and MS/Google UI use `Jūs`. Indie/console games use `tu`. Lock one in `LT-LT_BIBLE.md`. |
+| UI, tutorials, toasts | `tu` (imperative `spausk`, `pasirink`) **or** impersonal infinitive/`jūs` (`spauskite`) | Formal UI uses lowercase `jūs`, indie and console games use `tu`. Lock one in `LT-LT_BIBLE.md`. |
 | A1 Mentor, A2 Rival, A3 Rookie | `tu` | Particles. `na`, `štai`, `visgi`, `juk`, `šiaip ar taip`, `klausyk`, `žinai`. |
-| A4 Scientist (colleague) | `tu`. `Jūs` for a formal official | |
-| A5 Outlaw / Antagonist | `tu` (contempt) or cold `Jūs` | One form per character. |
+| A4 Scientist (colleague) | `tu`. `jūs` for a formal official | |
+| A5 Outlaw / Antagonist | `tu` (contempt) or cold `jūs` | One form per character. |
 
-* **Capitalization.** `Jūs / Jums / Jūsų` capitalized in letters and formal in-game messages. Lowercase `jūs` in spoken dialogue and UI. Decide per text type in the bible.
-* **Never mix** `tu` and `Jūs` between the same two characters.
+* **Capitalization.** Lowercase `jūs / jums / jūsų` in UI, tutorials and spoken dialogue. The capital `Jūs / Jums / Jūsų` belongs only to letters and formal messages addressed to one person.
+* **Never mix** `tu` and `jūs` between the same two characters.
 * **Vocative (šauksmininkas).** Every address uses the vocative. `Dėde!`, `Mechanike!`, `Jonai!`, `Rūta!`, `Vade!`, `Naujoke!`. Fixed NPC names are declined in the script. A `{playerName}` placeholder **cannot** be declined, never place it in vocative position. Restructure. `Sveiki, čia {playerName}`, `Žaidėjas: {playerName}`, or drop the name.
 * **Pronoun drop.** Drop redundant `tu / aš`. Verb endings carry person.
 * **Anglicisms.** `lootas`, `skillas`, `questas` exist in gamer slang (A2/A3 dialogue only). UI uses `grobis`, `įgūdis`, `užduotis`, `gamyba`.
