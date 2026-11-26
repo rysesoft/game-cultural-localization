@@ -1,0 +1,330 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "lt-LT",
+  "version": 1,
+  "notes": "Lithuanian kanceliarinė kalba / calque rules. See references/lt-LT.md §2-3.",
+  "rules": [
+    {
+      "id": "LT-ATLIKTI-VYKDYTI",
+      "severity": "WARN",
+      "pattern": "\\b(?:atlik\\w*|vykdy\\w*)\\s+\\w+ą\\b",
+      "flags": "i",
+      "message": "Kanceliarinė kalba 'atlikti remontą / vykdyti gamybą': use 'sutaisyti / gaminti'",
+      "examples": {
+        "match": [
+          "Atlikti remontą",
+          "Vykdyti gamybą"
+        ],
+        "nomatch": [
+          "Sutaisyti"
+        ]
+      }
+    },
+    {
+      "id": "LT-FOKUSUOTI",
+      "severity": "ERR",
+      "pattern": "\\bfokusuo\\w*",
+      "flags": "i",
+      "message": "Calque 'fokusuoti' on interact: use 'Naudoti / Valdyti'",
+      "examples": {
+        "match": [
+          "Fokusuoti"
+        ],
+        "nomatch": [
+          "Naudoti"
+        ]
+      }
+    },
+    {
+      "id": "LT-NEGALI-BUTI",
+      "severity": "WARN",
+      "pattern": "\\bnegali būti\\b",
+      "flags": "i",
+      "message": "Heavy English passive 'negali būti': prefer active/impersonal Lithuanian",
+      "examples": {
+        "match": [
+          "Šis daiktas negali būti čia padėtas."
+        ],
+        "nomatch": [
+          "Čia netinka."
+        ]
+      }
+    },
+    {
+      "id": "LT-JAU-YRA-DAIKTAS",
+      "severity": "WARN",
+      "pattern": "\\bjau yra (?:daiktas|objektas|daiktų)\\b",
+      "flags": "i",
+      "message": "Stiff 'jau yra daiktas': use 'Ši vieta jau užimta!'",
+      "examples": {
+        "match": [
+          "Šioje vietoje jau yra daiktas!"
+        ],
+        "nomatch": [
+          "Ši vieta jau užimta!"
+        ]
+      }
+    },
+    {
+      "id": "LT-JUS-JAU-TURITE",
+      "severity": "WARN",
+      "pattern": "\\bJūs jau turite\\b",
+      "flags": "i",
+      "message": "Formal 'Jūs jau turite' in tu-register UI: use 'jau turi'",
+      "examples": {
+        "match": [
+          "Jūs jau turite šį įrankį!"
+        ],
+        "nomatch": [
+          "Šį įrankį jau turi!"
+        ]
+      }
+    },
+    {
+      "id": "LT-PER-ZEMA",
+      "severity": "WARN",
+      "pattern": "\\bper žem[aą]\\b",
+      "flags": "i",
+      "message": "Literal 'per žema': use 'Trūksta jėgų!'",
+      "examples": {
+        "match": [
+          "Tavo ištvermė per žema!"
+        ],
+        "nomatch": [
+          "Trūksta jėgų!"
+        ]
+      }
+    },
+    {
+      "id": "LT-GAUTI-DAIKTUS",
+      "severity": "WARN",
+      "pattern": "\\bGAUTI DAIKTUS\\b",
+      "flags": "",
+      "message": "Literal 'GAUTI DAIKTUS' (GET ITEMS): use 'PAIMTI VISKĄ / ATSIIMTI'",
+      "examples": {
+        "match": [
+          "GAUTI DAIKTUS"
+        ],
+        "nomatch": [
+          "PAIMTI VISKĄ"
+        ]
+      }
+    },
+    {
+      "id": "LT-JUDETI",
+      "severity": "WARN",
+      "pattern": "\\bJudėti į\\b",
+      "flags": "i",
+      "message": "Manual-speak keybinding 'Judėti į priekį': use 'Pirmyn / Kairėn'",
+      "examples": {
+        "match": [
+          "Judėti į priekį"
+        ],
+        "nomatch": [
+          "Pirmyn"
+        ]
+      }
+    },
+    {
+      "id": "LT-PERDUOTA-REALIZUOTI",
+      "severity": "WARN",
+      "pattern": "\\b(?:Perduota į|Realizuoti)\\b",
+      "flags": "i",
+      "message": "Officialese 'Perduota į sandėlį / Realizuoti': use 'Nugabenta / Parduoti'",
+      "examples": {
+        "match": [
+          "Perduota į sandėlį",
+          "Realizuoti rinkoje"
+        ],
+        "nomatch": [
+          "Nugabenta į sandėlį"
+        ]
+      }
+    },
+    {
+      "id": "LT-GENDERED-PARTICIPLE",
+      "severity": "WARN",
+      "pattern": "\\b(?:esi|esate|buvai|buvote)\\s+\\w+(?:ęs|usi|tas|ta)\\b",
+      "flags": "i",
+      "message": "Gendered participle about the player ('esi pasiruošęs'): use a finite verb ('Viskas paruošta')",
+      "examples": {
+        "match": [
+          "Tu esi pasiruošęs."
+        ],
+        "nomatch": [
+          "Viskas paruošta."
+        ]
+      },
+      "context": "player"
+    },
+    {
+      "id": "LT-PRONOUN-SPAM",
+      "severity": "WARN",
+      "pattern": "(?:^|[.!?]\\s+)(?:Tu|Aš)\\s+(?:gali|turi|esi|galiu|turiu|esu)\\b",
+      "flags": "",
+      "message": "Pronoun spam 'Tu gali': Lithuanian is pro-drop",
+      "examples": {
+        "match": [
+          "Tu gali sutaisyti laivą."
+        ],
+        "nomatch": [
+          "Gali sutaisyti laivą."
+        ]
+      }
+    },
+    {
+      "id": "LT-PREP-PLACEHOLDER",
+      "severity": "ERR",
+      "pattern": "\\b(?:iš|į|su|nuo|prie|ant|be|dėl)\\s+\\{\\w+\\}",
+      "flags": "",
+      "message": "Preposition directly before a placeholder (case trap)",
+      "examples": {
+        "match": [
+          "Paimk iš {0}"
+        ],
+        "nomatch": [
+          "Paimk iš stoties {0}"
+        ]
+      }
+    },
+    {
+      "id": "LT-OPTIONAL-PLURAL",
+      "severity": "ERR",
+      "pattern": "\\{\\w+\\}\\s*\\w*\\(-\\w+\\)",
+      "flags": "",
+      "message": "'(-iai)'-style optional plural: use an ICU plural",
+      "examples": {
+        "match": [
+          "{0} daiktas(-ai)"
+        ],
+        "nomatch": [
+          "{0, plural, one {daiktas} other {daiktai}}"
+        ]
+      }
+    },
+    {
+      "id": "LT-HALF-PARTICIPLE",
+      "severity": "WARN",
+      "pattern": "\\b\\w+(?:damas|dama)\\b",
+      "flags": "",
+      "message": "Half-participle reveals player gender (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Dirbdamas pavargai"
+        ],
+        "nomatch": [
+          "Pavargai nuo darbo"
+        ]
+      }
+    },
+    {
+      "id": "LT-KANCELIARINE",
+      "severity": "WARN",
+      "pattern": "\\b(?:siekiant|realizuoti|įvykdyt\\w*)\\b",
+      "flags": "i",
+      "message": "Kanceliarinė kalba 'siekiant / realizuoti / įvykdyti'",
+      "examples": {
+        "match": [
+          "Siekiant sutaisyti",
+          "Įvykdyti užsakymą"
+        ],
+        "nomatch": [
+          "Kad sutaisytum"
+        ]
+      }
+    },
+    {
+      "id": "LT-FORMAL-ADDRESS",
+      "severity": "WARN",
+      "pattern": "\\b(?:pone|ponia|gerbiamas|gerbiama)\\b",
+      "flags": "i",
+      "message": "Gendered formal address of the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Gerbiamas pone"
+        ],
+        "nomatch": [
+          "Sveiki"
+        ]
+      }
+    },
+    {
+      "id": "LT-STAY-AFLOAT",
+      "severity": "WARN",
+      "pattern": "\\bišsilaikyti ant vandens\\b",
+      "flags": "i",
+      "message": "'stay afloat' calque",
+      "examples": {
+        "match": [
+          "Padėk išsilaikyti ant vandens"
+        ],
+        "nomatch": [
+          "Padėk nenuskęsti"
+        ]
+      }
+    },
+    {
+      "id": "LT-KOSMINE",
+      "severity": "WARN",
+      "pattern": "\\bkosmin\\w+ nesąmon\\w+\\b",
+      "flags": "i",
+      "message": "Calqued exclamation 'kosminė nesąmonė'",
+      "examples": {
+        "match": [
+          "Kosminė nesąmonė!"
+        ],
+        "nomatch": [
+          "Nesąmonė!"
+        ]
+      }
+    },
+    {
+      "id": "LT-PERCENT-SPACE",
+      "severity": "WARN",
+      "pattern": "\\d+%",
+      "flags": "",
+      "message": "Lithuanian percent needs a space: '40 %'",
+      "examples": {
+        "match": [
+          "40% baigta"
+        ],
+        "nomatch": [
+          "40 % baigta"
+        ]
+      }
+    },
+    {
+      "id": "LT-NON-ISO-DATE",
+      "severity": "WARN",
+      "pattern": "\\b\\d{1,2}[./]\\d{1,2}[./]\\d{4}\\b",
+      "flags": "",
+      "message": "Non-ISO date: use YYYY-MM-DD",
+      "examples": {
+        "match": [
+          "12.03.2026"
+        ],
+        "nomatch": [
+          "2026-03-12"
+        ]
+      }
+    },
+    {
+      "id": "LT-IMPERATIVE-BUTTON",
+      "severity": "WARN",
+      "pattern": "\\b(?:Išsaugok|Įkelk|Išeik|Taikyk)\\b",
+      "flags": "",
+      "message": "Imperative on a button: project uses infinitive (rows tagged button)",
+      "context": "button",
+      "examples": {
+        "match": [
+          "Išsaugok"
+        ],
+        "nomatch": [
+          "Išsaugoti"
+        ]
+      }
+    }
+  ]
+}

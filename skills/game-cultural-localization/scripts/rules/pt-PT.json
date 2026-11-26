@@ -1,0 +1,351 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "pt-PT",
+  "version": 1,
+  "notes": "European Portuguese: pt-BR leakage + bureaucratese. See references/pt-PT.md §1-2.",
+  "rules": [
+    {
+      "id": "PTPT-GERUND",
+      "severity": "ERR",
+      "pattern": "\\b(?:Carregando|Salvando|Montando|Desmontando|Transferindo|Processando|Construindo|Reparando|Aguardando|Conectando)\\b",
+      "flags": "i",
+      "message": "Brazilian progressive gerund leaked into pt-PT: use 'A carregar / A guardar / A montar'",
+      "examples": {
+        "match": [
+          "Carregando...",
+          "montando peças"
+        ],
+        "nomatch": [
+          "A carregar...",
+          "A montar peças"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-PTBR-TERMS",
+      "severity": "ERR",
+      "pattern": "\\b(?:Configurações|Salvar|Usuário|Usuários|Deletar|Gerenciar|Ônibus|Esporte|Bônus|Trem|Celular|Tela|Mouse|Arquivo|Time|Controle)\\b",
+      "flags": "i",
+      "message": "Brazilian term leaked into pt-PT: use 'Definições / Guardar / Utilizador / Eliminar / Gerir'",
+      "examples": {
+        "match": [
+          "Configurações",
+          "salvar o jogo",
+          "usuário"
+        ],
+        "nomatch": [
+          "Definições",
+          "guardar o jogo",
+          "utilizador"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-VOCE",
+      "severity": "WARN",
+      "pattern": "\\bvocê\\b",
+      "flags": "i",
+      "message": "Explicit 'você' sounds blunt in pt-PT: prefer 'tu' or implicit 3rd person",
+      "examples": {
+        "match": [
+          "Você já tem esta ferramenta!"
+        ],
+        "nomatch": [
+          "Já tens esta ferramenta!"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-CLITIC-START",
+      "severity": "WARN",
+      "pattern": "(?:^|[.!?]\\s+)(?:Me|Te|Se|Lhe|Nos)\\s+\\w+",
+      "flags": "",
+      "message": "Sentence-initial clitic ('Me ajuda') is Brazilian: pt-PT uses enclisis ('Ajuda-me')",
+      "examples": {
+        "match": [
+          "Me ajuda com isto.",
+          "Te mandei o esquema."
+        ],
+        "nomatch": [
+          "Ajuda-me com isto.",
+          "Enviei-te o esquema."
+        ]
+      }
+    },
+    {
+      "id": "PTPT-PASSIVE-COLOCADO",
+      "severity": "WARN",
+      "pattern": "\\bnão pode ser \\w+ad[oa]s?\\b",
+      "flags": "i",
+      "message": "Passive 'não pode ser colocado': use 'Isto não encaixa aqui.'",
+      "examples": {
+        "match": [
+          "Este item não pode ser colocado aqui."
+        ],
+        "nomatch": [
+          "Isto não encaixa aqui."
+        ]
+      }
+    },
+    {
+      "id": "PTPT-JA-SE-ENCONTRA",
+      "severity": "WARN",
+      "pattern": "\\bJá se encontra\\b",
+      "flags": "i",
+      "message": "Stiff 'Já se encontra um objeto': use 'Este lugar já está ocupado!'",
+      "examples": {
+        "match": [
+          "Já se encontra um objeto neste local!"
+        ],
+        "nomatch": [
+          "Já está aqui uma peça!"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-POSSUIS",
+      "severity": "WARN",
+      "pattern": "\\bpossui(?:s)?\\b",
+      "flags": "i",
+      "message": "Stiff 'possuis': use 'tens'",
+      "examples": {
+        "match": [
+          "Já possuis esta ferramenta!"
+        ],
+        "nomatch": [
+          "Já tens esta ferramenta!"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-FOCAR",
+      "severity": "ERR",
+      "pattern": "\\bFocar\\b",
+      "flags": "",
+      "message": "Literal 'Focar' on interact: use 'Usar / Interagir'",
+      "examples": {
+        "match": [
+          "Focar"
+        ],
+        "nomatch": [
+          "Usar"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-OBTER-ITENS",
+      "severity": "ERR",
+      "pattern": "\\bOBTER (?:ITENS|OBJETOS)\\b|\\bMover para\\b",
+      "flags": "",
+      "message": "Literal 'OBTER ITENS' (GET ITEMS): use 'RECOLHER TUDO'",
+      "examples": {
+        "match": [
+          "OBTER ITENS"
+        ],
+        "nomatch": [
+          "RECOLHER TUDO"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-SENHOR-SENHORA",
+      "severity": "WARN",
+      "pattern": "\\b(?:o senhor|a senhora)\\b",
+      "flags": "i",
+      "message": "'o senhor / a senhora' forces a player gender guess: use implicit 3rd person",
+      "examples": {
+        "match": [
+          "Espero que o senhor esteja bem."
+        ],
+        "nomatch": [
+          "Espero que esteja tudo bem consigo."
+        ]
+      }
+    },
+    {
+      "id": "PTPT-ARTICLE-PLACEHOLDER",
+      "severity": "ERR",
+      "pattern": "\\b(?:o|a|os|as|um|uma|do|da|no|na|ao|à|pelo|pela)\\s+\\{\\w+\\}",
+      "flags": "",
+      "message": "Article/contraction glued to a placeholder",
+      "examples": {
+        "match": [
+          "Apanha o {0}"
+        ],
+        "nomatch": [
+          "Apanha este item: {0}"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-GERUND-START",
+      "severity": "ERR",
+      "pattern": "^\\s*(?!(?:Quando|Segundo|Comando|Bando|Fundo|Mundo|Lindo|Grande)\\b)[A-ZÁÉÍÓÚÂÊÔÃÕÇ]\\w+(?:ando|endo|indo)\\b",
+      "flags": "",
+      "message": "Gerund progress label at string start (UI): pt-PT uses 'A carregar…'",
+      "context": "ui",
+      "examples": {
+        "match": [
+          "Transferindo itens",
+          "Guardando…"
+        ],
+        "nomatch": [
+          "A transferir itens",
+          "Quando chegares"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-OBJECT-PRONOUN",
+      "severity": "WARN",
+      "pattern": "\\b\\w+(?:ar|er|ir)\\s+(?:ele|ela|eles|elas)\\b",
+      "flags": "i",
+      "message": "Object pronoun after infinitive ('consertar ela') is Brazilian: use 'consertá-la'",
+      "examples": {
+        "match": [
+          "Vou consertar ela"
+        ],
+        "nomatch": [
+          "Vou consertá-la"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-CONTATO",
+      "severity": "ERR",
+      "pattern": "\\bcontato\\b",
+      "flags": "i",
+      "message": "pt-BR spelling 'contato': pt-PT (AO90) keeps 'contacto'",
+      "examples": {
+        "match": [
+          "Entre em contato"
+        ],
+        "nomatch": [
+          "Entre em contacto"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-ASPECTO",
+      "severity": "WARN",
+      "pattern": "\\baspecto\\b",
+      "flags": "i",
+      "message": "AO90 spelling: 'aspeto'",
+      "examples": {
+        "match": [
+          "Bom aspecto"
+        ],
+        "nomatch": [
+          "Bom aspeto"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-FATO",
+      "severity": "WARN",
+      "pattern": "\\bfato\\b",
+      "flags": "i",
+      "message": "'fato' meaning fact is Brazilian: pt-PT uses 'facto' ('fato' = suit is fine)",
+      "examples": {
+        "match": [
+          "É um fato."
+        ],
+        "nomatch": [
+          "É um facto."
+        ]
+      }
+    },
+    {
+      "id": "PTPT-COM-SUCESSO",
+      "severity": "WARN",
+      "pattern": "\\bcom sucesso\\b",
+      "flags": "i",
+      "message": "Calque of 'successfully'",
+      "examples": {
+        "match": [
+          "Guardado com sucesso"
+        ],
+        "nomatch": [
+          "Jogo guardado"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-BEM-VINDO",
+      "severity": "WARN",
+      "pattern": "\\bBem-vind[oa]s?\\b",
+      "flags": "",
+      "message": "Gendered 'Bem-vindo': use 'Boas-vindas'",
+      "examples": {
+        "match": [
+          "Bem-vindo à oficina"
+        ],
+        "nomatch": [
+          "Boas-vindas à oficina"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-GENDER-HACK",
+      "severity": "WARN",
+      "pattern": "\\w\\([ao]\\)",
+      "flags": "",
+      "message": "Bracketed gender hack 'Caro(a)': rephrase neutrally",
+      "examples": {
+        "match": [
+          "Caro(a) jogador(a)"
+        ],
+        "nomatch": [
+          "Olá"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-OBRIGADO-PLAYER",
+      "severity": "WARN",
+      "pattern": "\\bObrigad[oa]\\b",
+      "flags": "",
+      "message": "Player-voiced 'Obrigado/Obrigada' reveals gender (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Obrigado pela ajuda"
+        ],
+        "nomatch": [
+          "Agradeço a ajuda"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-GENDERED-PREDICATE",
+      "severity": "WARN",
+      "pattern": "\\b(?:Estás|És|Foste|Ficaste) \\w+(?:ado|ido|oso)\\b",
+      "flags": "",
+      "message": "Gendered predicate about the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Estás preparado"
+        ],
+        "nomatch": [
+          "Está tudo pronto"
+        ]
+      }
+    },
+    {
+      "id": "PTPT-TENHO-PERFECT",
+      "severity": "WARN",
+      "pattern": "\\b[Tt]enho \\w+(?:ado|ido)\\b",
+      "flags": "",
+      "message": "Spanish-perfect contamination 'tenho feito'",
+      "examples": {
+        "match": [
+          "Tenho reparado a nave"
+        ],
+        "nomatch": [
+          "Reparei a nave"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+[
+ {
+  "key": "ON",
+  "en": "ON",
+  "dst": "EINGESCHALTET"
+ },
+ {
+  "key": "BUY",
+  "en": "BUY",
+  "dst": "KAUFEN"
+ },
+ {
+  "key": "APPLY",
+  "en": "APPLY",
+  "dst": "ÜBERNEHMEN"
+ },
+ {
+  "key": "SETTINGS",
+  "en": "SETTINGS",
+  "dst": "EINSTELLUNGEN"
+ },
+ {
+  "key": "SAVE_JA",
+  "en": "SAVE",
+  "dst": "セーブする"
+ },
+ {
+  "key": "SAVE_ZH",
+  "en": "SAVE",
+  "dst": "保存"
+ },
+ {
+  "key": "SAVE_KO",
+  "en": "SAVE",
+  "dst": "저장하기"
+ },
+ {
+  "key": "CONF_TR",
+  "en": "Confirm",
+  "dst": "Onayla"
+ },
+ {
+  "key": "INV_TR",
+  "en": "Inventory",
+  "dst": "Envanter"
+ },
+ {
+  "key": "TAB",
+  "en": "Crafting Station",
+  "dst": "Werkstatt für Handwerk"
+ },
+ {
+  "key": "LONG",
+  "en": "This is a long tooltip describing the item in detail.",
+  "dst": "Dies ist ein sehr langer Tooltip, der den Gegenstand ausführlich und in aller Breite beschreibt, viel länger als das Englische."
+ },
+ {
+  "key": "TAGGED",
+  "en": "<b>OK</b>",
+  "dst": "<color=#ff0000>BESTÄTIGEN</color>"
+ },
+ {
+  "key": "NFD",
+  "en": "Cafe",
+  "dst": "Café Crème"
+ },
+ {
+  "key": "EMOJI",
+  "en": "Hi",
+  "dst": "Hi 🎮🎮🎮🎮🎮🎮"
+ },
+ {
+  "key": "HALFKANA",
+  "en": "Save",
+  "dst": "ｾｰﾌﾞ"
+ },
+ {
+  "key": "CYR",
+  "en": "Save",
+  "dst": "Сохранить"
+ },
+ {
+  "key": "ML_SRC",
+  "en": "Line\nTwo",
+  "dst": "Ein sehr langer Text ohne Umbruch der hier hoch ist"
+ },
+ {
+  "key": "ML_DST",
+  "en": "Confirm",
+  "dst": "Bestätigen\nund weiter"
+ },
+ {
+  "key": "RU_LONG",
+  "en": "Durability",
+  "dst": "Прочность"
+ }
+]

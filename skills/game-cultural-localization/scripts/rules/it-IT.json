@@ -1,0 +1,405 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "it-IT",
+  "version": 1,
+  "notes": "Italian burocratese / translationese rules. See references/it-IT.md §1-3.",
+  "rules": [
+    {
+      "id": "IT-EFFETTUARE",
+      "severity": "WARN",
+      "pattern": "\\beffettua\\w*",
+      "flags": "i",
+      "message": "Burocratese 'effettuare': use the direct verb ('riparare', 'fare')",
+      "examples": {
+        "match": [
+          "Effettuare la riparazione"
+        ],
+        "nomatch": [
+          "Riparare"
+        ]
+      }
+    },
+    {
+      "id": "IT-PROCEDERE-A",
+      "severity": "WARN",
+      "pattern": "\\bprocedere (?:a|al|allo|alla|all')",
+      "flags": "i",
+      "message": "Burocratese 'procedere a': use the direct verb",
+      "examples": {
+        "match": [
+          "Procedere allo smantellamento"
+        ],
+        "nomatch": [
+          "Smontare"
+        ]
+      }
+    },
+    {
+      "id": "IT-FOCALIZZARE",
+      "severity": "ERR",
+      "pattern": "\\bFocalizza\\w*|\\bMett(?:i|ere) a fuoco\\b",
+      "flags": "i",
+      "message": "Literal 'Focalizzare / Mettere a fuoco' on interact: use 'Usa / Interagisci'",
+      "examples": {
+        "match": [
+          "Focalizzare",
+          "Metti a fuoco"
+        ],
+        "nomatch": [
+          "Usa"
+        ]
+      }
+    },
+    {
+      "id": "IT-POSIZIONATO-PASSIVE",
+      "severity": "WARN",
+      "pattern": "\\bnon può essere \\w+at[oa]\\b",
+      "flags": "i",
+      "message": "Passive 'non può essere posizionato': use 'Questo qui non ci va.'",
+      "examples": {
+        "match": [
+          "Questo oggetto non può essere posizionato qui."
+        ],
+        "nomatch": [
+          "Non puoi metterlo qui."
+        ]
+      }
+    },
+    {
+      "id": "IT-GIA-PRESENTE",
+      "severity": "WARN",
+      "pattern": "\\bè già presente\\b",
+      "flags": "i",
+      "message": "Stiff 'è già presente': use 'Questo posto è già occupato!'",
+      "examples": {
+        "match": [
+          "Un oggetto è già presente in questa posizione!"
+        ],
+        "nomatch": [
+          "C'è già qualcosa qui!"
+        ]
+      }
+    },
+    {
+      "id": "IT-POSSIEDI",
+      "severity": "WARN",
+      "pattern": "\\bpossied[io]\\b",
+      "flags": "i",
+      "message": "Stiff 'possiedi': use everyday 'hai'",
+      "examples": {
+        "match": [
+          "Possiedi già questo strumento!"
+        ],
+        "nomatch": [
+          "Hai già questo attrezzo!"
+        ]
+      }
+    },
+    {
+      "id": "IT-TROPPO-BASSA",
+      "severity": "WARN",
+      "pattern": "\\bè troppo bass[oa]\\b",
+      "flags": "i",
+      "message": "Literal 'è troppo bassa': use 'Non hai abbastanza energia!'",
+      "examples": {
+        "match": [
+          "La tua resistenza è troppo bassa!"
+        ],
+        "nomatch": [
+          "Non hai abbastanza fiato!"
+        ]
+      }
+    },
+    {
+      "id": "IT-TROPPO-BREVE",
+      "severity": "WARN",
+      "pattern": "\\bè troppo breve\\b",
+      "flags": "i",
+      "message": "Literal 'durata ... è troppo breve': rephrase naturally",
+      "examples": {
+        "match": [
+          "La durata del sonno è troppo breve."
+        ],
+        "nomatch": [
+          "Non vale la pena dormire così poco."
+        ]
+      }
+    },
+    {
+      "id": "IT-OTTIENI-OGGETTI",
+      "severity": "ERR",
+      "pattern": "\\bOTTIENI OGGETTI\\b",
+      "flags": "",
+      "message": "Literal 'OTTIENI OGGETTI' (GET ITEMS): use 'PRENDI TUTTO / RITIRA'",
+      "examples": {
+        "match": [
+          "OTTIENI OGGETTI"
+        ],
+        "nomatch": [
+          "PRENDI TUTTO"
+        ]
+      }
+    },
+    {
+      "id": "IT-MUOVI",
+      "severity": "ERR",
+      "pattern": "\\bMuovi (?:in|a) \\w+\\b",
+      "flags": "i",
+      "message": "Manual-speak keybinding 'Muovi in avanti': use 'Avanti / Sinistra'",
+      "examples": {
+        "match": [
+          "Muovi in avanti"
+        ],
+        "nomatch": [
+          "Avanti"
+        ]
+      }
+    },
+    {
+      "id": "IT-TRASFERITI",
+      "severity": "WARN",
+      "pattern": "\\bstat[oiae] trasferit[oiae]\\b",
+      "flags": "i",
+      "message": "Burocratese 'sono stati trasferiti': use 'portati in magazzino'",
+      "examples": {
+        "match": [
+          "Gli oggetti sono stati trasferiti nel magazzino."
+        ],
+        "nomatch": [
+          "I pezzi sono stati portati in magazzino."
+        ]
+      }
+    },
+    {
+      "id": "IT-ESSO-ESSA",
+      "severity": "WARN",
+      "pattern": "\\b(?:esso|essa|essi)\\b",
+      "flags": "",
+      "message": "Bookish pronoun 'esso/essa': drop the pronoun in spoken Italian",
+      "examples": {
+        "match": [
+          "Prendi il motore: esso è pronto."
+        ],
+        "nomatch": [
+          "Le lettere esse e ti",
+          "ESSO"
+        ]
+      }
+    },
+    {
+      "id": "IT-PRONOUN-SPAM",
+      "severity": "WARN",
+      "pattern": "(?:^|[.!?]\\s+)(?:Tu|Io|Lui|Lei)\\s+(?:hai|sei|ho|sono|ha|è|puoi|devi)\\b",
+      "flags": "",
+      "message": "Subject-pronoun spam ('Tu hai'): Italian is pro-drop",
+      "examples": {
+        "match": [
+          "Tu hai una nave."
+        ],
+        "nomatch": [
+          "Hai una nave."
+        ]
+      }
+    },
+    {
+      "id": "IT-IN-GRADO-DI",
+      "severity": "WARN",
+      "pattern": "\\bin grado di\\b",
+      "flags": "i",
+      "message": "Stiff 'in grado di': use 'puoi / riesci'",
+      "examples": {
+        "match": [
+          "Non sei in grado di costruirlo."
+        ],
+        "nomatch": [
+          "Non puoi costruirlo."
+        ]
+      }
+    },
+    {
+      "id": "IT-SI-PREGA",
+      "severity": "WARN",
+      "pattern": "\\bsi prega di\\b",
+      "flags": "i",
+      "message": "Officialese 'si prega di': use a direct imperative",
+      "examples": {
+        "match": [
+          "Si prega di attendere."
+        ],
+        "nomatch": [
+          "Attendi."
+        ]
+      }
+    },
+    {
+      "id": "IT-ARTICLE-PLACEHOLDER",
+      "severity": "ERR",
+      "pattern": "\\b(?:il|lo|la|i|gli|le|un|uno|una|un'|del|dello|della|dell'|nel|nello|nella|nell'|al|allo|alla|all')\\s*\\{\\w+\\}",
+      "flags": "",
+      "message": "Article/articulated preposition glued to a placeholder",
+      "examples": {
+        "match": [
+          "Prendi il {0}",
+          "Vai al {item}"
+        ],
+        "nomatch": [
+          "Prendi questo oggetto: {0}"
+        ]
+      }
+    },
+    {
+      "id": "IT-E-APOSTROPHE",
+      "severity": "ERR",
+      "pattern": "\\bE'(?=\\s)",
+      "flags": "",
+      "message": "Apostrophe used as accent: write 'È'",
+      "examples": {
+        "match": [
+          "E' pronto"
+        ],
+        "nomatch": [
+          "È pronto"
+        ]
+      }
+    },
+    {
+      "id": "IT-WRONG-ACCENT",
+      "severity": "ERR",
+      "pattern": "\\b(?:perchè|poichè|affinchè|nè|pò)\\b",
+      "flags": "",
+      "message": "Wrong accent direction / missing apostrophe (perché, poiché, né, po')",
+      "examples": {
+        "match": [
+          "perchè no?"
+        ],
+        "nomatch": [
+          "perché no?"
+        ]
+      }
+    },
+    {
+      "id": "IT-MEDIANTE",
+      "severity": "WARN",
+      "pattern": "\\b(?:mediante|tramite)\\b",
+      "flags": "i",
+      "message": "Legalese preposition in dialogue: use 'con'",
+      "context": "dialog",
+      "examples": {
+        "match": [
+          "Ripara mediante il kit"
+        ],
+        "nomatch": [
+          "Ripara con il kit"
+        ]
+      }
+    },
+    {
+      "id": "IT-CON-SUCCESSO",
+      "severity": "WARN",
+      "pattern": "\\bcon successo\\b",
+      "flags": "i",
+      "message": "Calque of 'successfully'",
+      "examples": {
+        "match": [
+          "Salvato con successo"
+        ],
+        "nomatch": [
+          "Partita salvata"
+        ]
+      }
+    },
+    {
+      "id": "IT-GENDERED-PREDICATE",
+      "severity": "WARN",
+      "pattern": "\\b(?:Sei|È|Siete) (?:pronto|sicuro|certo|diventato|stato|esausto|stanco)\\b|\\bTi sei \\w+[ai]t[oa]\\b",
+      "flags": "",
+      "message": "Gendered predicate / reflexive about the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Sei pronto?",
+          "Ti sei costruito una nave"
+        ],
+        "nomatch": [
+          "Tutto pronto?"
+        ]
+      }
+    },
+    {
+      "id": "IT-LEI-CLITIC",
+      "severity": "WARN",
+      "pattern": "\\bL'ha \\w+at[oa]\\b",
+      "flags": "",
+      "message": "Direct-object clitic with 'Lei' forces gender agreement",
+      "examples": {
+        "match": [
+          "L'ha contattata il vicepresidente"
+        ],
+        "nomatch": [
+          "Il vicepresidente si è messo in contatto con Lei"
+        ]
+      }
+    },
+    {
+      "id": "IT-BENVENUTO",
+      "severity": "WARN",
+      "pattern": "\\bBenvenut[oa]\\b",
+      "flags": "",
+      "message": "Gendered 'Benvenuto': use 'Ti diamo il benvenuto'",
+      "examples": {
+        "match": [
+          "Benvenuto in officina"
+        ],
+        "nomatch": [
+          "il benvenuto"
+        ]
+      }
+    },
+    {
+      "id": "IT-ALLEATO",
+      "severity": "WARN",
+      "pattern": "\\bAlleat[oi]\\b",
+      "flags": "",
+      "message": "Gendered badge 'Alleato': use 'Alleanza'",
+      "examples": {
+        "match": [
+          "Alleato"
+        ],
+        "nomatch": [
+          "Alleanza"
+        ]
+      }
+    },
+    {
+      "id": "IT-PASSATO-REMOTO-PL",
+      "severity": "WARN",
+      "pattern": "\\b\\w{3,}(?:arono|irono|erono)\\b",
+      "flags": "",
+      "message": "Passato remoto 3rd-plural ending in dialogue: use passato prossimo",
+      "context": "dialog",
+      "examples": {
+        "match": [
+          "Distrussero tutto e fuggirono."
+        ],
+        "nomatch": [
+          "Hanno distrutto tutto."
+        ]
+      }
+    },
+    {
+      "id": "IT-BESTEMMIA",
+      "severity": "ERR",
+      "pattern": "\\b(?:porco|porca)\\s+(?:dio|madonna)\\b|\\bdio\\s+(?:cane|porco)\\b",
+      "flags": "i",
+      "message": "Bestemmia: forbidden in any rating tier",
+      "examples": {
+        "match": [
+          "Porco dio!"
+        ],
+        "nomatch": [
+          "Porca miseria!"
+        ]
+      }
+    }
+  ]
+}

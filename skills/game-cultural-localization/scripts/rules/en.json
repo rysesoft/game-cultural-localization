@@ -1,0 +1,238 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "en",
+  "version": 1,
+  "notes": "Source-polish rules for English (developer placeholder English). Minimal set; see references/en.md.",
+  "rules": [
+    {
+      "id": "EN-IN-ORDER-TO",
+      "severity": "WARN",
+      "pattern": "\\bin order to\\b",
+      "flags": "i",
+      "message": "Filler 'in order to': use plain 'to'",
+      "examples": {
+        "match": [
+          "Press X in order to jump"
+        ],
+        "nomatch": [
+          "Press X to jump"
+        ]
+      }
+    },
+    {
+      "id": "EN-UTILIZE",
+      "severity": "WARN",
+      "pattern": "\\butiliz(?:e|es|ed|ing)\\b",
+      "flags": "i",
+      "message": "Corporate 'utilize': use 'use'",
+      "examples": {
+        "match": [
+          "Utilize the panel"
+        ],
+        "nomatch": [
+          "Use the panel"
+        ]
+      }
+    },
+    {
+      "id": "EN-PRIOR-TO",
+      "severity": "WARN",
+      "pattern": "\\bprior to\\b",
+      "flags": "i",
+      "message": "Stiff 'prior to': use 'before'",
+      "examples": {
+        "match": [
+          "Save prior to exit"
+        ],
+        "nomatch": [
+          "Save before you exit"
+        ]
+      }
+    },
+    {
+      "id": "EN-NOT-ABLE",
+      "severity": "WARN",
+      "pattern": "\\b(?:is|are|was|were) not able to\\b",
+      "flags": "i",
+      "message": "Stiff 'is not able to': use 'can't'",
+      "examples": {
+        "match": [
+          "The drone is not able to fly"
+        ],
+        "nomatch": [
+          "The drone can't fly"
+        ]
+      }
+    },
+    {
+      "id": "EN-PLACEHOLDER-TEXT",
+      "severity": "ERR",
+      "pattern": "\\b(?:TODO|TBD|FIXME|Lorem ipsum|PLACEHOLDER|XXX)\\b",
+      "flags": "",
+      "message": "Unfinished placeholder text left in a source string",
+      "examples": {
+        "match": [
+          "TODO: write this",
+          "Lorem ipsum dolor"
+        ],
+        "nomatch": [
+          "Todo list",
+          "Total: 3"
+        ]
+      }
+    },
+    {
+      "id": "EN-DOUBLE-SPACE",
+      "severity": "WARN",
+      "pattern": "\\S  +\\S",
+      "flags": "",
+      "message": "Double space inside a sentence",
+      "examples": {
+        "match": [
+          "Press  start"
+        ],
+        "nomatch": [
+          "Press start"
+        ]
+      }
+    },
+    {
+      "id": "EN-PASSIVE-FAILED",
+      "severity": "WARN",
+      "pattern": "\\b(?:placement|operation|action|request) (?:has )?failed\\b",
+      "flags": "i",
+      "message": "Passive software-error tone: write direct player feedback",
+      "examples": {
+        "match": [
+          "Item placement failed in current area."
+        ],
+        "nomatch": [
+          "That doesn't fit here."
+        ]
+      }
+    },
+    {
+      "id": "EN-PLEASE-UI",
+      "severity": "WARN",
+      "pattern": "^\\s*Please\\b",
+      "flags": "",
+      "message": "'Please' on UI copy: use a direct imperative",
+      "examples": {
+        "match": [
+          "Please select a file"
+        ],
+        "nomatch": [
+          "Select a file",
+          "Say please."
+        ]
+      }
+    },
+    {
+      "id": "EN-OPTIONAL-PLURAL",
+      "severity": "ERR",
+      "pattern": "\\(s\\)(?!\\w)",
+      "flags": "",
+      "message": "'item(s)'-style optional plural: use an ICU plural",
+      "examples": {
+        "match": [
+          "3 item(s) found"
+        ],
+        "nomatch": [
+          "3 items found"
+        ]
+      }
+    },
+    {
+      "id": "EN-LATINATE-VERB",
+      "severity": "WARN",
+      "pattern": "\\b(?:utilise|commence|acquire|obtain)\\b",
+      "flags": "i",
+      "message": "Latinate verb: use 'use / start / get'",
+      "examples": {
+        "match": [
+          "Commence the repair",
+          "Obtain the key"
+        ],
+        "nomatch": [
+          "Start the repair"
+        ]
+      }
+    },
+    {
+      "id": "EN-PLEASE-NOTE",
+      "severity": "WARN",
+      "pattern": "\\bPlease note that\\b",
+      "flags": "i",
+      "message": "Filler 'Please note that'",
+      "examples": {
+        "match": [
+          "Please note that saving is disabled."
+        ],
+        "nomatch": [
+          "Saving is disabled."
+        ]
+      }
+    },
+    {
+      "id": "EN-UNABLE-TO",
+      "severity": "WARN",
+      "pattern": "\\bis (?:unable|not possible) to\\b",
+      "flags": "i",
+      "message": "Stiff 'is unable to': use 'can't'",
+      "examples": {
+        "match": [
+          "It is not possible to build here."
+        ],
+        "nomatch": [
+          "You can't build here."
+        ]
+      }
+    },
+    {
+      "id": "EN-PRONOUN-HACK",
+      "severity": "WARN",
+      "pattern": "\\b(?:he/she|\\(s\\)he|him/her|his/her)\\b",
+      "flags": "i",
+      "message": "Pronoun hack: rewrite gender-neutral ('they' / restructure)",
+      "examples": {
+        "match": [
+          "Ask him/her to wait"
+        ],
+        "nomatch": [
+          "Ask them to wait"
+        ]
+      }
+    },
+    {
+      "id": "EN-GENDERED-VOCATIVE",
+      "severity": "WARN",
+      "pattern": "\\b(?:dude|bro|sir|ma'am|boy|son|girl)\\b",
+      "flags": "i",
+      "message": "Gendered vocative toward the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Nice work, son."
+        ],
+        "nomatch": [
+          "Nice work."
+        ]
+      }
+    },
+    {
+      "id": "EN-HARDCODED-PERCENT",
+      "severity": "WARN",
+      "pattern": "\\d+%",
+      "flags": "",
+      "message": "Hard-coded percent: use a number placeholder (targets reorder '%50' / '50 %')",
+      "examples": {
+        "match": [
+          "Deal 50% damage"
+        ],
+        "nomatch": [
+          "Deal {pct} damage"
+        ]
+      }
+    }
+  ]
+}

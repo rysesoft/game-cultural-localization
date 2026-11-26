@@ -1,0 +1,31 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+
+#: ui/button
+msgctxt "UI"
+msgid "Save"
+msgstr "Speichern"
+
+msgid "You have {0} coins"
+msgstr "Du hast Münzen"
+
+msgid "Long text"
+msgstr ""
+"Zeile eins "
+"Zeile zwei"
+
+#, fuzzy
+msgid "Fuzzy one"
+msgstr "Unscharf"
+
+msgid "%d item"
+msgid_plural "%d items"
+msgstr[0] "%d Ding"
+msgstr[1] "%d Dinge"
+
+msgid "He said \"hi\""
+msgstr "Er sagte \"hallo\""
+
+#~ msgid "Obsolete"
+#~ msgstr "Veraltet"

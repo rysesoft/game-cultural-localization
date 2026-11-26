@@ -1,0 +1,13 @@
+key	en	dst
+PH_OK	You have {0} coins	{0} Münzen hast du
+PH_MISSING	You have {0} coins	Du hast Münzen
+PH_WRONGIDX	You have {0} coins	Du hast {1} Münzen
+PH_CASE	Hi {name}	Hallo {Name}
+PH_FORMAT	Cost: {0:N0}	Kosten: {0}
+PH_ESCAPED	Use {{braces}}	Nutze {{Klammern}}
+PH_SMART	{0} {0:plural:item|items}	{0} {0:plural:Gegenstand|Gegenstände}
+PRINTF_OK	%s found %d items	%s hat %d Dinge gefunden
+PRINTF_MISS	%s found %d items	%s hat Dinge gefunden
+PRINTF_REORD	%1$s gave %2$s	%2$s bekam von %1$s
+PRINTF_DI	%d items	%i Dinge
+PCT_FP1	100% complete	100% fertig

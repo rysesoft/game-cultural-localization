@@ -1,0 +1,319 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "pt-BR",
+  "version": 1,
+  "notes": "Brazilian Portuguese: pt-PT leakage + stiff translationese. See references/pt-BR.md §2-3.",
+  "rules": [
+    {
+      "id": "PTBR-PTPT-TERMS",
+      "severity": "ERR",
+      "pattern": "\\b(?:Definições|Ecrã|Ecrãs|Utilizador|Utilizadores|Ficheiro|Ficheiros|Telemóvel|Equipa|Registo|Gerir|Guardar jogo)\\b",
+      "flags": "i",
+      "message": "European Portuguese (pt-PT) term leaked into pt-BR: use 'Configurações / Tela / Usuário / Arquivo'",
+      "examples": {
+        "match": [
+          "Abra as Definições",
+          "no ecrã",
+          "o utilizador"
+        ],
+        "nomatch": [
+          "Abra as Configurações",
+          "na tela"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-GUARDAR-SAVE",
+      "severity": "WARN",
+      "pattern": "\\bGuardar\\b",
+      "flags": "",
+      "message": "pt-PT 'Guardar' for Save: pt-BR uses 'Salvar' (ok when it means 'to keep')",
+      "examples": {
+        "match": [
+          "Guardar"
+        ],
+        "nomatch": [
+          "Salvar",
+          "guardar o segredo"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-A-INFINITIVO",
+      "severity": "WARN",
+      "pattern": "(?:^|[.!?:]\\s*)A\\s+(?:carregar|guardar|montar|desmontar|transferir|processar|salvar|construir|reparar|aguardar)\\b",
+      "flags": "i",
+      "message": "pt-PT 'a + infinitivo' progressive leaked into pt-BR: use the gerund (-ndo)",
+      "examples": {
+        "match": [
+          "A carregar...",
+          "A montar peças"
+        ],
+        "nomatch": [
+          "Carregando...",
+          "Ajude a carregar o caminhão."
+        ]
+      }
+    },
+    {
+      "id": "PTBR-FOCAR",
+      "severity": "ERR",
+      "pattern": "\\bFocar\\b",
+      "flags": "",
+      "message": "Literal 'Focar' on console interact: use 'Usar / Interagir'",
+      "examples": {
+        "match": [
+          "Focar"
+        ],
+        "nomatch": [
+          "Usar"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-PASSIVE-COLOCADO",
+      "severity": "WARN",
+      "pattern": "\\bnão pode ser \\w+ad[oa]s?\\b",
+      "flags": "i",
+      "message": "Passive 'não pode ser colocado': use 'Isso não encaixa aqui.'",
+      "examples": {
+        "match": [
+          "Este item não pode ser colocado neste local."
+        ],
+        "nomatch": [
+          "Isso não encaixa aqui."
+        ]
+      }
+    },
+    {
+      "id": "PTBR-JA-EXISTE",
+      "severity": "WARN",
+      "pattern": "\\bJá existe um(?:a)?\\b",
+      "flags": "i",
+      "message": "Stiff 'Já existe um item': use 'Esse espaço já está ocupado!'",
+      "examples": {
+        "match": [
+          "Já existe um item neste local!"
+        ],
+        "nomatch": [
+          "Já tem algo aqui!"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-POSSUI",
+      "severity": "WARN",
+      "pattern": "\\bpossui\\b",
+      "flags": "i",
+      "message": "Stiff 'possui': prefer everyday 'tem' in dialogue/warnings",
+      "examples": {
+        "match": [
+          "Você já possui esta ferramenta!"
+        ],
+        "nomatch": [
+          "Você já tem essa ferramenta!"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-MUITO-BAIXA",
+      "severity": "WARN",
+      "pattern": "\\bestá muito baix[oa]\\b",
+      "flags": "i",
+      "message": "Literal 'está muito baixa': use 'Você está sem fôlego!'",
+      "examples": {
+        "match": [
+          "Sua resistência está muito baixa!"
+        ],
+        "nomatch": [
+          "Você está sem energia!"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-OBTER-ITENS",
+      "severity": "ERR",
+      "pattern": "\\bOBTER ITENS\\b",
+      "flags": "",
+      "message": "Literal 'OBTER ITENS' (GET ITEMS): use 'PEGAR TUDO / COLETAR'",
+      "examples": {
+        "match": [
+          "OBTER ITENS"
+        ],
+        "nomatch": [
+          "PEGAR TUDO"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-MOVER-PARA",
+      "severity": "ERR",
+      "pattern": "\\bMover para\\b",
+      "flags": "i",
+      "message": "Manual-speak keybinding 'Mover para a frente': use 'Avançar / Recuar'",
+      "examples": {
+        "match": [
+          "Mover para a frente"
+        ],
+        "nomatch": [
+          "Avançar"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-EFETUAR",
+      "severity": "WARN",
+      "pattern": "\\b(?:Efetuar|Efectuar|Comercializar)\\b|\\b(?:Realizar|Efetuar) (?:a|o) \\w+\\b",
+      "flags": "i",
+      "message": "Bureaucratic 'Efetuar o reparo / Comercializar': use 'Consertar / Vender'",
+      "examples": {
+        "match": [
+          "Efetuar o reparo",
+          "Comercializar peças"
+        ],
+        "nomatch": [
+          "Consertar"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-GENDERED-GREETING",
+      "severity": "WARN",
+      "pattern": "\\b(?:Bem-vind[oa]s?|Prezad[oa])\\b",
+      "flags": "",
+      "message": "Gendered form directed at/by the player: use 'Boas-vindas / Agradeço'",
+      "examples": {
+        "match": [
+          "Bem-vindo à oficina!"
+        ],
+        "nomatch": [
+          "Boas-vindas à oficina!"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-ARTICLE-PLACEHOLDER",
+      "severity": "ERR",
+      "pattern": "\\b(?:o|a|os|as|um|uma|do|da|no|na|ao|à|pelo|pela)\\s+\\{\\w+\\}",
+      "flags": "",
+      "message": "Article/contraction glued to a placeholder",
+      "examples": {
+        "match": [
+          "Pegue o {0}",
+          "Vá ao {item}"
+        ],
+        "nomatch": [
+          "Pegue este item: {0}"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-COM-SUCESSO",
+      "severity": "WARN",
+      "pattern": "\\bcom sucesso\\b|\\bexitosamente\\b",
+      "flags": "i",
+      "message": "Calque of 'successfully' (or Spanish)",
+      "examples": {
+        "match": [
+          "Salvo com sucesso"
+        ],
+        "nomatch": [
+          "Jogo salvo"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-GENDER-HACK",
+      "severity": "WARN",
+      "pattern": "\\b\\w+\\([ao]\\)(?!\\w)",
+      "flags": "",
+      "message": "Bracketed gender hack 'jogador(a)': rephrase neutrally",
+      "examples": {
+        "match": [
+          "Caro(a) jogador(a)"
+        ],
+        "nomatch": [
+          "Olá"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-OBRIGADO-PLAYER",
+      "severity": "WARN",
+      "pattern": "\\bObrigad[oa]\\b",
+      "flags": "",
+      "message": "Player-voiced 'Obrigado/Obrigada' reveals gender (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Obrigado pela ajuda"
+        ],
+        "nomatch": [
+          "Valeu pela ajuda"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-GENDERED-PREDICATE",
+      "severity": "WARN",
+      "pattern": "\\bVocê (?:está|é|foi|ficou) \\w+(?:ado|ido|oso)\\b",
+      "flags": "",
+      "message": "Gendered predicate about the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Você está preparado"
+        ],
+        "nomatch": [
+          "Tudo pronto"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-TENHO-PERFECT",
+      "severity": "WARN",
+      "pattern": "\\b[Tt]enho \\w+(?:ado|ido)\\b",
+      "flags": "",
+      "message": "Spanish-perfect contamination 'tenho feito' (fine only for ongoing 'I've been …')",
+      "examples": {
+        "match": [
+          "Tenho reparado a nave"
+        ],
+        "nomatch": [
+          "Reparei a nave"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-UI-CONTRACTIONS",
+      "severity": "WARN",
+      "pattern": "\\b(?:pra|tá|né)\\b",
+      "flags": "",
+      "message": "Dialogue-only contractions in UI text (rows tagged ui)",
+      "context": "ui",
+      "examples": {
+        "match": [
+          "Pronto pra jogar"
+        ],
+        "nomatch": [
+          "Pronto para jogar"
+        ]
+      }
+    },
+    {
+      "id": "PTBR-FALTA-DISPOSICAO",
+      "severity": "WARN",
+      "pattern": "\\bfalta disposição\\b",
+      "flags": "i",
+      "message": "Wrong stamina word: use 'sem fôlego / sem energia'",
+      "examples": {
+        "match": [
+          "Falta disposição!"
+        ],
+        "nomatch": [
+          "Você está sem fôlego!"
+        ]
+      }
+    }
+  ]
+}

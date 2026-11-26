@@ -1,0 +1,435 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "de-DE",
+  "version": 1,
+  "notes": "German Beamten-Deutsch / translationese rules. See references/de-DE.md §2-3.",
+  "rules": [
+    {
+      "id": "DE-FOKUSSIEREN",
+      "severity": "ERR",
+      "pattern": "\\bFokussieren\\b",
+      "flags": "i",
+      "message": "Mistranslated interact prompt 'Fokussieren': use 'Benutzen / Bedienen'",
+      "examples": {
+        "match": [
+          "Fokussieren"
+        ],
+        "nomatch": [
+          "Benutzen"
+        ]
+      }
+    },
+    {
+      "id": "DE-KONSTRUIEREN",
+      "severity": "ERR",
+      "pattern": "\\bKONSTRUIEREN\\b",
+      "flags": "",
+      "message": "False friend 'KONSTRUIEREN' (CAD design): use 'BAUEN / FERTIGEN'",
+      "examples": {
+        "match": [
+          "KONSTRUIEREN"
+        ],
+        "nomatch": [
+          "BAUEN"
+        ]
+      }
+    },
+    {
+      "id": "DE-BEWEGEN-PROMPT",
+      "severity": "WARN",
+      "pattern": "\\b(?:Vorwärts|Rückwärts|Nach\\s+(?:links|rechts|oben|unten))\\s+bewegen\\b",
+      "flags": "i",
+      "message": "Manual-speak keybinding 'Vorwärts bewegen': use 'Vorwärts / Nach links'",
+      "examples": {
+        "match": [
+          "Vorwärts bewegen",
+          "Nach links bewegen"
+        ],
+        "nomatch": [
+          "Vorwärts",
+          "Nach links"
+        ]
+      }
+    },
+    {
+      "id": "DE-GEGENSTAENDE-ENTNEHMEN",
+      "severity": "WARN",
+      "pattern": "\\bGEGENSTÄNDE\\s+ENTNEHMEN\\b",
+      "flags": "",
+      "message": "Stiff 'GEGENSTÄNDE ENTNEHMEN' (GET ITEMS): use 'ALLES NEHMEN / ABHOLEN'",
+      "examples": {
+        "match": [
+          "GEGENSTÄNDE ENTNEHMEN"
+        ],
+        "nomatch": [
+          "ALLES NEHMEN"
+        ]
+      }
+    },
+    {
+      "id": "DE-BEFINDET-SICH",
+      "severity": "WARN",
+      "pattern": "\\bbefindet sich\\b",
+      "flags": "i",
+      "message": "Police-report 'befindet sich': prefer 'liegt / steht / ist'",
+      "examples": {
+        "match": [
+          "Hier befindet sich bereits ein Gegenstand!"
+        ],
+        "nomatch": [
+          "Der Platz ist schon belegt!"
+        ]
+      }
+    },
+    {
+      "id": "DE-PLATZIERT-WERDEN",
+      "severity": "WARN",
+      "pattern": "\\bkann\\s+(?:hier\\s+)?nicht\\s+platziert\\s+werden\\b",
+      "flags": "i",
+      "message": "Passive 'kann nicht platziert werden': use 'Das passt hier nicht hin.'",
+      "examples": {
+        "match": [
+          "Dieser Gegenstand kann hier nicht platziert werden."
+        ],
+        "nomatch": [
+          "Das passt hier nicht hin."
+        ]
+      }
+    },
+    {
+      "id": "DE-BESITZT",
+      "severity": "WARN",
+      "pattern": "\\bbesitzt\\b",
+      "flags": "i",
+      "message": "Stiff 'Du besitzt': use 'hast du schon'",
+      "examples": {
+        "match": [
+          "Du besitzt dieses Werkzeug bereits!"
+        ],
+        "nomatch": [
+          "Das Werkzeug hast du schon!"
+        ]
+      }
+    },
+    {
+      "id": "DE-ZU-NIEDRIG",
+      "severity": "WARN",
+      "pattern": "\\bist zu niedrig\\b",
+      "flags": "i",
+      "message": "Literal 'ist zu niedrig': use 'Du hast nicht genug Ausdauer!'",
+      "examples": {
+        "match": [
+          "Deine Ausdauer ist zu niedrig!"
+        ],
+        "nomatch": [
+          "Dir geht die Puste aus!"
+        ]
+      }
+    },
+    {
+      "id": "DE-VERAEUSSERN",
+      "severity": "ERR",
+      "pattern": "\\bveräußer\\w*",
+      "flags": "i",
+      "message": "Notary German 'veräußern': use 'verkaufen'",
+      "examples": {
+        "match": [
+          "Gegenstand veräußern"
+        ],
+        "nomatch": [
+          "Gegenstand verkaufen"
+        ]
+      }
+    },
+    {
+      "id": "DE-LAGER-UEBERTRAGEN",
+      "severity": "WARN",
+      "pattern": "\\b(?:ins|in das)\\s+Lager\\s+übertragen\\b",
+      "flags": "i",
+      "message": "'ins Lager übertragen' for physical items: use 'ins Lager gebracht'",
+      "examples": {
+        "match": [
+          "Teile wurden ins Lager übertragen."
+        ],
+        "nomatch": [
+          "Teile sind im Lager gelandet."
+        ]
+      }
+    },
+    {
+      "id": "DE-HALTE-BEREIT-INDEM",
+      "severity": "WARN",
+      "pattern": "Halte .* bereit,\\s*indem",
+      "flags": "i",
+      "message": "Manual-speak 'Halte X bereit, indem': use a direct imperative",
+      "examples": {
+        "match": [
+          "Halte einen Generator bereit, indem du ihn baust."
+        ],
+        "nomatch": [
+          "Leg einen Generator ins Lager."
+        ]
+      }
+    },
+    {
+      "id": "DE-EHE",
+      "severity": "ERR",
+      "pattern": "\\behe\\b",
+      "flags": "",
+      "message": "Archaic conjunction 'ehe': use everyday 'bevor' (lower-case only; 'Ehe' the noun is fine)",
+      "examples": {
+        "match": [
+          "Speichere, ehe du gehst."
+        ],
+        "nomatch": [
+          "Die Ehe von Anna und Max.",
+          "Ehe-Ring"
+        ]
+      }
+    },
+    {
+      "id": "DE-SOFERN",
+      "severity": "WARN",
+      "pattern": "\\bsofern\\b",
+      "flags": "i",
+      "message": "Officialese 'sofern': use 'wenn / solange'",
+      "examples": {
+        "match": [
+          "Sofern du genug Geld hast."
+        ],
+        "nomatch": [
+          "Wenn du genug Geld hast."
+        ]
+      }
+    },
+    {
+      "id": "DE-SAEMTLICHE",
+      "severity": "WARN",
+      "pattern": "\\bsämtliche[nrs]?\\b",
+      "flags": "i",
+      "message": "Officialese 'sämtliche': use 'alle'",
+      "examples": {
+        "match": [
+          "Sämtliche Teile wurden verkauft."
+        ],
+        "nomatch": [
+          "Alle Teile wurden verkauft."
+        ]
+      }
+    },
+    {
+      "id": "DE-VERFUEGT-UEBER",
+      "severity": "WARN",
+      "pattern": "\\bverfüg(?:t|st|en)\\s+über\\b",
+      "flags": "i",
+      "message": "Officialese 'verfügt über': use 'hat / bietet'",
+      "examples": {
+        "match": [
+          "Die Werkstatt verfügt über drei Plätze."
+        ],
+        "nomatch": [
+          "Die Werkstatt hat drei Plätze."
+        ]
+      }
+    },
+    {
+      "id": "DE-HEGE-BEKLEIDE",
+      "severity": "WARN",
+      "pattern": "\\bheg(?:e|t|st)\\s+eine\\s+Leidenschaft\\b|\\bbekleid\\w*\\s+ein\\s+Amt\\b",
+      "flags": "i",
+      "message": "19th-century phrasing 'hege eine Leidenschaft / bekleide ein Amt': modern wording",
+      "examples": {
+        "match": [
+          "Ich hege eine Leidenschaft für Motoren."
+        ],
+        "nomatch": [
+          "Ich sammle leidenschaftlich gern Motoren."
+        ]
+      }
+    },
+    {
+      "id": "DE-DURCHFUEHREN",
+      "severity": "WARN",
+      "pattern": "\\bdurch(?:führen|geführt|führt)\\b",
+      "flags": "i",
+      "message": "Officialese 'durchführen': use the plain verb ('reparieren', 'starten')",
+      "examples": {
+        "match": [
+          "Reparatur durchführen"
+        ],
+        "nomatch": [
+          "Reparieren"
+        ]
+      }
+    },
+    {
+      "id": "DE-ERFOLGT",
+      "severity": "WARN",
+      "pattern": "\\berfolgt(?:e|en)?\\b",
+      "flags": "i",
+      "message": "Officialese 'erfolgt': rewrite with a concrete verb",
+      "examples": {
+        "match": [
+          "Die Lieferung erfolgt morgen."
+        ],
+        "nomatch": [
+          "Die Lieferung kommt morgen."
+        ]
+      }
+    },
+    {
+      "id": "DE-IN-DER-LAGE",
+      "severity": "WARN",
+      "pattern": "\\bin der Lage\\b",
+      "flags": "i",
+      "message": "Stiff 'in der Lage sein': use 'können'",
+      "examples": {
+        "match": [
+          "Du bist nicht in der Lage, das zu bauen."
+        ],
+        "nomatch": [
+          "Das kannst du nicht bauen."
+        ]
+      }
+    },
+    {
+      "id": "DE-CAPITAL-SHARP-S",
+      "severity": "WARN",
+      "pattern": "\\u1e9e",
+      "flags": "",
+      "message": "Capital 'ẞ' may be missing from custom TMP display fonts: use 'SS' in ALL-CAPS (verify with font_glyph_scanner)",
+      "examples": {
+        "match": [
+          "SCHLIEẞEN"
+        ],
+        "nomatch": [
+          "SCHLIESSEN"
+        ]
+      }
+    },
+    {
+      "id": "DE-PLACEHOLDER-COMPOUND",
+      "severity": "ERR",
+      "pattern": "\\{\\w+\\}(?:Upgrade|Bauplan|Rezept|Modul)\\b",
+      "flags": "",
+      "message": "Compound noun with a placeholder needs a hyphen: '{0}-Upgrade'",
+      "examples": {
+        "match": [
+          "{0}Upgrade"
+        ],
+        "nomatch": [
+          "{0}-Upgrade"
+        ]
+      }
+    },
+    {
+      "id": "DE-ARTICLE-PLACEHOLDER",
+      "severity": "ERR",
+      "pattern": "\\b(?:den|dem|des|der|die|das|mit|von|zum|zur)\\s+\\{\\w+\\}",
+      "flags": "",
+      "message": "Article/case marker directly before a placeholder: the inserted noun cannot inflect",
+      "examples": {
+        "match": [
+          "Geh zum {0}",
+          "Nimm den {itemName}"
+        ],
+        "nomatch": [
+          "Geh zur Station {0}"
+        ]
+      }
+    },
+    {
+      "id": "DE-GENDERSTERN",
+      "severity": "ERR",
+      "pattern": "\\w+(?:\\*|:|_)innen\\b|\\b[A-Za-zäöüß]+Innen\\b",
+      "flags": "",
+      "message": "Gendersternchen / Binnen-I breaks immersion and fonts: use neutral phrasing",
+      "examples": {
+        "match": [
+          "Spieler*innen",
+          "SpielerInnen"
+        ],
+        "nomatch": [
+          "Spielende"
+        ]
+      }
+    },
+    {
+      "id": "DE-ENTNEHMEN-PASSIV",
+      "severity": "WARN",
+      "pattern": "\\bentnehmen\\b|\\bplatziert werden\\b",
+      "flags": "i",
+      "message": "Written-register 'entnehmen' / passive 'platziert werden'",
+      "examples": {
+        "match": [
+          "Teile entnehmen"
+        ],
+        "nomatch": [
+          "Teile nehmen"
+        ]
+      }
+    },
+    {
+      "id": "DE-KOSMISCH-CALQUE",
+      "severity": "WARN",
+      "pattern": "\\bkosmische[rn]? (?:Schwachsinn|Unsinn)\\b",
+      "flags": "i",
+      "message": "Calqued exclamation 'kosmischer Schwachsinn'",
+      "examples": {
+        "match": [
+          "Was für ein kosmischer Schwachsinn!"
+        ],
+        "nomatch": [
+          "So ein Quatsch!"
+        ]
+      }
+    },
+    {
+      "id": "DE-PERCENT-SPACE",
+      "severity": "WARN",
+      "pattern": "\\d+%",
+      "flags": "",
+      "message": "German percent needs a space: '40 %'",
+      "examples": {
+        "match": [
+          "40% fertig"
+        ],
+        "nomatch": [
+          "40 % fertig"
+        ]
+      }
+    },
+    {
+      "id": "DE-GENDERED-ADDRESS",
+      "severity": "WARN",
+      "pattern": "\\b(?:Junge|Sohn|Kleiner|Mann)\\b",
+      "flags": "",
+      "message": "Gendered address of the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Gut gemacht, Junge."
+        ],
+        "nomatch": [
+          "Gut gemacht."
+        ]
+      }
+    },
+    {
+      "id": "DE-ANWENDEN-BUTTON",
+      "severity": "WARN",
+      "pattern": "\\bAnwenden\\b",
+      "flags": "",
+      "message": "Settings button is 'Übernehmen' (rows tagged button)",
+      "context": "button",
+      "examples": {
+        "match": [
+          "Anwenden"
+        ],
+        "nomatch": [
+          "Übernehmen"
+        ]
+      }
+    }
+  ]
+}

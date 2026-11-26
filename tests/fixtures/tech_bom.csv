@@ -1,0 +1,6 @@
+﻿key,en,dst
+PH_OK,You have {0} coins,{0} Münzen hast du
+PH_MISSING,You have {0} coins,Du hast Münzen
+PH_WRONGIDX,You have {0} coins,Du hast {1} Münzen
+PH_CASE,Hi {name},Hallo {Name}
+PH_FORMAT,Cost: {0:N0},Kosten: {0}

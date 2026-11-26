@@ -1,0 +1,27 @@
+﻿[
+ {
+  "key": "PH_OK",
+  "en": "You have {0} coins",
+  "dst": "{0} Münzen hast du"
+ },
+ {
+  "key": "PH_MISSING",
+  "en": "You have {0} coins",
+  "dst": "Du hast Münzen"
+ },
+ {
+  "key": "PH_WRONGIDX",
+  "en": "You have {0} coins",
+  "dst": "Du hast {1} Münzen"
+ },
+ {
+  "key": "PH_CASE",
+  "en": "Hi {name}",
+  "dst": "Hallo {Name}"
+ },
+ {
+  "key": "PH_FORMAT",
+  "en": "Cost: {0:N0}",
+  "dst": "Kosten: {0}"
+ }
+]

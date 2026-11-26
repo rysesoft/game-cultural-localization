@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Temporary / scratch
+*.tmp
+*.log
+audit/
+undefined/
+_t.py
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

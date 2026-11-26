@@ -1,0 +1,325 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "ja-JP",
+  "version": 1,
+  "notes": "Japanese 翻訳調 rules (no \\b: CJK has no word boundaries). See references/ja-JP.md §1.",
+  "rules": [
+    {
+      "id": "JA-ANATA",
+      "severity": "ERR",
+      "pattern": "あなた(?:は|の|が|を|に|へ|も|と)",
+      "flags": "",
+      "message": "Hon'yakuchō 'あなた' spam: drop the pronoun or use role/name",
+      "examples": {
+        "match": [
+          "あなたは回収できます"
+        ],
+        "nomatch": [
+          "回収できます"
+        ]
+      }
+    },
+    {
+      "id": "JA-KOTO-GA-DEKIMASU",
+      "severity": "WARN",
+      "pattern": "することができ(?:ます|る)",
+      "flags": "",
+      "message": "Stiff '〜することができます': prefer '〜できます / 〜できる'",
+      "examples": {
+        "match": [
+          "建造することができます"
+        ],
+        "nomatch": [
+          "建造できます"
+        ]
+      }
+    },
+    {
+      "id": "JA-KOTO-GA-KANOU",
+      "severity": "WARN",
+      "pattern": "(?:ことが可能です|する必要があります)",
+      "flags": "",
+      "message": "Stiff '〜することが可能です': use '〜できます'",
+      "examples": {
+        "match": [
+          "修理することが可能です"
+        ],
+        "nomatch": [
+          "修理できます"
+        ]
+      }
+    },
+    {
+      "id": "JA-KARE-KANOJO",
+      "severity": "WARN",
+      "pattern": "(?:彼女|彼ら|彼)(?:は|の|が|を|に)|それらの",
+      "flags": "",
+      "message": "Pronoun spam '彼/彼女/それらの': omit or use role/name",
+      "examples": {
+        "match": [
+          "彼は船を直した",
+          "それらの部品"
+        ],
+        "nomatch": [
+          "あいつが船を直した"
+        ]
+      }
+    },
+    {
+      "id": "JA-INANIMATE-PASSIVE",
+      "severity": "WARN",
+      "pattern": "(?:転送|移動|配置|送信)されました",
+      "flags": "",
+      "message": "Unnatural inanimate passive ('部品が転送されました'): use '倉庫に送った / 届いた'",
+      "examples": {
+        "match": [
+          "部品が倉庫へ転送されました"
+        ],
+        "nomatch": [
+          "部品を倉庫に送った"
+        ]
+      }
+    },
+    {
+      "id": "JA-KOTO-WA-DEKIMASEN",
+      "severity": "WARN",
+      "pattern": "することはできません",
+      "flags": "",
+      "message": "Stiff '〜することはできません': use '〜できません / 置けない'",
+      "examples": {
+        "match": [
+          "ここにアイテムを配置することはできません。"
+        ],
+        "nomatch": [
+          "ここには置けない。"
+        ]
+      }
+    },
+    {
+      "id": "JA-SONZAI",
+      "severity": "WARN",
+      "pattern": "が存在します",
+      "flags": "",
+      "message": "Robotic '〜が存在します': use 'もう埋まってる / 置かれています'",
+      "examples": {
+        "match": [
+          "ここにはすでにアイテムが存在します！"
+        ],
+        "nomatch": [
+          "ここはもう埋まってる！"
+        ]
+      }
+    },
+    {
+      "id": "JA-SHOYUU",
+      "severity": "WARN",
+      "pattern": "所有しています",
+      "flags": "",
+      "message": "Stiff '所有しています': use 'もう持ってる / 所持しています'",
+      "examples": {
+        "match": [
+          "このツールはすでに所有しています！"
+        ],
+        "nomatch": [
+          "そのツールはもう持ってるぞ！"
+        ]
+      }
+    },
+    {
+      "id": "JA-HIKUSUGI",
+      "severity": "WARN",
+      "pattern": "低すぎます",
+      "flags": "",
+      "message": "Literal '低すぎます' (too low): use '足りない'",
+      "examples": {
+        "match": [
+          "スタミナが低すぎます！"
+        ],
+        "nomatch": [
+          "スタミナが足りない！"
+        ]
+      }
+    },
+    {
+      "id": "JA-FOCUS",
+      "severity": "ERR",
+      "pattern": "フォーカス",
+      "flags": "",
+      "message": "Literal 'フォーカス' on interact: use '使う / 調べる / 操作する'",
+      "examples": {
+        "match": [
+          "フォーカス"
+        ],
+        "nomatch": [
+          "使う"
+        ]
+      }
+    },
+    {
+      "id": "JA-ITEM-SHUTOKU",
+      "severity": "WARN",
+      "pattern": "アイテムを取得",
+      "flags": "",
+      "message": "Literal 'アイテムを取得' (GET ITEMS): use 'すべて受け取る / 回収する'",
+      "examples": {
+        "match": [
+          "アイテムを取得"
+        ],
+        "nomatch": [
+          "すべて受け取る"
+        ]
+      }
+    },
+    {
+      "id": "JA-HALFWIDTH-KANA",
+      "severity": "WARN",
+      "pattern": "[\\uff61-\\uff9f]",
+      "flags": "",
+      "message": "Half-width katakana: use full-width katakana",
+      "examples": {
+        "match": [
+          "ｾｰﾌﾞ"
+        ],
+        "nomatch": [
+          "セーブ"
+        ]
+      }
+    },
+    {
+      "id": "JA-OKONAU",
+      "severity": "WARN",
+      "pattern": "を(?:行う|行います|行って|実施)",
+      "flags": "",
+      "message": "Verbal-noun helper 'を行う / を実施': use the plain verb",
+      "examples": {
+        "match": [
+          "修理を行います"
+        ],
+        "nomatch": [
+          "修理します"
+        ]
+      }
+    },
+    {
+      "id": "JA-FULLWIDTH-ALNUM",
+      "severity": "WARN",
+      "pattern": "[０-９Ａ-Ｚａ-ｚ]",
+      "flags": "",
+      "message": "Full-width digit/Latin: use half-width",
+      "examples": {
+        "match": [
+          "レベル３"
+        ],
+        "nomatch": [
+          "レベル3"
+        ]
+      }
+    },
+    {
+      "id": "JA-IDEOGRAPHIC-SPACE",
+      "severity": "WARN",
+      "pattern": "\\u3000",
+      "flags": "",
+      "message": "Full-width space U+3000 inside the string",
+      "examples": {
+        "match": [
+          "確認　する"
+        ],
+        "nomatch": [
+          "確認する"
+        ]
+      }
+    },
+    {
+      "id": "JA-ELLIPSIS",
+      "severity": "WARN",
+      "pattern": "\\.\\.\\.|・・・",
+      "flags": "",
+      "message": "ASCII/katakana ellipsis: use '……'",
+      "examples": {
+        "match": [
+          "読み込み中..."
+        ],
+        "nomatch": [
+          "読み込み中……"
+        ]
+      }
+    },
+    {
+      "id": "JA-ASCII-PUNCT",
+      "severity": "WARN",
+      "pattern": "[!?](?![\\]}>)])",
+      "flags": "",
+      "message": "ASCII '!'/'?': use full-width '！'/'？'",
+      "examples": {
+        "match": [
+          "やった!"
+        ],
+        "nomatch": [
+          "やった！"
+        ]
+      }
+    },
+    {
+      "id": "JA-CHOONPU",
+      "severity": "WARN",
+      "pattern": "(?:サーバ|ユーザ|プレイヤ|コンピュータ)(?!ー)",
+      "flags": "",
+      "message": "Missing 長音符 (locked long-vowel style): サーバー / ユーザー / プレイヤー",
+      "examples": {
+        "match": [
+          "ユーザ設定"
+        ],
+        "nomatch": [
+          "ユーザー設定"
+        ]
+      }
+    },
+    {
+      "id": "JA-COUNTER-PLACEHOLDER",
+      "severity": "WARN",
+      "pattern": "\\}個",
+      "flags": "",
+      "message": "Counter '個' on a variable noun: verify the 助数詞 or use '×{0}'",
+      "examples": {
+        "match": [
+          "{0}個"
+        ],
+        "nomatch": [
+          "×{0}"
+        ]
+      }
+    },
+    {
+      "id": "JA-I-AM-SPEED",
+      "severity": "ERR",
+      "pattern": "(?:私|俺|僕)はスピードだ",
+      "flags": "",
+      "message": "'I am speed' calque: use the official dub line or a natural racing phrase",
+      "examples": {
+        "match": [
+          "俺はスピードだ！"
+        ],
+        "nomatch": [
+          "最速は俺だ！"
+        ]
+      }
+    },
+    {
+      "id": "JA-GENDERED-ADDRESS",
+      "severity": "WARN",
+      "pattern": "(?:坊主|お嬢ちゃん|兄ちゃん|姉ちゃん)",
+      "flags": "",
+      "message": "Gendered address to the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "よくやった、坊主"
+        ],
+        "nomatch": [
+          "よくやった"
+        ]
+      }
+    }
+  ]
+}

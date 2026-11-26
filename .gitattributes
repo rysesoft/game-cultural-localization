@@ -1,0 +1,10 @@
+* text=auto eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.ps1 text eol=crlf
+tests/fixtures/strings_crlf.po -text
+tests/fixtures/*.ttf binary
+tests/fixtures/*.asset -text
+assets/*.svg text eol=lf

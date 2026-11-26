@@ -1,0 +1,242 @@
+[
+ {
+  "key": "PH_OK",
+  "en": "You have {0} coins",
+  "dst": "{0} Münzen hast du"
+ },
+ {
+  "key": "PH_MISSING",
+  "en": "You have {0} coins",
+  "dst": "Du hast Münzen"
+ },
+ {
+  "key": "PH_WRONGIDX",
+  "en": "You have {0} coins",
+  "dst": "Du hast {1} Münzen"
+ },
+ {
+  "key": "PH_CASE",
+  "en": "Hi {name}",
+  "dst": "Hallo {Name}"
+ },
+ {
+  "key": "PH_FORMAT",
+  "en": "Cost: {0:N0}",
+  "dst": "Kosten: {0}"
+ },
+ {
+  "key": "PH_ESCAPED",
+  "en": "Use {{braces}}",
+  "dst": "Nutze {{Klammern}}"
+ },
+ {
+  "key": "PH_SMART",
+  "en": "{0} {0:plural:item|items}",
+  "dst": "{0} {0:plural:Gegenstand|Gegenstände}"
+ },
+ {
+  "key": "PRINTF_OK",
+  "en": "%s found %d items",
+  "dst": "%s hat %d Dinge gefunden"
+ },
+ {
+  "key": "PRINTF_MISS",
+  "en": "%s found %d items",
+  "dst": "%s hat Dinge gefunden"
+ },
+ {
+  "key": "PRINTF_REORD",
+  "en": "%1$s gave %2$s",
+  "dst": "%2$s bekam von %1$s"
+ },
+ {
+  "key": "PRINTF_DI",
+  "en": "%d items",
+  "dst": "%i Dinge"
+ },
+ {
+  "key": "PCT_FP1",
+  "en": "100% complete",
+  "dst": "100% fertig"
+ },
+ {
+  "key": "PCT_FP2",
+  "en": "Deal 50% damage",
+  "dst": "50% de dégâts"
+ },
+ {
+  "key": "PCT_FP3",
+  "en": "100% safe",
+  "dst": "100% sicher"
+ },
+ {
+  "key": "PCT_FP4",
+  "en": "Bonus: 20%",
+  "dst": "Bonus : 20 %"
+ },
+ {
+  "key": "PCT_ESC",
+  "en": "100%% done",
+  "dst": "100 %% erledigt"
+ },
+ {
+  "key": "UNREAL_FMT",
+  "en": "You have {Count} {Count}|plural(one=coin,other=coins)",
+  "dst": "Du hast {Count} Münzen"
+ },
+ {
+  "key": "TAG_OK",
+  "en": "<b>Warning</b>",
+  "dst": "<b>Warnung</b>"
+ },
+ {
+  "key": "TAG_UNCLOSED",
+  "en": "<b>Warning</b>",
+  "dst": "<b>Warnung"
+ },
+ {
+  "key": "TAG_REVERSED",
+  "en": "<b>Warning</b> now",
+  "dst": "</b>Warnung<b> jetzt"
+ },
+ {
+  "key": "TAG_COLORCASE",
+  "en": "<color=#FFF>x</color>",
+  "dst": "<color=#fff>y</color>"
+ },
+ {
+  "key": "TAG_COLORVAL",
+  "en": "<color=red>x</color>",
+  "dst": "<color=#ff0000>y</color>"
+ },
+ {
+  "key": "TAG_SPRITE",
+  "en": "Press <sprite=3> to jump",
+  "dst": "Drücke zum Springen"
+ },
+ {
+  "key": "TAG_LINK",
+  "en": "<link=\"id\">Open</link>",
+  "dst": "Öffnen"
+ },
+ {
+  "key": "TAG_BR",
+  "en": "Line<br>Two",
+  "dst": "Zeile Zwei"
+ },
+ {
+  "key": "TAG_SIZEPCT",
+  "en": "<size=120%>Big</size>",
+  "dst": "<size=120%>Groß</size>"
+ },
+ {
+  "key": "TAG_STYLE",
+  "en": "<style=emphasis>Store</style>",
+  "dst": "<style=emphasis>Laden</style>"
+ },
+ {
+  "key": "TAG_MARK",
+  "en": "<mark=#ffff00aa>hi</mark>",
+  "dst": "hallo"
+ },
+ {
+  "key": "TAG_NOPARSE",
+  "en": "<noparse><b></noparse>",
+  "dst": "<b>"
+ },
+ {
+  "key": "TAG_UNITY_LT",
+  "en": "a < b and c > d",
+  "dst": "a < b und c > d"
+ },
+ {
+  "key": "WS_LEAD",
+  "en": " is assigned.",
+  "dst": "atandı."
+ },
+ {
+  "key": "WS_TRAIL",
+  "en": "Total Debt: ",
+  "dst": "Toplam Borç:"
+ },
+ {
+  "key": "WS_NBSP",
+  "en": " assigned",
+  "dst": " atandı"
+ },
+ {
+  "key": "WS_NL",
+  "en": "Line one\n",
+  "dst": "Satır bir"
+ },
+ {
+  "key": "WS_TAB",
+  "en": "\tTabbed",
+  "dst": "Sekmeli"
+ },
+ {
+  "key": "ENC_FFFD",
+  "en": "Hero",
+  "dst": "H�ro"
+ },
+ {
+  "key": "ENC_MOJIBAKE",
+  "en": "Über",
+  "dst": "Ãœber"
+ },
+ {
+  "key": "EMPTY_DST",
+  "en": "Save",
+  "dst": ""
+ },
+ {
+  "key": "EMPTY_BOTH",
+  "en": "",
+  "dst": ""
+ },
+ {
+  "key": "WS_ONLY",
+  "en": "Save",
+  "dst": "   "
+ },
+ {
+  "key": "SPACED_HY",
+  "en": "Level 1 - Boss",
+  "dst": "Seviye 1 - Boss"
+ },
+ {
+  "key": "DOUBLE_SPACE",
+  "en": "Hello world",
+  "dst": "Merhaba  dünya"
+ },
+ {
+  "key": "UNTRANSLATED",
+  "en": "Settings",
+  "dst": "Settings"
+ },
+ {
+  "key": "NUMERIC_ONLY",
+  "en": "42",
+  "dst": "42"
+ },
+ {
+  "key": "NULL_DST",
+  "en": "Save",
+  "dst": null
+ },
+ {
+  "key": "INT_DST",
+  "en": "Save",
+  "dst": 5
+ },
+ {
+  "key": "CTRL_CHAR",
+  "en": "Save",
+  "dst": "Sa\u0007ve"
+ },
+ {
+  "key": "ZWSP",
+  "en": "Save",
+  "dst": "Spei​chern"
+ }
+]

@@ -1,0 +1,330 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "ru-RU",
+  "version": 1,
+  "notes": "Russian канцелярит / calque rules. See references/ru-RU.md §1-2.",
+  "rules": [
+    {
+      "id": "RU-OSUSHCHESTVLYAT",
+      "severity": "WARN",
+      "pattern": "\\bосуществ\\w+",
+      "flags": "i",
+      "message": "Канцелярит 'осуществлять ремонт': use the direct verb ('чинить')",
+      "examples": {
+        "match": [
+          "Осуществлять ремонт"
+        ],
+        "nomatch": [
+          "Чинить"
+        ]
+      }
+    },
+    {
+      "id": "RU-PROIZVODIT-NOUN",
+      "severity": "WARN",
+      "pattern": "\\b(?:производить|произвести) (?:ремонт|сборку|установку|замену)\\b",
+      "flags": "i",
+      "message": "Канцелярит 'производить сборку': use 'собирать'",
+      "examples": {
+        "match": [
+          "Производить сборку"
+        ],
+        "nomatch": [
+          "Производить детали",
+          "Собирать"
+        ]
+      }
+    },
+    {
+      "id": "RU-FOKUSIROVAT",
+      "severity": "ERR",
+      "pattern": "\\bфокусиров\\w*",
+      "flags": "i",
+      "message": "Calque 'фокусировать' on interact: use 'Использовать / Открыть'",
+      "examples": {
+        "match": [
+          "Фокусировать"
+        ],
+        "nomatch": [
+          "Использовать"
+        ]
+      }
+    },
+    {
+      "id": "RU-NE-MOZHET-BYT",
+      "severity": "WARN",
+      "pattern": "\\bне может быть\\b",
+      "flags": "i",
+      "message": "Passive 'не может быть размещён': use 'Сюда это не подойдёт.'",
+      "examples": {
+        "match": [
+          "Данный предмет не может быть размещён здесь."
+        ],
+        "nomatch": [
+          "Сюда не поставить."
+        ]
+      }
+    },
+    {
+      "id": "RU-DANNYJ",
+      "severity": "WARN",
+      "pattern": "\\bданн(?:ый|ая|ое|ые|ого|ой|ому|ым|ыми|ом|ых|ую)\\b",
+      "flags": "i",
+      "message": "Канцелярит 'данный предмет': use 'это / этот'",
+      "examples": {
+        "match": [
+          "Данный предмет",
+          "в данном месте",
+          "данные параметры"
+        ],
+        "nomatch": [
+          "Этот предмет"
+        ]
+      }
+    },
+    {
+      "id": "RU-UZHE-NAKHODITSYA",
+      "severity": "WARN",
+      "pattern": "\\bуже находится\\b",
+      "flags": "i",
+      "message": "Stiff 'уже находится предмет': use 'Место уже занято!'",
+      "examples": {
+        "match": [
+          "В данном месте уже находится предмет!"
+        ],
+        "nomatch": [
+          "Тут уже что-то лежит!"
+        ]
+      }
+    },
+    {
+      "id": "RU-OBLADAETE",
+      "severity": "WARN",
+      "pattern": "\\bоблада(?:ете|ешь|ет|ю)\\b",
+      "flags": "i",
+      "message": "Stiff 'обладаете': use 'у вас есть'",
+      "examples": {
+        "match": [
+          "Вы уже обладаете данным инструментом!"
+        ],
+        "nomatch": [
+          "Этот инструмент у вас уже есть!"
+        ]
+      }
+    },
+    {
+      "id": "RU-SLISHKOM-NIZKAYA",
+      "severity": "WARN",
+      "pattern": "\\bслишком низк(?:ая|ий|ое)\\b",
+      "flags": "i",
+      "message": "Literal 'слишком низкая': use 'Не хватает сил!'",
+      "examples": {
+        "match": [
+          "Ваша выносливость слишком низкая!"
+        ],
+        "nomatch": [
+          "Не хватает сил!"
+        ]
+      }
+    },
+    {
+      "id": "RU-POLUCHIT-PREDMETY",
+      "severity": "WARN",
+      "pattern": "\\bПОЛУЧИТЬ ПРЕДМЕТЫ\\b",
+      "flags": "",
+      "message": "Literal 'ПОЛУЧИТЬ ПРЕДМЕТЫ' (GET ITEMS): use 'ЗАБРАТЬ ВСЁ'",
+      "examples": {
+        "match": [
+          "ПОЛУЧИТЬ ПРЕДМЕТЫ"
+        ],
+        "nomatch": [
+          "ЗАБРАТЬ ВСЁ"
+        ]
+      }
+    },
+    {
+      "id": "RU-DVIGATSYA",
+      "severity": "WARN",
+      "pattern": "\\bДвигаться (?:вперёд|вперед|назад|влево|вправо)\\b",
+      "flags": "i",
+      "message": "Manual-speak keybinding 'Двигаться вперёд': use 'Вперёд / Влево'",
+      "examples": {
+        "match": [
+          "Двигаться вперёд"
+        ],
+        "nomatch": [
+          "Вперёд"
+        ]
+      }
+    },
+    {
+      "id": "RU-IMEESH",
+      "severity": "WARN",
+      "pattern": "\\b(?:ты|вы)\\s+имее(?:шь|те)\\b|\\b(?:он|она|оно)\\s+имеет\\b",
+      "flags": "i",
+      "message": "Calque of 'have' ('Ты имеешь'): use 'У тебя есть'",
+      "examples": {
+        "match": [
+          "Ты имеешь ключ.",
+          "Он имеет мастерскую."
+        ],
+        "nomatch": [
+          "У тебя есть ключ."
+        ]
+      }
+    },
+    {
+      "id": "RU-YAVLYAETSYA",
+      "severity": "WARN",
+      "pattern": "\\bявля(?:ется|ются)\\b",
+      "flags": "i",
+      "message": "Канцелярит 'является': use a dash or a plain verb",
+      "examples": {
+        "match": [
+          "Реактор является источником энергии."
+        ],
+        "nomatch": [
+          "Реактор — источник энергии."
+        ]
+      }
+    },
+    {
+      "id": "RU-VY-CAPITAL",
+      "severity": "WARN",
+      "pattern": "(?<=[^.!?»]\\s)Вы\\b",
+      "flags": "",
+      "message": "Capitalised 'Вы' mid-sentence: modern game prose writes lower-case 'вы'",
+      "examples": {
+        "match": [
+          "Спасибо, что Вы помогли."
+        ],
+        "nomatch": [
+          "Вы помогли.",
+          "Спасибо, что вы помогли."
+        ]
+      }
+    },
+    {
+      "id": "RU-PREP-PLACEHOLDER",
+      "severity": "ERR",
+      "pattern": "\\b(?:из|в|во|с|со|от|к|ко|на|при|о|об)\\s+\\{\\w+\\}",
+      "flags": "",
+      "message": "Preposition directly before a placeholder (case trap)",
+      "examples": {
+        "match": [
+          "Забрать из {0}"
+        ],
+        "nomatch": [
+          "Забрать со станции {0}"
+        ]
+      }
+    },
+    {
+      "id": "RU-OPTIONAL-PLURAL",
+      "severity": "ERR",
+      "pattern": "\\{\\w+\\}\\s*\\w*\\(\\w+\\)",
+      "flags": "",
+      "message": "'(ов)'-style optional plural: use an ICU plural",
+      "examples": {
+        "match": [
+          "{0} реактор(ов)"
+        ],
+        "nomatch": [
+          "{0, plural, one {реактор} few {реактора} other {реакторов}}"
+        ]
+      }
+    },
+    {
+      "id": "RU-GENDERED-SHORT-FORM",
+      "severity": "WARN",
+      "pattern": "\\b(?:сам|сама|один|одна|должен|должна|рад|рада|готов|готова)\\b",
+      "flags": "",
+      "message": "Gendered short form about the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Ты должен вернуться"
+        ],
+        "nomatch": [
+          "Тебе нужно вернуться"
+        ]
+      }
+    },
+    {
+      "id": "RU-GENDERED-PAST",
+      "severity": "WARN",
+      "pattern": "\\bты\\s+\\w+(?:ал|ил|ел|ул|ёл|ла|ила|ела)\\b",
+      "flags": "i",
+      "message": "Gendered past tense with 'ты' (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Ты запустил мастерскую"
+        ],
+        "nomatch": [
+          "Мастерская уже в строю"
+        ]
+      }
+    },
+    {
+      "id": "RU-KANCELYARIT",
+      "severity": "WARN",
+      "pattern": "\\b(?:представляет собой|в целях)\\b",
+      "flags": "i",
+      "message": "Канцелярит 'представляет собой / в целях'",
+      "examples": {
+        "match": [
+          "В целях безопасности"
+        ],
+        "nomatch": [
+          "Для безопасности"
+        ]
+      }
+    },
+    {
+      "id": "RU-KOSMICH",
+      "severity": "WARN",
+      "pattern": "\\bКосмическ\\w+ чушь\\b",
+      "flags": "i",
+      "message": "Calqued exclamation 'космическая чушь'",
+      "examples": {
+        "match": [
+          "Космическая чушь!"
+        ],
+        "nomatch": [
+          "Полная чушь!"
+        ]
+      }
+    },
+    {
+      "id": "RU-STRAIGHT-QUOTES",
+      "severity": "WARN",
+      "pattern": "\"[^\"]+\"",
+      "flags": "",
+      "message": "Straight double quotes: use «…»",
+      "examples": {
+        "match": [
+          "Нажми \"Пуск\""
+        ],
+        "nomatch": [
+          "Нажми «Пуск»"
+        ]
+      }
+    },
+    {
+      "id": "RU-MAT",
+      "severity": "WARN",
+      "pattern": "\\b(?:бля\\w*|хуй\\w*|пизд\\w*|еба\\w*|ёб\\w*)\\b",
+      "flags": "i",
+      "message": "Мат: only allowed in an 18+ rating tier",
+      "examples": {
+        "match": [
+          "Блядь!"
+        ],
+        "nomatch": [
+          "Чёрт!"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,331 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "zh-CN",
+  "version": 1,
+  "notes": "Simplified Chinese 翻译腔 + Traditional/Taiwan leak rules (no \\b: CJK has no word boundaries). See references/zh-CN.md §1,§3.",
+  "rules": [
+    {
+      "id": "ZHCN-TW-TERMS",
+      "severity": "ERR",
+      "pattern": "(?:螢幕|設定|預設|滑鼠|解析度|全螢幕|軟體|存檔|讀檔|影片|網路|資料|程式|選單|登入|套用|品質|最佳化|雷射|伺服器|資訊|檔案|矽)",
+      "flags": "",
+      "message": "Taiwan zh-Hant term leaked into Mainland zh-CN: use 设置 / 屏幕 / 默认 / 鼠标 / 分辨率",
+      "examples": {
+        "match": [
+          "請設定螢幕解析度",
+          "開啟設定。",
+          "遊戲設定"
+        ],
+        "nomatch": [
+          "请设置屏幕分辨率"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-TRADITIONAL-CHARS",
+      "severity": "ERR",
+      "pattern": "[設認標優軟網絡應該這個對會說時間國與來們沒發過學體經動長現實樣還進電機氣門問題買賣車歡為從後無當檔裡]",
+      "flags": "",
+      "message": "Traditional-only character in a zh-CN string (mechanical conversion / wrong table?)",
+      "examples": {
+        "match": [
+          "這個設定",
+          "沒問題"
+        ],
+        "nomatch": [
+          "这个设置",
+          "没问题"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-BEI-SUO",
+      "severity": "WARN",
+      "pattern": "被.{1,10}所",
+      "flags": "",
+      "message": "Translationese passive '被…所…': use an active Chinese clause",
+      "examples": {
+        "match": [
+          "被海盗所袭击"
+        ],
+        "nomatch": [
+          "遭海盗袭击"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-WUFA-BEI",
+      "severity": "WARN",
+      "pattern": "无法被",
+      "flags": "",
+      "message": "Passive '无法被放置': use '放不了 / 放不下'",
+      "examples": {
+        "match": [
+          "无法被放置在这里"
+        ],
+        "nomatch": [
+          "这里放不下"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-DANG-DE-SHIHOU",
+      "severity": "WARN",
+      "pattern": "当.{1,14}的时候|在.{1,14}的情况下",
+      "flags": "",
+      "message": "Translationese '当……的时候 / 在……的情况下': use '……时 / 要是……'",
+      "examples": {
+        "match": [
+          "当你完成的时候",
+          "在没有燃料的情况下"
+        ],
+        "nomatch": [
+          "完成时"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-YIJING-CUNZAI",
+      "severity": "WARN",
+      "pattern": "已经存在一个",
+      "flags": "",
+      "message": "Robotic '已经存在一个': use '已经放了东西 / 位置占满了'",
+      "examples": {
+        "match": [
+          "这里已经存在一个物品！"
+        ],
+        "nomatch": [
+          "这儿已经放了东西了！"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-YONGYOU-CI",
+      "severity": "WARN",
+      "pattern": "拥有此",
+      "flags": "",
+      "message": "Stiff '你已经拥有此工具': use '这把工具你已经有了'",
+      "examples": {
+        "match": [
+          "你已经拥有此工具！"
+        ],
+        "nomatch": [
+          "这把工具你已经有了！"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-GUODI",
+      "severity": "WARN",
+      "pattern": "(?:体力|耐力|能量|血量)过低",
+      "flags": "",
+      "message": "Literal '体力过低': use '体力不够了 / 没力气了'",
+      "examples": {
+        "match": [
+          "你的体力过低！"
+        ],
+        "nomatch": [
+          "体力不够了！"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-CHIXU-SHIJIAN",
+      "severity": "WARN",
+      "pattern": "持续时间太短",
+      "flags": "",
+      "message": "Literal '持续时间太短': rephrase naturally",
+      "examples": {
+        "match": [
+          "睡眠持续时间太短。"
+        ],
+        "nomatch": [
+          "睡这么一会儿可不管用。"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-JUJIAO",
+      "severity": "ERR",
+      "pattern": "聚焦",
+      "flags": "",
+      "message": "Literal '聚焦' on interact: use '使用 / 操作'",
+      "examples": {
+        "match": [
+          "聚焦"
+        ],
+        "nomatch": [
+          "使用"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-HUOQU-WUPIN",
+      "severity": "WARN",
+      "pattern": "获取物品",
+      "flags": "",
+      "message": "Literal '获取物品' (GET ITEMS): use '全部拿走 / 全部收取'",
+      "examples": {
+        "match": [
+          "获取物品"
+        ],
+        "nomatch": [
+          "全部拿走"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-NI-KEYI-QU",
+      "severity": "WARN",
+      "pattern": "你可以去",
+      "flags": "",
+      "message": "Translationese '你可以去使用X来做Y': cut redundant pronoun ('用X就能Y')",
+      "examples": {
+        "match": [
+          "你可以去使用扳手来修理"
+        ],
+        "nomatch": [
+          "用扳手就能修理"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-CORNER-QUOTES",
+      "severity": "WARN",
+      "pattern": "[「」『』]",
+      "flags": "",
+      "message": "Taiwan/HK corner quotes: use “ ” in zh-CN",
+      "examples": {
+        "match": [
+          "点击「开始」"
+        ],
+        "nomatch": [
+          "点击“开始”"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-JINXING",
+      "severity": "WARN",
+      "pattern": "进行(?:修理|制造|制作|建造|升级|购买|保存|加载)",
+      "flags": "",
+      "message": "'进行' + verbal noun: use the plain verb",
+      "examples": {
+        "match": [
+          "进行修理"
+        ],
+        "nomatch": [
+          "修理"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-CHENGGONGDI",
+      "severity": "WARN",
+      "pattern": "成功地",
+      "flags": "",
+      "message": "'successfully' calque '成功地'",
+      "examples": {
+        "match": [
+          "成功地保存了"
+        ],
+        "nomatch": [
+          "已保存"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-JIANGHUI",
+      "severity": "WARN",
+      "pattern": "将会",
+      "flags": "",
+      "message": "Future-marker calque '将会'",
+      "examples": {
+        "match": [
+          "你将会获得奖励"
+        ],
+        "nomatch": [
+          "你会获得奖励"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-FULLWIDTH-ALNUM",
+      "severity": "WARN",
+      "pattern": "[０-９Ａ-Ｚａ-ｚ]",
+      "flags": "",
+      "message": "Full-width digit/Latin: use half-width",
+      "examples": {
+        "match": [
+          "等级３"
+        ],
+        "nomatch": [
+          "等级3"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-ELLIPSIS",
+      "severity": "WARN",
+      "pattern": "\\.\\.\\.|。。。",
+      "flags": "",
+      "message": "Wrong ellipsis: use '……'",
+      "examples": {
+        "match": [
+          "加载中..."
+        ],
+        "nomatch": [
+          "加载中……"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-UNTRANSLATED-WORD",
+      "severity": "WARN",
+      "pattern": "(?<![{<\\[\\w])[A-Za-z]{4,}(?![}>\\]\\w])",
+      "flags": "",
+      "message": "Untranslated English word outside a tag/placeholder (版号 review risk)",
+      "examples": {
+        "match": [
+          "点击 Start 开始"
+        ],
+        "nomatch": [
+          "点击开始",
+          "{itemName}",
+          "<sprite=3>"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-GENDERED-ADDRESS",
+      "severity": "WARN",
+      "pattern": "(?:小子|小伙子|丫头|小姑娘|哥们|兄弟|姐妹)",
+      "flags": "",
+      "message": "Gendered address to the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "干得好，小子"
+        ],
+        "nomatch": [
+          "干得好"
+        ]
+      }
+    },
+    {
+      "id": "ZHCN-PROFANITY",
+      "severity": "WARN",
+      "pattern": "(?:操你|他妈的|傻逼|妈的)",
+      "flags": "",
+      "message": "Profanity banned in licensed Mainland releases",
+      "examples": {
+        "match": [
+          "他妈的！"
+        ],
+        "nomatch": [
+          "该死！"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,353 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "zh-Hant",
+  "version": 1,
+  "notes": "Traditional Chinese (Taiwan/HK): Mainland-term and simplified-character leak rules. HK variant (--variant hk) relaxes 激光/軟件/質素/網絡. See references/zh-Hant.md §1-2.",
+  "rules": [
+    {
+      "id": "ZHHANT-SIMPLIFIED-CHARS",
+      "severity": "ERR",
+      "pattern": "[设认标优软网络应该这个对会说时间国与来们没发过学体经动长现实样还进电机气门问题买卖车欢为从后当档里]",
+      "flags": "",
+      "message": "Simplified-only character in a zh-Hant string (mechanical OpenCC / wrong table?)",
+      "examples": {
+        "match": [
+          "这个设置",
+          "没问题"
+        ],
+        "nomatch": [
+          "這個設定",
+          "沒問題"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-CN-TERMS-HARD",
+      "severity": "ERR",
+      "pattern": "(?:設置|全屏|默認|鼠標|分辨率|空格鍵|軟件|視頻|網絡|服務器|菜單|登錄|存盤|等離子)",
+      "flags": "",
+      "message": "Mainland term in zh-Hant: use 螢幕 / 全螢幕 / 預設 / 滑鼠 / 解析度 / 空白鍵",
+      "examples": {
+        "match": [
+          "全屏模式",
+          "預設改為默認",
+          "分辨率"
+        ],
+        "nomatch": [
+          "全螢幕模式",
+          "解析度"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-GUI",
+      "severity": "ERR",
+      "pattern": "硅",
+      "flags": "",
+      "message": "Mainland character '硅' in zh-Hant: Taiwan/HK standard for Silicon is '矽'",
+      "examples": {
+        "match": [
+          "硅晶片"
+        ],
+        "nomatch": [
+          "矽晶片"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-ZHILIANG-YOUHUA",
+      "severity": "WARN",
+      "pattern": "優化",
+      "flags": "",
+      "message": "Mainland '優化': Taiwan settings UI uses '最佳化' (tolerated in patch notes/dialogue)",
+      "examples": {
+        "match": [
+          "優化效能"
+        ],
+        "nomatch": [
+          "最佳化效能"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-TUBANFA",
+      "severity": "WARN",
+      "pattern": "土辦法",
+      "flags": "",
+      "message": "Mainland '土辦法': use '應急土法 / 拼湊頂著用'",
+      "examples": {
+        "match": [
+          "用土辦法修"
+        ],
+        "nomatch": [
+          "拼湊頂著用"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-BEI-SUO",
+      "severity": "WARN",
+      "pattern": "被.{1,10}所",
+      "flags": "",
+      "message": "Translationese passive '被…所…': use natural active Chinese",
+      "examples": {
+        "match": [
+          "被海盜所襲擊"
+        ],
+        "nomatch": [
+          "遭海盜襲擊"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-YI-CUNZAI",
+      "severity": "WARN",
+      "pattern": "已存在一個|已經存在一個",
+      "flags": "",
+      "message": "Robotic '此處已存在一個物品': use '這個位置已經有東西了'",
+      "examples": {
+        "match": [
+          "此處已存在一個物品！"
+        ],
+        "nomatch": [
+          "這個位置已經有東西了！"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-YINGYONG-APPLY",
+      "severity": "WARN",
+      "pattern": "^應用$",
+      "flags": "",
+      "message": "'應用' as the Apply-settings button: Taiwan uses '套用'",
+      "examples": {
+        "match": [
+          "應用"
+        ],
+        "nomatch": [
+          "套用",
+          "應用程式"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-GUODI",
+      "severity": "WARN",
+      "pattern": "(?:體力|耐力|能量)過低",
+      "flags": "",
+      "message": "Literal '體力過低': use '體力不夠了 / 沒力氣了'",
+      "examples": {
+        "match": [
+          "你的體力過低！"
+        ],
+        "nomatch": [
+          "體力不夠了！"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-HK-TERMS",
+      "severity": "ERR",
+      "pattern": "(?:屏幕|激光|信息|質素|數據|打印|的士)",
+      "flags": "",
+      "message": "HK vocabulary: legitimate only in a zh-HK build (pass --variant hk to downgrade to WARN)",
+      "variant_severity": {
+        "hk": "WARN"
+      },
+      "examples": {
+        "match": [
+          "激光砲",
+          "收到新信息"
+        ],
+        "nomatch": [
+          "雷射砲",
+          "收到新訊息"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-CHENGXU",
+      "severity": "WARN",
+      "pattern": "程序",
+      "flags": "",
+      "message": "Mainland '程序' for program: Taiwan uses '程式' (程序 = procedure is fine)",
+      "examples": {
+        "match": [
+          "啟動程序"
+        ],
+        "nomatch": [
+          "啟動程式"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-ZHILIANG",
+      "severity": "WARN",
+      "pattern": "質量",
+      "flags": "",
+      "message": "Mainland '質量' for quality: Taiwan prefers '品質' (fine for physics mass)",
+      "examples": {
+        "match": [
+          "提升畫面質量"
+        ],
+        "nomatch": [
+          "提升畫面品質"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-WENJIAN",
+      "severity": "WARN",
+      "pattern": "文件",
+      "flags": "",
+      "message": "Mainland '文件' for digital file: Taiwan uses '檔案'",
+      "examples": {
+        "match": [
+          "儲存文件"
+        ],
+        "nomatch": [
+          "儲存檔案"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-CN-QUOTES",
+      "severity": "WARN",
+      "pattern": "[“”]",
+      "flags": "",
+      "message": "Mainland quotes: use 「」",
+      "examples": {
+        "match": [
+          "點擊“開始”"
+        ],
+        "nomatch": [
+          "點擊「開始」"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-NI-FEMALE",
+      "severity": "WARN",
+      "pattern": "妳",
+      "flags": "",
+      "message": "Gendered 'you' 妳: use 你",
+      "examples": {
+        "match": [
+          "妳好"
+        ],
+        "nomatch": [
+          "你好"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-DANG-SHIHOU",
+      "severity": "WARN",
+      "pattern": "當.{1,12}的時候",
+      "flags": "",
+      "message": "'when…' frame: use '……時'",
+      "examples": {
+        "match": [
+          "當你完成的時候"
+        ],
+        "nomatch": [
+          "完成時"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-JINXING",
+      "severity": "WARN",
+      "pattern": "進行(?:修理|製造|製作|建造|升級|購買|儲存|載入)",
+      "flags": "",
+      "message": "'進行' + verbal noun: use the plain verb",
+      "examples": {
+        "match": [
+          "進行修理"
+        ],
+        "nomatch": [
+          "修理"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-CHENGGONGDI",
+      "severity": "WARN",
+      "pattern": "成功地",
+      "flags": "",
+      "message": "'successfully' calque '成功地'",
+      "examples": {
+        "match": [
+          "成功地儲存了"
+        ],
+        "nomatch": [
+          "已儲存"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-FULLWIDTH-ALNUM",
+      "severity": "WARN",
+      "pattern": "[０-９Ａ-Ｚａ-ｚ]",
+      "flags": "",
+      "message": "Full-width digit/Latin: use half-width",
+      "examples": {
+        "match": [
+          "等級３"
+        ],
+        "nomatch": [
+          "等級3"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-ELLIPSIS",
+      "severity": "WARN",
+      "pattern": "\\.\\.\\.|。。。",
+      "flags": "",
+      "message": "Wrong ellipsis: use '……'",
+      "examples": {
+        "match": [
+          "載入中..."
+        ],
+        "nomatch": [
+          "載入中……"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-GENDERED-ADDRESS",
+      "severity": "WARN",
+      "pattern": "(?:小子|小夥子|丫頭|小姑娘|哥們|兄弟|姊妹|帥哥|美女)",
+      "flags": "",
+      "message": "Gendered address to the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "幹得好，小子"
+        ],
+        "nomatch": [
+          "幹得好"
+        ]
+      }
+    },
+    {
+      "id": "ZHHANT-CANTONESE",
+      "severity": "WARN",
+      "pattern": "(?:係|唔|嘅|咗|喺|佢)",
+      "flags": "",
+      "message": "Written Cantonese in a non-HK build (pass --variant hk for Hong Kong dialogue)",
+      "skip_variants": [
+        "hk"
+      ],
+      "examples": {
+        "match": [
+          "佢係邊個？"
+        ],
+        "nomatch": [
+          "他是誰？"
+        ]
+      }
+    }
+  ]
+}

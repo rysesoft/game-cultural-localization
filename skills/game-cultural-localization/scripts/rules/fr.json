@@ -1,0 +1,389 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "fr",
+  "version": 1,
+  "notes": "French style administratif / translationese rules. See references/fr.md §2-3.",
+  "rules": [
+    {
+      "id": "FR-FOCUSER",
+      "severity": "ERR",
+      "pattern": "\\bfocuser\\b",
+      "flags": "i",
+      "message": "Anglicism 'focuser' on interact prompt: use 'Utiliser / Interagir'",
+      "examples": {
+        "match": [
+          "Focuser"
+        ],
+        "nomatch": [
+          "Utiliser"
+        ]
+      }
+    },
+    {
+      "id": "FR-PROCEDER-A",
+      "severity": "WARN",
+      "pattern": "\\bprocéder (?:à|au|aux)\\b",
+      "flags": "i",
+      "message": "Administrative 'procéder à': use the direct verb ('réparer', 'fabriquer')",
+      "examples": {
+        "match": [
+          "Procéder à la réparation"
+        ],
+        "nomatch": [
+          "Réparer"
+        ]
+      }
+    },
+    {
+      "id": "FR-EFFECTUER",
+      "severity": "WARN",
+      "pattern": "\\beffectu(?:er|ez|é|ée)\\b",
+      "flags": "i",
+      "message": "Administrative 'effectuer': prefer 'faire / réaliser'",
+      "examples": {
+        "match": [
+          "Effectuer une réparation"
+        ],
+        "nomatch": [
+          "Faire une réparation"
+        ]
+      }
+    },
+    {
+      "id": "FR-NE-PEUT-ETRE-PLACE",
+      "severity": "WARN",
+      "pattern": "\\bne peut (?:pas )?être (?:placé|posé|installé|déplacé)e?s?\\b",
+      "flags": "i",
+      "message": "Passive 'ne peut pas être placé': use 'Ça ne rentre pas ici.'",
+      "examples": {
+        "match": [
+          "Cet objet ne peut pas être placé à cet endroit."
+        ],
+        "nomatch": [
+          "Ça ne rentre pas ici."
+        ]
+      }
+    },
+    {
+      "id": "FR-SE-TROUVE-DEJA",
+      "severity": "WARN",
+      "pattern": "\\bse trouve déjà\\b",
+      "flags": "i",
+      "message": "Stiff 'se trouve déjà': use 'La place est déjà prise !'",
+      "examples": {
+        "match": [
+          "Un objet se trouve déjà à cet emplacement !"
+        ],
+        "nomatch": [
+          "La place est déjà prise !"
+        ]
+      }
+    },
+    {
+      "id": "FR-POSSEDEZ",
+      "severity": "WARN",
+      "pattern": "\\bposs[ée]d(?:ez|es)\\b",
+      "flags": "i",
+      "message": "Stiff 'Vous possédez': use 'Tu as déjà / Outil déjà en poche'",
+      "examples": {
+        "match": [
+          "Vous possédez déjà cet outil !"
+        ],
+        "nomatch": [
+          "Tu as déjà cet outil !"
+        ]
+      }
+    },
+    {
+      "id": "FR-TROP-FAIBLE",
+      "severity": "WARN",
+      "pattern": "\\best trop faible\\b",
+      "flags": "i",
+      "message": "Literal 'est trop faible': use 'Tu n'as plus assez d'endurance !'",
+      "examples": {
+        "match": [
+          "Votre endurance est trop faible !"
+        ],
+        "nomatch": [
+          "À bout de souffle !"
+        ]
+      }
+    },
+    {
+      "id": "FR-ETE-TRANSFERE",
+      "severity": "WARN",
+      "pattern": "\\bété transféré(?:e|s|es)?\\b",
+      "flags": "i",
+      "message": "Administrative 'ont été transférés': use 'envoyés au stockage'",
+      "examples": {
+        "match": [
+          "Les objets ont été transférés vers l'entrepôt."
+        ],
+        "nomatch": [
+          "Les pièces ont été envoyées au stockage."
+        ]
+      }
+    },
+    {
+      "id": "FR-OBTENIR-LES-OBJETS",
+      "severity": "ERR",
+      "pattern": "\\bOBTENIR LES OBJETS\\b",
+      "flags": "",
+      "message": "Literal 'OBTENIR LES OBJETS' (GET ITEMS): use 'TOUT PRENDRE / RÉCUPÉRER'",
+      "examples": {
+        "match": [
+          "OBTENIR LES OBJETS"
+        ],
+        "nomatch": [
+          "TOUT PRENDRE"
+        ]
+      }
+    },
+    {
+      "id": "FR-DEPLACER-VERS",
+      "severity": "ERR",
+      "pattern": "\\bDéplacer vers\\b",
+      "flags": "i",
+      "message": "Manual-speak keybinding 'Déplacer vers l'avant': use 'Avancer / Reculer / Gauche'",
+      "examples": {
+        "match": [
+          "Déplacer vers l'avant"
+        ],
+        "nomatch": [
+          "Avancer"
+        ]
+      }
+    },
+    {
+      "id": "FR-MEDIAN-DOT",
+      "severity": "ERR",
+      "pattern": "[^\\W\\d_]·[^\\W\\d_]",
+      "flags": "",
+      "message": "Mid-word median dot inclusive spelling ('prêt·e') breaks immersion/fonts: use gender-neutral phrasing",
+      "examples": {
+        "match": [
+          "Tu es prêt·e ?"
+        ],
+        "nomatch": [
+          "Niveau 3 · Boss final"
+        ]
+      }
+    },
+    {
+      "id": "FR-VEUILLEZ",
+      "severity": "WARN",
+      "pattern": "\\bVeuillez\\b",
+      "flags": "",
+      "message": "Formal 'Veuillez' in UI: use a plain infinitive or imperative",
+      "examples": {
+        "match": [
+          "Veuillez patienter"
+        ],
+        "nomatch": [
+          "Patientez"
+        ]
+      }
+    },
+    {
+      "id": "FR-AFIN-DE",
+      "severity": "WARN",
+      "pattern": "\\bafin (?:de|d')\\b",
+      "flags": "i",
+      "message": "Administrative 'afin de': use 'pour'",
+      "examples": {
+        "match": [
+          "Appuie sur X afin de sauter."
+        ],
+        "nomatch": [
+          "Appuie sur X pour sauter."
+        ]
+      }
+    },
+    {
+      "id": "FR-IL-EST-POSSIBLE",
+      "severity": "WARN",
+      "pattern": "\\bil est possible de\\b",
+      "flags": "i",
+      "message": "Stiff 'il est possible de': use 'tu peux / on peut'",
+      "examples": {
+        "match": [
+          "Il est possible de réparer la coque."
+        ],
+        "nomatch": [
+          "Tu peux réparer la coque."
+        ]
+      }
+    },
+    {
+      "id": "FR-PASSE-SIMPLE",
+      "severity": "WARN",
+      "pattern": "\\b(?:il|elle|on)\\s+(?!(?:est|fait|dit|suit|lit|doit|vit|fuit|tient|vient|écrit|finit|choisit|produit|construit|nuit|sort|sert|dort|part|met|bat|conduit|rit|sait|plaît|croit|boit|voit|peut|veut|faut)\\b)\\w+(?:ut|it|ît|ûmes|irent|èrent|urent)\\b",
+      "flags": "i",
+      "message": "Possible passé simple in dialogue ('il détruisit'): use passé composé",
+      "examples": {
+        "match": [
+          "Il détruisit tout et prit la fuite."
+        ],
+        "nomatch": [
+          "Il a tout détruit.",
+          "Il fait beau.",
+          "Elle dit non."
+        ]
+      }
+    },
+    {
+      "id": "FR-ARTICLE-PLACEHOLDER",
+      "severity": "ERR",
+      "pattern": "\\b(?:le|la|les|du|de la|des|un|une|au|aux)\\s+\\{\\w+\\}",
+      "flags": "",
+      "message": "Article/preposition glued to a placeholder: elision/agreement cannot work ('l'', 'un/une')",
+      "examples": {
+        "match": [
+          "Prends le {0}",
+          "Va au {item}"
+        ],
+        "nomatch": [
+          "Prends l'objet : {0}"
+        ]
+      }
+    },
+    {
+      "id": "FR-SPACE-BEFORE-PUNCT",
+      "severity": "WARN",
+      "pattern": "\\x20[?!:;]",
+      "flags": "",
+      "message": "Ordinary breaking space before ? ! : ; (should be U+00A0 non-breaking)",
+      "examples": {
+        "match": [
+          "Tu es prêt ?"
+        ],
+        "nomatch": [
+          "Tu es prêt ?",
+          "F1:"
+        ]
+      }
+    },
+    {
+      "id": "FR-NNBSP",
+      "severity": "WARN",
+      "pattern": "\\u202f",
+      "flags": "",
+      "message": "Narrow no-break space U+202F: only after verifying the font atlas",
+      "examples": {
+        "match": [
+          "Prêt ?"
+        ],
+        "nomatch": [
+          "Prêt ?"
+        ]
+      }
+    },
+    {
+      "id": "FR-A-CET-ENDROIT",
+      "severity": "WARN",
+      "pattern": "\\bà cet (?:endroit|emplacement)\\b",
+      "flags": "i",
+      "message": "Manual-speak 'à cet endroit / emplacement': use 'ici'",
+      "examples": {
+        "match": [
+          "Impossible de poser ça à cet endroit."
+        ],
+        "nomatch": [
+          "Impossible de poser ça ici."
+        ]
+      }
+    },
+    {
+      "id": "FR-AVEC-SUCCES",
+      "severity": "WARN",
+      "pattern": "\\bavec succès\\b",
+      "flags": "i",
+      "message": "Calque of 'successfully': drop it or use 'c'est fait'",
+      "examples": {
+        "match": [
+          "Sauvegarde effectuée avec succès"
+        ],
+        "nomatch": [
+          "Partie sauvegardée"
+        ]
+      }
+    },
+    {
+      "id": "FR-VEUILLEZ-SVP",
+      "severity": "WARN",
+      "pattern": "\\bveuillez\\b.*\\bs'il vous pla[iî]t\\b",
+      "flags": "i",
+      "message": "Doubled politeness 'veuillez ... s'il vous plaît'",
+      "examples": {
+        "match": [
+          "Veuillez patienter, s'il vous plaît."
+        ],
+        "nomatch": [
+          "Patientez."
+        ]
+      }
+    },
+    {
+      "id": "FR-IL-EST-RECOMMANDE",
+      "severity": "WARN",
+      "pattern": "\\bil est recommandé de\\b",
+      "flags": "i",
+      "message": "Impersonal notice tone 'il est recommandé de'",
+      "examples": {
+        "match": [
+          "Il est recommandé de sauvegarder."
+        ],
+        "nomatch": [
+          "Pense à sauvegarder."
+        ]
+      }
+    },
+    {
+      "id": "FR-GENDERED-PREDICATE",
+      "severity": "WARN",
+      "pattern": "\\b(?:tu es|vous êtes) (?:prêt|sûr|certain|devenu)\\b",
+      "flags": "i",
+      "message": "Gendered predicate about the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Tu es prêt ?"
+        ],
+        "nomatch": [
+          "C'est prêt ?"
+        ]
+      }
+    },
+    {
+      "id": "FR-BIENVENU",
+      "severity": "WARN",
+      "pattern": "\\bBienvenu\\b",
+      "flags": "",
+      "message": "Missing -e on the interjection: 'Bienvenue'",
+      "examples": {
+        "match": [
+          "Bienvenu à l'atelier"
+        ],
+        "nomatch": [
+          "Bienvenue à l'atelier"
+        ]
+      }
+    },
+    {
+      "id": "FR-GENDER-HACK",
+      "severity": "WARN",
+      "pattern": "\\w\\(e\\)s?(?!\\w)|\\b\\w+/e\\b",
+      "flags": "",
+      "message": "Bracketed or slashed gender hack ('prêt(e)', 'prêt/e'): rephrase neutrally",
+      "examples": {
+        "match": [
+          "Tu es prêt(e) ?",
+          "prêt/e"
+        ],
+        "nomatch": [
+          "C'est prêt ?"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,335 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "tr-TR",
+  "version": 1,
+  "notes": "Turkish anti-translationese + uppercase dotted-I rules. See references/tr-TR.md §1-3.",
+  "rules": [
+    {
+      "id": "TR-PASSIVE-BY",
+      "severity": "WARN",
+      "pattern": "\\btarafından\\b",
+      "flags": "i",
+      "message": "English 'by' passive calque ('tarafından'): prefer an active Turkish verb",
+      "examples": {
+        "match": [
+          "Gemi korsanlar tarafından yakıldı."
+        ],
+        "nomatch": [
+          "Gemiyi korsanlar yaktı."
+        ]
+      }
+    },
+    {
+      "id": "TR-BULUNMAKTADIR",
+      "severity": "ERR",
+      "pattern": "\\bbulunmaktadır\\b",
+      "flags": "i",
+      "message": "Bureaucratic 'bulunmaktadır': use natural 'var / dolu / bulunuyor'",
+      "examples": {
+        "match": [
+          "Burada zaten bir eşya bulunmaktadır!"
+        ],
+        "nomatch": [
+          "Burası zaten dolu!"
+        ]
+      }
+    },
+    {
+      "id": "TR-MAKTADIR",
+      "severity": "WARN",
+      "pattern": "\\b\\w+m[ae]kt[ae]d[ıi]r(?:lar|ler)?\\b",
+      "flags": "i",
+      "message": "Report-style '-maktadır/-mektedir' ending: use plain present ('-ıyor') or a short clause",
+      "examples": {
+        "match": [
+          "Üretim devam etmektedir.",
+          "Parçalar depoya gönderilmektedir."
+        ],
+        "nomatch": [
+          "Üretim devam ediyor."
+        ]
+      }
+    },
+    {
+      "id": "TR-SAHIPSIN",
+      "severity": "WARN",
+      "pattern": "\\bsahipsin(?:iz)?\\b",
+      "flags": "i",
+      "message": "Calque 'sahipsin' ('you own'): prefer 'sende zaten var'",
+      "examples": {
+        "match": [
+          "Bu alete zaten sahipsin!"
+        ],
+        "nomatch": [
+          "Bu alet sende zaten var!"
+        ]
+      }
+    },
+    {
+      "id": "TR-SAHIP-OLMAK",
+      "severity": "WARN",
+      "pattern": "\\bsahip\\s+ol\\w*",
+      "flags": "i",
+      "message": "'sahip olmak' calque of 'to have': prefer 'var / elinde'",
+      "examples": {
+        "match": [
+          "Bir reaktöre sahip olmalısın."
+        ],
+        "nomatch": [
+          "Bir reaktörün olmalı."
+        ]
+      }
+    },
+    {
+      "id": "TR-GERCEKLESTIR",
+      "severity": "WARN",
+      "pattern": "\\bgerçekleştir\\w*",
+      "flags": "i",
+      "message": "Officialese 'gerçekleştirmek': use the plain verb ('yap', 'tamamla')",
+      "examples": {
+        "match": [
+          "Onarımı gerçekleştir."
+        ],
+        "nomatch": [
+          "Onar."
+        ]
+      }
+    },
+    {
+      "id": "TR-YERLESTIRILEMEZ",
+      "severity": "WARN",
+      "pattern": "\\byerleştirilemez\\b",
+      "flags": "i",
+      "message": "Passive 'yerleştirilemez': prefer 'buraya uymaz / koyamazsın'",
+      "examples": {
+        "match": [
+          "Bu eşya buraya yerleştirilemez."
+        ],
+        "nomatch": [
+          "Bu buraya uymaz."
+        ]
+      }
+    },
+    {
+      "id": "TR-COK-DUSUK",
+      "severity": "WARN",
+      "pattern": "\\b(?:kondisyonun|dayanıklılığın|enerjin|canın)\\s+çok\\s+düşük\\b",
+      "flags": "i",
+      "message": "Literal 'X is too low': prefer 'nefesin tükendi / enerjin yetmiyor'",
+      "examples": {
+        "match": [
+          "Kondisyonun çok düşük!"
+        ],
+        "nomatch": [
+          "Nefesin tükendi!"
+        ]
+      }
+    },
+    {
+      "id": "TR-SURESI-COK-KISA",
+      "severity": "WARN",
+      "pattern": "\\bsüresi\\s+çok\\s+kısa\\b",
+      "flags": "i",
+      "message": "Literal 'duration too short': rephrase ('Bu kadar kısa uyunmaz.')",
+      "examples": {
+        "match": [
+          "Uyku süresi çok kısa."
+        ],
+        "nomatch": [
+          "Bu kadar kısa uyunmaz."
+        ]
+      }
+    },
+    {
+      "id": "TR-YUKSELTME-YAP",
+      "severity": "WARN",
+      "pattern": "\\byükseltme\\s+yap\\w*",
+      "flags": "i",
+      "message": "Verbal-noun calque 'yükseltme yapmak': use 'yükselt'",
+      "examples": {
+        "match": [
+          "Siparişi iptal etmeden yükseltme yapamazsın."
+        ],
+        "nomatch": [
+          "Yükseltmeden önce siparişi iptal et!"
+        ]
+      }
+    },
+    {
+      "id": "TR-PRONOUN-SPAM",
+      "severity": "WARN",
+      "pattern": "(?:^|[.!?]\\s+)Sen(?:in)?\\s+\\w+(?:da|de|nda|nde|ın|in)?\\s",
+      "flags": "",
+      "message": "Redundant 'Sen/Senin' at sentence start: Turkish verb endings already carry person (pro-drop)",
+      "examples": {
+        "match": [
+          "Sen bunu yapabilirsin.",
+          "Senin deponda yer yok."
+        ],
+        "nomatch": [
+          "Bunu yapabilirsin.",
+          "Deponda yer yok."
+        ]
+      }
+    },
+    {
+      "id": "TR-UPPERCASE-I",
+      "severity": "ERR",
+      "pattern": "\\b(?:IPTAL|INŞA|IYILEŞTIR|IÇERIK|ILETIŞIM|ILERI|INDIR|IKI|GIRIŞ|SIL|BILGI|SEÇIM|GIR|IÇIN|YENI|IŞLEM|DEĞIŞTIR|BIRIM|ISIM|IPUCU|IZIN|ITEM|LISTE|DIL|SEVIYE)\\b",
+      "flags": "",
+      "message": "Broken Turkish uppercase: dotted 'i' must become 'İ' (İPTAL, İNŞA, GİRİŞ)",
+      "examples": {
+        "match": [
+          "IPTAL",
+          "GIRIŞ YAP",
+          "YENI OYUN"
+        ],
+        "nomatch": [
+          "İPTAL",
+          "GİRİŞ",
+          "ISINMA",
+          "ÇIKIŞ"
+        ]
+      }
+    },
+    {
+      "id": "TR-OTTOMAN-OFFICIALESE",
+      "severity": "WARN",
+      "pattern": "\\b(?:arz ederim|tarafınıza iletilmiştir|müteşekkir kalırım|rica olunur)\\b",
+      "flags": "i",
+      "message": "Ottoman-petition bureaucratese: modern polite Turkish instead",
+      "examples": {
+        "match": [
+          "Bilgilerinize arz ederim."
+        ],
+        "nomatch": [
+          "Bilginize."
+        ]
+      }
+    },
+    {
+      "id": "TR-PLACEHOLDER-SUFFIX",
+      "severity": "ERR",
+      "pattern": "\\{\\w+\\}'[^\\W\\d_]+",
+      "flags": "",
+      "message": "Case suffix attached directly to a placeholder breaks vowel harmony: restructure with a category noun ('{0} istasyonundan')",
+      "examples": {
+        "match": [
+          "{0}'a git",
+          "{itemName}'den al"
+        ],
+        "nomatch": [
+          "{0} istasyonuna git"
+        ]
+      }
+    },
+    {
+      "id": "TR-PLURAL-AFTER-NUMBER",
+      "severity": "ERR",
+      "pattern": "\\b\\d+\\s+[^\\W\\d_]+(?:ler|lar)\\b",
+      "flags": "",
+      "message": "Plural suffix after a number ('3 Reaktörler'): Turkish keeps the singular",
+      "examples": {
+        "match": [
+          "3 Reaktörler"
+        ],
+        "nomatch": [
+          "3 Reaktör"
+        ]
+      }
+    },
+    {
+      "id": "TR-COMMON-NOUN-APOSTROPHE",
+      "severity": "ERR",
+      "pattern": "\\b(?:Depo|Terminal|Envanter|Seviye)'(?:y|n|d|t)?[aeıioöuü]",
+      "flags": "",
+      "message": "Apostrophe before a case suffix on a common noun ('Depo'ya'): write 'Depoya'",
+      "examples": {
+        "match": [
+          "Depo'ya git"
+        ],
+        "nomatch": [
+          "Depoya git"
+        ]
+      }
+    },
+    {
+      "id": "TR-INIZ-REGISTER",
+      "severity": "WARN",
+      "pattern": "\\b(?:yapamazsınız|bekleyiniz|giriniz|seçiniz)\\b",
+      "flags": "i",
+      "message": "ATM-style '-iniz' register: use 'sen' imperative unless the project UI is 'siz'",
+      "examples": {
+        "match": [
+          "Lütfen bekleyiniz"
+        ],
+        "nomatch": [
+          "Bekle"
+        ]
+      }
+    },
+    {
+      "id": "TR-GENDERED-ADDRESS",
+      "severity": "WARN",
+      "pattern": "\\b(?:oğlum|kızım|abi|abla|delikanlı|beyefendi|hanımefendi)\\b",
+      "flags": "i",
+      "message": "Gendered address of the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Aferin oğlum"
+        ],
+        "nomatch": [
+          "Aferin"
+        ]
+      }
+    },
+    {
+      "id": "TR-PERCENT-ORDER",
+      "severity": "WARN",
+      "pattern": "\\d+%",
+      "flags": "",
+      "message": "Percent sign goes first in Turkish: '%40'",
+      "examples": {
+        "match": [
+          "40% tamam"
+        ],
+        "nomatch": [
+          "%40 tamam"
+        ]
+      }
+    },
+    {
+      "id": "TR-KNOWN-CALQUE",
+      "severity": "WARN",
+      "pattern": "\\b(?:su üstünde kal\\w*|kozmik saçmalık)\\b",
+      "flags": "i",
+      "message": "Known calque ('stay afloat' / 'cosmic nonsense')",
+      "examples": {
+        "match": [
+          "Su üstünde kalmaya çalış",
+          "Kozmik saçmalık!"
+        ],
+        "nomatch": [
+          "Ayakta kalmaya çalış"
+        ]
+      }
+    },
+    {
+      "id": "TR-INFINITIVE-BUTTON",
+      "severity": "WARN",
+      "pattern": "\\b(?:Kaydetmek|Yüklemek|Çıkmak|Uygulamak)\\b",
+      "flags": "",
+      "message": "Infinitive on a menu button: use imperative/noun ('Kaydet') (rows tagged button)",
+      "context": "button",
+      "examples": {
+        "match": [
+          "Kaydetmek"
+        ],
+        "nomatch": [
+          "Kaydet"
+        ]
+      }
+    }
+  ]
+}

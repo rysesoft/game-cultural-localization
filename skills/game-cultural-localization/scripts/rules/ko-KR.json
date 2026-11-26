@@ -1,0 +1,314 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "ko-KR",
+  "version": 1,
+  "notes": "Korean 번역투 rules (no \\b: Hangul boundaries unreliable with particles). See references/ko-KR.md §1,§3.",
+  "rules": [
+    {
+      "id": "KO-DANGSIN",
+      "severity": "ERR",
+      "pattern": "당신",
+      "flags": "",
+      "message": "Beonyeoktu '당신' sounds confrontational in Korean UI & polite speech: drop the subject or use a role/title",
+      "examples": {
+        "match": [
+          "당신은 할 수 있습니다"
+        ],
+        "nomatch": [
+          "할 수 있습니다"
+        ]
+      }
+    },
+    {
+      "id": "KO-E-UIHAE",
+      "severity": "WARN",
+      "pattern": "에\\s*의해(?:서)?",
+      "flags": "",
+      "message": "English passive calque '~에 의해': rewrite with an active Korean verb",
+      "examples": {
+        "match": [
+          "시스템에 의해 파괴되었다",
+          "시스템에 의해서",
+          "시스템에 의해."
+        ],
+        "nomatch": [
+          "시스템이 부쉈다"
+        ]
+      }
+    },
+    {
+      "id": "KO-PRONOUN-SPAM",
+      "severity": "WARN",
+      "pattern": "그녀|그들(?:은|이|의|을)",
+      "flags": "",
+      "message": "Pronoun spam '그녀/그들의': omit or use '그 사람 / 그쪽'",
+      "examples": {
+        "match": [
+          "그녀는 떠났다",
+          "그들의 배"
+        ],
+        "nomatch": [
+          "그 사람은 떠났다"
+        ]
+      }
+    },
+    {
+      "id": "KO-BAECHI-HAL-SU",
+      "severity": "WARN",
+      "pattern": "배치할 수 없습니다",
+      "flags": "",
+      "message": "Stiff '배치할 수 없습니다': use '여기에 놓을 수 없습니다 / 여기엔 안 맞아요'",
+      "examples": {
+        "match": [
+          "이 아이템은 여기에 배치할 수 없습니다."
+        ],
+        "nomatch": [
+          "여기에 놓을 수 없습니다."
+        ]
+      }
+    },
+    {
+      "id": "KO-JONJAE",
+      "severity": "WARN",
+      "pattern": "존재합니다",
+      "flags": "",
+      "message": "Robotic '존재합니다': use '있습니다 / 자리가 꽉 찼습니다'",
+      "examples": {
+        "match": [
+          "이미 아이템이 존재합니다!"
+        ],
+        "nomatch": [
+          "이미 다른 물건이 있습니다!"
+        ]
+      }
+    },
+    {
+      "id": "KO-SOYU",
+      "severity": "WARN",
+      "pattern": "소유하고\\s*있습니다",
+      "flags": "",
+      "message": "Stiff '소유하고 있습니다': prefer '가지고 있습니다 / 보유 중입니다'",
+      "examples": {
+        "match": [
+          "이미 이 도구를 소유하고 있습니다!"
+        ],
+        "nomatch": [
+          "이미 가지고 있는 도구입니다!"
+        ]
+      }
+    },
+    {
+      "id": "KO-NEOMU-NATSEUMNIDA",
+      "severity": "WARN",
+      "pattern": "너무 낮습니다",
+      "flags": "",
+      "message": "Literal '너무 낮습니다': use '부족합니다'",
+      "examples": {
+        "match": [
+          "스태미나가 너무 낮습니다!"
+        ],
+        "nomatch": [
+          "기력이 부족합니다!"
+        ]
+      }
+    },
+    {
+      "id": "KO-FOCUS",
+      "severity": "ERR",
+      "pattern": "포커스",
+      "flags": "",
+      "message": "Literal '포커스' on interact: use '사용하기 / 조작하기'",
+      "examples": {
+        "match": [
+          "포커스"
+        ],
+        "nomatch": [
+          "사용하기"
+        ]
+      }
+    },
+    {
+      "id": "KO-ITEM-HOEKDEUK",
+      "severity": "WARN",
+      "pattern": "아이템 획득",
+      "flags": "",
+      "message": "Literal '아이템 획득' (GET ITEMS): use '모두 받기 / 모두 회수'",
+      "examples": {
+        "match": [
+          "아이템 획득"
+        ],
+        "nomatch": [
+          "모두 받기"
+        ]
+      }
+    },
+    {
+      "id": "KO-DOUBLE-PASSIVE",
+      "severity": "WARN",
+      "pattern": "되어[지져졌]",
+      "flags": "",
+      "message": "Double passive '~되어지다': use '~되다'",
+      "examples": {
+        "match": [
+          "완료되어졌습니다"
+        ],
+        "nomatch": [
+          "완료되었습니다"
+        ]
+      }
+    },
+    {
+      "id": "KO-E-DAEHAYEO",
+      "severity": "WARN",
+      "pattern": "에 대하여",
+      "flags": "",
+      "message": "Stiff '에 대하여': use '에 대해'",
+      "examples": {
+        "match": [
+          "이 문제에 대하여"
+        ],
+        "nomatch": [
+          "이 문제에 대해"
+        ]
+      }
+    },
+    {
+      "id": "KO-PLACEHOLDER-PARTICLE",
+      "severity": "ERR",
+      "pattern": "[}\\]>]\\s?(?:을|를|이|가|은|는|으로)(?=[\\s,.!?]|$)",
+      "flags": "",
+      "message": "Particle attached directly to a placeholder breaks on vowel/consonant endings: use '{0}을(를)' or restructure ('{0}에서')",
+      "examples": {
+        "match": [
+          "{0}을 획득했습니다",
+          "{itemName}가 필요합니다"
+        ],
+        "nomatch": [
+          "{0}을(를) 획득했습니다",
+          "{0}에서 창고로"
+        ]
+      }
+    },
+    {
+      "id": "KO-FALLBACK-PARTICLE",
+      "severity": "WARN",
+      "pattern": "[}\\]>]\\s?(?:을\\(를\\)|이\\(가\\)|은\\(는\\)|과\\(와\\)|\\(으\\)로)",
+      "flags": "",
+      "message": "Fallback particle notation '{0}을(를)': prefer an invariant particle or engine resolution",
+      "examples": {
+        "match": [
+          "{0}을(를) 획득"
+        ],
+        "nomatch": [
+          "{0} 획득"
+        ]
+      }
+    },
+    {
+      "id": "KO-SEONGGONG",
+      "severity": "WARN",
+      "pattern": "성공적으로",
+      "flags": "",
+      "message": "'successfully' calque '성공적으로'",
+      "examples": {
+        "match": [
+          "성공적으로 저장되었습니다"
+        ],
+        "nomatch": [
+          "저장했습니다"
+        ]
+      }
+    },
+    {
+      "id": "KO-GANEUNG",
+      "severity": "WARN",
+      "pattern": "하는 것이 가능",
+      "flags": "",
+      "message": "'~하는 것이 가능' → '~할 수 있'",
+      "examples": {
+        "match": [
+          "수리하는 것이 가능합니다"
+        ],
+        "nomatch": [
+          "수리할 수 있습니다"
+        ]
+      }
+    },
+    {
+      "id": "KO-ANIO",
+      "severity": "WARN",
+      "pattern": "아니오(?=[\\s,.!?]|$)",
+      "flags": "",
+      "message": "Non-standard spelling '아니오': use '아니요'",
+      "examples": {
+        "match": [
+          "아니오"
+        ],
+        "nomatch": [
+          "아니요"
+        ]
+      }
+    },
+    {
+      "id": "KO-LOANWORD-SPELLING",
+      "severity": "WARN",
+      "pattern": "스테미너|스테미나|메세지|컨텐츠",
+      "flags": "",
+      "message": "외래어 표기법 violation: 스태미나 / 메시지 / 콘텐츠",
+      "examples": {
+        "match": [
+          "메세지 도착"
+        ],
+        "nomatch": [
+          "메시지 도착"
+        ]
+      }
+    },
+    {
+      "id": "KO-COUNTER-SPACE",
+      "severity": "WARN",
+      "pattern": "\\d\\s+(?:개|명|대|척|장|회|번)(?=[\\s,.!?]|$)",
+      "flags": "",
+      "message": "Space between digit and counter: write '1개'",
+      "examples": {
+        "match": [
+          "3 개 획득"
+        ],
+        "nomatch": [
+          "3개 획득"
+        ]
+      }
+    },
+    {
+      "id": "KO-KINSHIP-ADDRESS",
+      "severity": "WARN",
+      "pattern": "(?:^|\\s)(?:형|오빠|누나|언니)(?=[\\s,.!?~]|$)",
+      "flags": "",
+      "message": "Kinship address reveals player gender (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "고마워 형"
+        ],
+        "nomatch": [
+          "고마워"
+        ]
+      }
+    },
+    {
+      "id": "KO-CJK-PUNCT",
+      "severity": "WARN",
+      "pattern": "[。、「」]",
+      "flags": "",
+      "message": "Japanese/Chinese punctuation in Korean text",
+      "examples": {
+        "match": [
+          "저장했습니다。"
+        ],
+        "nomatch": [
+          "저장했습니다."
+        ]
+      }
+    }
+  ]
+}

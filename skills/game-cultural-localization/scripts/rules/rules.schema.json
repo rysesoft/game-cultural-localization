@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "lqa_linter rule file",
+  "type": "object",
+  "required": [
+    "locale",
+    "rules"
+  ],
+  "properties": {
+    "locale": {
+      "type": "string",
+      "description": "Canonical locale this file applies to (en, tr-TR, de-DE, fr, es-ES, it-IT, pt-BR, pt-PT, pl-PL, lt-LT, ru-RU, ja-JP, ko-KR, zh-CN, zh-Hant)"
+    },
+    "version": {
+      "type": "integer"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "pattern",
+          "message"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique rule id, e.g. DE-EHE"
+          },
+          "severity": {
+            "enum": [
+              "ERR",
+              "WARN"
+            ]
+          },
+          "pattern": {
+            "type": "string",
+            "description": "Python 're' regular expression searched in the TARGET string"
+          },
+          "flags": {
+            "type": "string",
+            "description": "Any of i (IGNORECASE), m (MULTILINE), x (VERBOSE)"
+          },
+          "message": {
+            "type": "string"
+          },
+          "context": {
+            "enum": [
+              "any",
+              "ui",
+              "dialog",
+              "player",
+              "button"
+            ],
+            "description": "any (default); ui/dialog apply unless the row is tagged with the other context; player/button apply only to rows tagged player (meta player:true / tags contain 'player') or button (category button or key containing BTN/BUTTON)"
+          },
+          "skip_variants": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Regional variants (--variant) for which the rule is skipped, e.g. [\"hk\"]"
+          },
+          "examples": {
+            "type": "object",
+            "properties": {
+              "match": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "nomatch": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "variant_severity": {
+            "type": "object",
+            "additionalProperties": {
+              "enum": [
+                "ERR",
+                "WARN"
+              ]
+            },
+            "description": "Severity override per --variant, e.g. {\"hk\": \"WARN\"}"
+          }
+        }
+      }
+    }
+  }
+}

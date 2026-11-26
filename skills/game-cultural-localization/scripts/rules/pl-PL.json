@@ -1,0 +1,360 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "pl-PL",
+  "version": 1,
+  "notes": "Polish styl kancelaryjny / calque rules. See references/pl-PL.md §2-3.",
+  "rules": [
+    {
+      "id": "PL-TY-MASZ",
+      "severity": "WARN",
+      "pattern": "(?:^|[.!?]\\s+)Ty\\s+(?:masz|możesz|musisz|jesteś)\\b",
+      "flags": "",
+      "message": "Pronoun spam 'Ty masz': Polish is pro-drop ('Masz')",
+      "examples": {
+        "match": [
+          "Ty masz już to narzędzie."
+        ],
+        "nomatch": [
+          "Masz już to narzędzie."
+        ]
+      }
+    },
+    {
+      "id": "PL-POSIADAC",
+      "severity": "WARN",
+      "pattern": "\\bposiada(?:sz|cie|ć|ją|my)?\\b",
+      "flags": "i",
+      "message": "Bureaucratic 'posiadać': use natural 'mieć (masz / ma)'",
+      "examples": {
+        "match": [
+          "Posiadasz już to narzędzie!",
+          "Twój warsztat posiada trzy stanowiska."
+        ],
+        "nomatch": [
+          "Masz już to narzędzie!"
+        ]
+      }
+    },
+    {
+      "id": "PL-FOKUSUJ",
+      "severity": "ERR",
+      "pattern": "\\bFokusuj\\w*",
+      "flags": "i",
+      "message": "Calque 'Fokusuj' on interact: use 'Użyj / Obsłuż'",
+      "examples": {
+        "match": [
+          "Fokusuj"
+        ],
+        "nomatch": [
+          "Użyj"
+        ]
+      }
+    },
+    {
+      "id": "PL-SKUPIENIE-PROMPT",
+      "severity": "WARN",
+      "pattern": "^\\s*Skupienie\\s*$",
+      "flags": "",
+      "message": "Literal 'Skupienie' as interact prompt: use 'Użyj / Obsłuż'",
+      "examples": {
+        "match": [
+          "Skupienie"
+        ],
+        "nomatch": [
+          "Użyj",
+          "Skupienie: +5"
+        ]
+      }
+    },
+    {
+      "id": "PL-NIE-MOZE-ZOSTAC",
+      "severity": "WARN",
+      "pattern": "\\bnie może zostać\\b",
+      "flags": "i",
+      "message": "Passive 'nie może zostać umieszczony': use 'To tu nie pasuje.'",
+      "examples": {
+        "match": [
+          "Ten przedmiot nie może zostać umieszczony tutaj."
+        ],
+        "nomatch": [
+          "To tu nie pasuje."
+        ]
+      }
+    },
+    {
+      "id": "PL-ZNAJDUJE-SIE-JUZ",
+      "severity": "WARN",
+      "pattern": "\\bznajduje się już\\b",
+      "flags": "i",
+      "message": "Stiff 'znajduje się już przedmiot': use 'To miejsce jest już zajęte!'",
+      "examples": {
+        "match": [
+          "W tym miejscu znajduje się już przedmiot!"
+        ],
+        "nomatch": [
+          "Już coś tu leży!"
+        ]
+      }
+    },
+    {
+      "id": "PL-ZBYT-NISKA",
+      "severity": "WARN",
+      "pattern": "\\bjest zbyt nisk[ai]\\b",
+      "flags": "i",
+      "message": "Literal 'jest zbyt niska': use 'Brakuje ci sił!'",
+      "examples": {
+        "match": [
+          "Twoja wytrzymałość jest zbyt niska!"
+        ],
+        "nomatch": [
+          "Brakuje ci sił!"
+        ]
+      }
+    },
+    {
+      "id": "PL-UZYSKAJ-PRZEDMIOTY",
+      "severity": "WARN",
+      "pattern": "\\bUZYSKAJ PRZEDMIOTY\\b",
+      "flags": "",
+      "message": "Literal 'UZYSKAJ PRZEDMIOTY' (GET ITEMS): use 'WEŹ WSZYSTKO / ODBIERZ'",
+      "examples": {
+        "match": [
+          "UZYSKAJ PRZEDMIOTY"
+        ],
+        "nomatch": [
+          "WEŹ WSZYSTKO"
+        ]
+      }
+    },
+    {
+      "id": "PL-PORUSZAJ-SIE",
+      "severity": "WARN",
+      "pattern": "\\bPoruszaj się\\b",
+      "flags": "i",
+      "message": "Manual-speak keybinding 'Poruszaj się do przodu': use 'Do przodu / W lewo'",
+      "examples": {
+        "match": [
+          "Poruszaj się do przodu"
+        ],
+        "nomatch": [
+          "Do przodu"
+        ]
+      }
+    },
+    {
+      "id": "PL-DOKONAC",
+      "severity": "WARN",
+      "pattern": "\\bdokona(?:ć|j|sz|no)\\s+\\w+",
+      "flags": "i",
+      "message": "Kancelaryjny 'dokonać X': use a direct verb ('napraw')",
+      "examples": {
+        "match": [
+          "Dokonać naprawy"
+        ],
+        "nomatch": [
+          "Naprawić"
+        ]
+      }
+    },
+    {
+      "id": "PL-ZBYC",
+      "severity": "WARN",
+      "pattern": "\\bzby(?:ć|j|to)\\b",
+      "flags": "i",
+      "message": "Officialese 'zbyć na rynku': use 'sprzedać'",
+      "examples": {
+        "match": [
+          "Zbyć na rynku"
+        ],
+        "nomatch": [
+          "Sprzedać na rynku"
+        ]
+      }
+    },
+    {
+      "id": "PL-NALEZY",
+      "severity": "WARN",
+      "pattern": "\\bnależy\\b",
+      "flags": "i",
+      "message": "Officialese 'należy': use a direct imperative",
+      "examples": {
+        "match": [
+          "Należy wyłączyć zasilanie."
+        ],
+        "nomatch": [
+          "Wyłącz zasilanie."
+        ]
+      }
+    },
+    {
+      "id": "PL-W-CELU",
+      "severity": "WARN",
+      "pattern": "\\bw celu\\b",
+      "flags": "i",
+      "message": "Officialese 'w celu': use 'aby / żeby'",
+      "examples": {
+        "match": [
+          "Naciśnij X w celu skoku."
+        ],
+        "nomatch": [
+          "Naciśnij X, aby skoczyć."
+        ]
+      }
+    },
+    {
+      "id": "PL-GENDERED-PAST",
+      "severity": "WARN",
+      "pattern": "\\b\\w+(?:łeś|łaś|byś|abyś)\\b",
+      "flags": "",
+      "message": "2nd-person past tense reveals player gender ('zrobiłeś/zrobiłaś'): use present/future or impersonal forms",
+      "examples": {
+        "match": [
+          "Udowodniłeś, że potrafisz."
+        ],
+        "nomatch": [
+          "Widać już, że potrafisz."
+        ]
+      },
+      "context": "player"
+    },
+    {
+      "id": "PL-PREP-PLACEHOLDER",
+      "severity": "ERR",
+      "pattern": "\\b(?:z|ze|do|w|we|na|od|przy|o)\\s+\\{\\w+\\}",
+      "flags": "",
+      "message": "Preposition directly before a placeholder: the inserted noun cannot decline",
+      "examples": {
+        "match": [
+          "Transport z {0}"
+        ],
+        "nomatch": [
+          "Transport ze stanowiska {0}"
+        ]
+      }
+    },
+    {
+      "id": "PL-OPTIONAL-PLURAL",
+      "severity": "ERR",
+      "pattern": "\\{\\w+\\}\\s+\\w+\\(\\w+\\)",
+      "flags": "",
+      "message": "'(ów)'-style optional plural: use an ICU plural",
+      "examples": {
+        "match": [
+          "{0} reaktor(ów)"
+        ],
+        "nomatch": [
+          "{0, plural, one {reaktor} few {reaktory} other {reaktorów}}"
+        ]
+      }
+    },
+    {
+      "id": "PL-FUTURE-GENDER",
+      "severity": "ERR",
+      "pattern": "\\bbędziesz\\s+\\w+[łl][aey]?\\b",
+      "flags": "",
+      "message": "Compound future reveals player gender (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "będziesz musiał"
+        ],
+        "nomatch": [
+          "musisz"
+        ]
+      }
+    },
+    {
+      "id": "PL-KANCELARYJNY",
+      "severity": "WARN",
+      "pattern": "\\b(?:uległ\\w*|w przypadku)\\b",
+      "flags": "i",
+      "message": "Kancelaryjny 'uległ / w przypadku'",
+      "examples": {
+        "match": [
+          "Statek uległ uszkodzeniu",
+          "W przypadku awarii"
+        ],
+        "nomatch": [
+          "Statek się uszkodził"
+        ]
+      }
+    },
+    {
+      "id": "PL-FORMAL-ADDRESS",
+      "severity": "WARN",
+      "pattern": "\\b(?:Panie|Pani|Szanown\\w+)\\b",
+      "flags": "",
+      "message": "Gendered formal address of the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Szanowny Panie"
+        ],
+        "nomatch": [
+          "Dzień dobry"
+        ]
+      }
+    },
+    {
+      "id": "PL-KOSMICZNE",
+      "severity": "WARN",
+      "pattern": "\\bkosmiczn\\w+ bzdur\\w*\\b",
+      "flags": "i",
+      "message": "Calqued exclamation 'kosmiczne bzdury'",
+      "examples": {
+        "match": [
+          "Kosmiczne bzdury!"
+        ],
+        "nomatch": [
+          "Bzdura!"
+        ]
+      }
+    },
+    {
+      "id": "PL-INFINITIVE-BUTTON",
+      "severity": "WARN",
+      "pattern": "\\b(?:Zapisać|Wczytać|Wyjść|Zastosować)\\b",
+      "flags": "",
+      "message": "Infinitive on a button: project uses imperative (rows tagged button)",
+      "context": "button",
+      "examples": {
+        "match": [
+          "Zapisać"
+        ],
+        "nomatch": [
+          "Zapisz"
+        ]
+      }
+    },
+    {
+      "id": "PL-ZALADUJ",
+      "severity": "WARN",
+      "pattern": "\\b(?:Załaduj|Ładuj)\\b",
+      "flags": "",
+      "message": "Save/load wording: use 'Wczytaj'",
+      "examples": {
+        "match": [
+          "Załaduj grę"
+        ],
+        "nomatch": [
+          "Wczytaj grę"
+        ]
+      }
+    },
+    {
+      "id": "PL-ORPHAN-PREPOSITION",
+      "severity": "WARN",
+      "pattern": "(?<=\\s)[wziouaWZIOUA]\\s*$",
+      "flags": "m",
+      "message": "Single-letter preposition at line end (needs a non-breaking space)",
+      "examples": {
+        "match": [
+          "Idź do magazynu i\nwróć"
+        ],
+        "nomatch": [
+          "Idź do magazynu i wróć"
+        ]
+      }
+    }
+  ]
+}

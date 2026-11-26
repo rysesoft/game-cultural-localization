@@ -1,0 +1,376 @@
+{
+  "$schema": "./rules.schema.json",
+  "locale": "es-ES",
+  "version": 1,
+  "notes": "Peninsular Spanish anti-bureaucratese and LatAm/neutral-dub leak rules. See references/es-ES.md §2-3.",
+  "rules": [
+    {
+      "id": "ES-CONFIGURACIONES",
+      "severity": "ERR",
+      "pattern": "\\bConfiguraciones\\b",
+      "flags": "i",
+      "message": "Non-es-ES UI label 'Configuraciones': use 'Ajustes / Opciones'",
+      "examples": {
+        "match": [
+          "Configuraciones"
+        ],
+        "nomatch": [
+          "Ajustes"
+        ]
+      }
+    },
+    {
+      "id": "ES-LATAM-TERMS",
+      "severity": "WARN",
+      "pattern": "\\b(?:celular|video ?juego|carro de carreras)\\b",
+      "flags": "i",
+      "message": "LatAm term in es-ES build: use 'ordenador / móvil / videojuego'",
+      "examples": {
+        "match": [
+          "Tu celular suena",
+          "Un videojuego nuevo"
+        ],
+        "nomatch": [
+          "Tu móvil suena"
+        ]
+      }
+    },
+    {
+      "id": "ES-ENFOCAR",
+      "severity": "WARN",
+      "pattern": "\\bEnfocar\\b",
+      "flags": "",
+      "message": "Literal 'Enfocar' on console interact: use 'Usar / Interactuar'",
+      "examples": {
+        "match": [
+          "Enfocar"
+        ],
+        "nomatch": [
+          "Usar",
+          "enfocar la cámara"
+        ]
+      }
+    },
+    {
+      "id": "ES-PASIVA-SER",
+      "severity": "WARN",
+      "pattern": "\\bno puede ser \\w+ad[oa]s?\\b",
+      "flags": "i",
+      "message": "English passive 'no puede ser colocado': use 'Esto no va aquí.'",
+      "examples": {
+        "match": [
+          "Este objeto no puede ser colocado aquí."
+        ],
+        "nomatch": [
+          "Esto no va aquí."
+        ]
+      }
+    },
+    {
+      "id": "ES-YA-SE-ENCUENTRA",
+      "severity": "WARN",
+      "pattern": "\\bya se encuentra\\b",
+      "flags": "i",
+      "message": "Stiff 'ya se encuentra un objeto': use 'ya hay algo / está ocupado'",
+      "examples": {
+        "match": [
+          "¡Ya se encuentra un objeto en este lugar!"
+        ],
+        "nomatch": [
+          "¡Aquí ya hay algo!"
+        ]
+      }
+    },
+    {
+      "id": "ES-POSEES",
+      "severity": "WARN",
+      "pattern": "\\bposees\\b",
+      "flags": "i",
+      "message": "Stiff 'posees': use everyday 'tienes'",
+      "examples": {
+        "match": [
+          "¡Ya posees esta herramienta!"
+        ],
+        "nomatch": [
+          "¡Ya tienes esta herramienta!"
+        ]
+      }
+    },
+    {
+      "id": "ES-DEMASIADO-BAJA",
+      "severity": "WARN",
+      "pattern": "\\bes demasiado baj[oa]\\b",
+      "flags": "i",
+      "message": "Literal 'es demasiado baja': use '¡No te queda energía!'",
+      "examples": {
+        "match": [
+          "¡Tu resistencia es demasiado baja!"
+        ],
+        "nomatch": [
+          "¡Estás sin fuerzas!"
+        ]
+      }
+    },
+    {
+      "id": "ES-OBTENER-OBJETOS",
+      "severity": "ERR",
+      "pattern": "\\bOBTENER OBJETOS\\b",
+      "flags": "",
+      "message": "Literal 'OBTENER OBJETOS' (GET ITEMS): use 'RECOGER TODO'",
+      "examples": {
+        "match": [
+          "OBTENER OBJETOS"
+        ],
+        "nomatch": [
+          "RECOGER TODO"
+        ]
+      }
+    },
+    {
+      "id": "ES-MOVER-HACIA",
+      "severity": "ERR",
+      "pattern": "\\bMover hacia\\b",
+      "flags": "i",
+      "message": "Manual-speak keybinding 'Mover hacia adelante': use 'Avanzar / Retroceder'",
+      "examples": {
+        "match": [
+          "Mover hacia adelante"
+        ],
+        "nomatch": [
+          "Avanzar"
+        ]
+      }
+    },
+    {
+      "id": "ES-REALIZAR-EFECTUAR",
+      "severity": "WARN",
+      "pattern": "\\b(?:Realizar la|Efectuar)\\b",
+      "flags": "i",
+      "message": "Bureaucratic 'Realizar la reparación / Efectuar': use the direct verb",
+      "examples": {
+        "match": [
+          "Realizar la reparación",
+          "Efectuar el pago"
+        ],
+        "nomatch": [
+          "Reparar"
+        ]
+      }
+    },
+    {
+      "id": "ES-PRONOUN-SPAM",
+      "severity": "WARN",
+      "pattern": "(?:^|[.!?¡¿]\\s*)(?:Tú|Yo)\\s+(?:tienes|puedes|debes|eres|estás|tengo|puedo|debo|soy|estoy)\\b",
+      "flags": "",
+      "message": "Subject-pronoun spam ('Tú tienes'): Spanish is pro-drop",
+      "examples": {
+        "match": [
+          "Tú tienes que reparar la nave."
+        ],
+        "nomatch": [
+          "Tienes que reparar la nave."
+        ]
+      }
+    },
+    {
+      "id": "ES-INVERTED-QUESTION",
+      "severity": "WARN",
+      "pattern": "^[^¿]*\\?",
+      "flags": "",
+      "message": "Question mark without opening '¿'",
+      "examples": {
+        "match": [
+          "Seguro que quieres salir?"
+        ],
+        "nomatch": [
+          "¿Seguro que quieres salir?",
+          "Listo."
+        ]
+      }
+    },
+    {
+      "id": "ES-INVERTED-EXCLAMATION",
+      "severity": "WARN",
+      "pattern": "^[^¡]*!",
+      "flags": "",
+      "message": "Exclamation mark without opening '¡'",
+      "examples": {
+        "match": [
+          "Cuidado!"
+        ],
+        "nomatch": [
+          "¡Cuidado!",
+          "Listo."
+        ]
+      }
+    },
+    {
+      "id": "ES-USTED-SPAM",
+      "severity": "WARN",
+      "pattern": "\\busted (?:tiene|puede|debe)\\b.*\\busted\\b",
+      "flags": "i",
+      "message": "'usted' repeated in one sentence: drop the pronoun",
+      "examples": {
+        "match": [
+          "Usted tiene que ir y usted debe volver."
+        ],
+        "nomatch": [
+          "Tiene que ir y volver."
+        ]
+      }
+    },
+    {
+      "id": "ES-COMPUTADORA",
+      "severity": "ERR",
+      "pattern": "\\bComputadora\\b",
+      "flags": "i",
+      "message": "LatAm 'Computadora': es-ES uses 'Ordenador'",
+      "examples": {
+        "match": [
+          "Enciende la computadora"
+        ],
+        "nomatch": [
+          "Enciende el ordenador"
+        ]
+      }
+    },
+    {
+      "id": "ES-ARTICLE-PLACEHOLDER",
+      "severity": "ERR",
+      "pattern": "\\b(?:el|la|los|las|un|una|unos|unas|del|al)\\s+\\{\\w+\\}",
+      "flags": "",
+      "message": "Article/contraction glued to a placeholder: gender/number cannot agree",
+      "examples": {
+        "match": [
+          "Coge el {0}",
+          "Ve al {item}"
+        ],
+        "nomatch": [
+          "Coge este objeto: {0}"
+        ]
+      }
+    },
+    {
+      "id": "ES-SALVAR",
+      "severity": "WARN",
+      "pattern": "\\bSalvar\\b",
+      "flags": "",
+      "message": "'Salvar' for Save: es-ES UI uses 'Guardar' ('salvar' = rescue is fine in dialogue)",
+      "examples": {
+        "match": [
+          "Salvar partida"
+        ],
+        "nomatch": [
+          "Guardar partida"
+        ]
+      }
+    },
+    {
+      "id": "ES-NOMINALISED-VERB",
+      "severity": "WARN",
+      "pattern": "\\b(?:realizar|efectuar) (?:la|una|el|un) \\w+(?:ción|miento)\\b",
+      "flags": "i",
+      "message": "Nominalised verb 'realizar la reparación': use the plain verb",
+      "examples": {
+        "match": [
+          "Realizar la reparación"
+        ],
+        "nomatch": [
+          "Reparar"
+        ]
+      }
+    },
+    {
+      "id": "ES-CON-EXITO",
+      "severity": "WARN",
+      "pattern": "\\bcon éxito\\b|\\bexitosamente\\b",
+      "flags": "i",
+      "message": "Calque of 'successfully'",
+      "examples": {
+        "match": [
+          "Guardado con éxito"
+        ],
+        "nomatch": [
+          "Partida guardada"
+        ]
+      }
+    },
+    {
+      "id": "ES-GENDERED-PREDICATE",
+      "severity": "WARN",
+      "pattern": "\\b(?:Estás|Eres|Has (?:sido|quedado)) (?:listo|preparado|seguro|cansado|seleccionado|clasificado)\\b",
+      "flags": "",
+      "message": "Gendered predicate about the player (rows tagged player)",
+      "context": "player",
+      "examples": {
+        "match": [
+          "Estás listo"
+        ],
+        "nomatch": [
+          "Todo listo"
+        ]
+      }
+    },
+    {
+      "id": "ES-BIENVENIDO",
+      "severity": "WARN",
+      "pattern": "\\bBienvenid[oa]\\b",
+      "flags": "",
+      "message": "Gendered 'Bienvenido': use 'Te damos la bienvenida'",
+      "examples": {
+        "match": [
+          "Bienvenido al taller"
+        ],
+        "nomatch": [
+          "Te damos la bienvenida al taller"
+        ]
+      }
+    },
+    {
+      "id": "ES-GENDER-HACK",
+      "severity": "WARN",
+      "pattern": "\\b\\w+@s\\b|\\b\\w+[oa]/[oa]\\b|\\bl[oa]s/[oa]s\\b",
+      "flags": "",
+      "message": "'@' / 'o/a' gender hacks: rephrase neutrally",
+      "examples": {
+        "match": [
+          "Listo/a",
+          "Amig@s"
+        ],
+        "nomatch": [
+          "Todo listo"
+        ]
+      }
+    },
+    {
+      "id": "ES-USTEDES",
+      "severity": "WARN",
+      "pattern": "\\bustedes\\b",
+      "flags": "i",
+      "message": "'ustedes' is formal plural only in es-ES: verify the speaker (casual plural is 'vosotros')",
+      "examples": {
+        "match": [
+          "Ustedes pueden entrar."
+        ],
+        "nomatch": [
+          "Podéis entrar."
+        ]
+      }
+    },
+    {
+      "id": "ES-SEGURO-QUE",
+      "severity": "WARN",
+      "pattern": "\\b(?:estás|está) segur[oa] (?:de )?que\\b",
+      "flags": "i",
+      "message": "Gendered adjective + queísmo risk: prefer '¿Seguro que…?'",
+      "examples": {
+        "match": [
+          "¿Estás seguro de que quieres salir?"
+        ],
+        "nomatch": [
+          "¿Seguro que quieres salir?"
+        ]
+      }
+    }
+  ]
+}
