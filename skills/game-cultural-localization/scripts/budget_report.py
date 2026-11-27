@@ -2,8 +2,10 @@
 """Token, call, latency and cost report from budget.jsonl, with a projection to a full project.
 
 Reads the lines every model call appends to budget.jsonl (role, provider, model, input_tokens,
-output_tokens, latency_ms, ok) and aggregates them by role, by provider, by model and by role
-and model. Cost uses price_in / price_out (USD per 1M tokens) of providers.config.json, a model
+output_tokens, latency_ms, ok, optional cache_read_tokens and cache_write_tokens) and aggregates
+them by role, by provider, by model and by role and model. Cost uses price_in / price_out (USD per
+1M tokens) of providers.config.json. Prompt tokens served from the provider's cache are priced with
+price_cache_read and tokens written to it with price_cache_write (both default to price_in). A model
 whose price is null is reported as "price not set" and its cost is left out of every total.
 
 Projection: with --rows (the number of source lines the logged run processed) the per-line
@@ -64,7 +66,7 @@ def read_records(paths: Sequence[Path]) -> List[Dict[str, Any]]:
                 raise L10nError(f"{p}:{n}: invalid JSON line ({exc.msg})")
             if not isinstance(rec, dict) or not all(isinstance(rec.get(k), str) for k in ("role", "provider", "model")):
                 raise L10nError(f"{p}:{n}: a budget line needs role, provider and model")
-            for k in ("input_tokens", "output_tokens", "latency_ms"):
+            for k in ("input_tokens", "output_tokens", "latency_ms", "cache_read_tokens", "cache_write_tokens"):
                 v = rec.get(k, 0)
                 if not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0:
                     raise L10nError(f"{p}:{n}: '{k}' must be a non-negative number")
@@ -74,32 +76,46 @@ def read_records(paths: Sequence[Path]) -> List[Dict[str, Any]]:
     return out
 
 
-def price_table(config: Any) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
-    """model id -> (price_in, price_out) in USD per 1M tokens."""
-    return {s.id: (s.price_in, s.price_out) for s in config.models.values()}
+Prices = Dict[str, Tuple[Optional[float], ...]]
 
 
-def cost_of(model: str, tin: float, tout: float, prices: Dict[str, Tuple[Optional[float], Optional[float]]]) -> Optional[float]:
-    """USD cost, None when the model or one of its prices is unknown."""
-    pin, pout = prices.get(model, (None, None))
+def price_table(config: Any) -> Prices:
+    """model id -> (price_in, price_out, price_cache_read, price_cache_write) in USD per 1M tokens."""
+    return {s.id: (s.price_in, s.price_out, getattr(s, "price_cache_read", None), getattr(s, "price_cache_write", None))
+            for s in config.models.values()}
+
+
+def cost_of(model: str, tin: float, tout: float, prices: Prices, cache_read: float = 0, cache_write: float = 0) -> Optional[float]:
+    """USD cost, None when the model or one of its prices is unknown.
+
+    tin is the whole prompt. The cached parts are taken out of it and priced with their own rates.
+    """
+    pin, pout, pread, pwrite = (tuple(prices.get(model, ())) + (None,) * 4)[:4]
     if pin is None or pout is None:
         return None
-    return tin / 1e6 * pin + tout / 1e6 * pout
+    pread = pin if pread is None else pread
+    pwrite = pin if pwrite is None else pwrite
+    uncached = max(0.0, tin - cache_read - cache_write)
+    return (uncached * pin + cache_read * pread + cache_write * pwrite + tout * pout) / 1e6
 
 
-def aggregate(records: Iterable[Dict[str, Any]], keys: Sequence[str], prices: Dict[str, Tuple[Optional[float], Optional[float]]]) -> List[Dict[str, Any]]:
+def aggregate(records: Iterable[Dict[str, Any]], keys: Sequence[str], prices: Prices) -> List[Dict[str, Any]]:
     """Group records by the given fields; cost is summed per model so mixed groups stay exact."""
     groups: Dict[Tuple[str, ...], Dict[str, Any]] = {}
     for r in records:
         gk = tuple(str(r.get(k, "")) for k in keys)
         g = groups.setdefault(gk, {**{k: v for k, v in zip(keys, gk)}, "calls": 0, "errors": 0, "input_tokens": 0, "output_tokens": 0,
+                                   "cache_read_tokens": 0, "cache_write_tokens": 0,
                                    "latency_ms": 0, "cost_usd": 0.0, "priced": True, "unpriced_models": []})
         g["calls"] += 1
         g["errors"] += 0 if r.get("ok", True) else 1
         g["input_tokens"] += int(r.get("input_tokens", 0))
         g["output_tokens"] += int(r.get("output_tokens", 0))
+        g["cache_read_tokens"] += int(r.get("cache_read_tokens", 0))
+        g["cache_write_tokens"] += int(r.get("cache_write_tokens", 0))
         g["latency_ms"] += int(r.get("latency_ms", 0))
-        c = cost_of(r["model"], r.get("input_tokens", 0), r.get("output_tokens", 0), prices)
+        c = cost_of(r["model"], r.get("input_tokens", 0), r.get("output_tokens", 0), prices,
+                    r.get("cache_read_tokens", 0), r.get("cache_write_tokens", 0))
         if c is None:
             g["priced"] = False
             if r["model"] not in g["unpriced_models"]:
@@ -172,6 +188,9 @@ def main() -> int:
     exit_code = EXIT_FINDINGS if over else EXIT_OK
     lines = [f"Budget report: {len(records)} calls from {len(logs)} file(s)" + (f", {dry} dry-run calls (fake provider, estimated tokens)" if dry else "")]
     lines.append(f"  Total  tokens in {totals['input_tokens']}, out {totals['output_tokens']}, latency {totals['latency_ms']} ms, cost {_fmt_cost(totals)}")
+    if totals["cache_read_tokens"] or totals["cache_write_tokens"]:
+        share = totals["cache_read_tokens"] / totals["input_tokens"] if totals["input_tokens"] else 0.0
+        lines.append(f"  Prompt cache  read {totals['cache_read_tokens']} ({share:.0%} of the input), written {totals['cache_write_tokens']}")
     for title, rows in (("By role", by_role), ("By provider", by_provider), ("By model", by_model)):
         lines.append(f"  {title}")
         for g in rows:

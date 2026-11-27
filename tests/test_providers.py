@@ -127,9 +127,14 @@ class HttpAdapterTests(unittest.TestCase):
         self.assertEqual(req["headers"]["x-api-key"], "secret-key-123")
         self.assertEqual(req["headers"]["anthropic-version"], "2023-06-01")
         self.assertEqual(req["body"]["model"], "claude-haiku-5-5")
-        self.assertTrue(req["body"]["system"].startswith("SYS"))
-        self.assertIn("JSON", req["body"]["system"])
+        system = req["body"]["system"]
+        self.assertEqual(len(system), 1)                                     # one text block, marked for the prompt cache
+        self.assertEqual(system[0]["type"], "text")
+        self.assertTrue(system[0]["text"].startswith("SYS"))
+        self.assertIn("JSON", system[0]["text"])
+        self.assertEqual(system[0]["cache_control"], {"type": "ephemeral"})
         self.assertEqual(req["body"]["messages"], [{"role": "user", "content": "USER"}])
+        self.assertNotIn("cache_control", json.dumps(req["body"]["messages"]))   # the per batch user turn is never marked
         self.assertNotIn("temperature", req["body"])                       # current Claude models reject sampling parameters
         self.assertEqual(req["body"]["max_tokens"], 16000)                  # room for thinking, a larger request keeps its own value
         thinking_reply = {"content": [{"type": "thinking", "thinking": "", "signature": "x"}, {"type": "text", "text": "{\"ok\": true}"}],
@@ -140,6 +145,36 @@ class HttpAdapterTests(unittest.TestCase):
         self.assertEqual(res2.text, "{\"ok\": true}")                     # thinking blocks are skipped
         self.assertEqual((res.text, res.input_tokens, res.output_tokens, res.model), ("{\"ok\": true}", 12, 3, "claude-haiku-5-5"))
         self.assertNotIn("secret", repr(p))
+
+    def test_prompt_cache_usage_is_read(self):
+        # Anthropic reports the uncached remainder in input_tokens, the adapter adds the cached parts back
+        written = {"content": [{"type": "text", "text": "{}"}], "usage": {"input_tokens": 38, "cache_creation_input_tokens": 4336,
+                                                                         "cache_read_input_tokens": 0, "output_tokens": 9}}
+        read = {"content": [{"type": "text", "text": "{}"}], "usage": {"input_tokens": 39, "cache_creation_input_tokens": 0,
+                                                                      "cache_read_input_tokens": 4336, "output_tokens": 9}}
+        p, _, _ = self._make("anthropic", [(200, written, {}), (200, read, {})], model="claude-haiku-5-5")
+        first, second = p.complete("S", "U1"), p.complete("S", "U2")   # the live numbers of the cache probe
+        self.assertEqual((first.input_tokens, first.cache_write_tokens, first.cache_read_tokens), (4374, 4336, 0))
+        self.assertEqual((second.input_tokens, second.cache_write_tokens, second.cache_read_tokens), (4375, 0, 4336))
+        # DeepSeek caches on its own and reports the hit share of prompt_tokens
+        ds = {"choices": [{"message": {"content": "{}"}}], "usage": {"prompt_tokens": 3321, "completion_tokens": 5,
+                                                                    "prompt_cache_hit_tokens": 3072, "prompt_cache_miss_tokens": 249}}
+        p2, _, _ = self._make("deepseek", [(200, ds, {})], model="deepseek-flash")
+        r2 = p2.complete("S", "U")
+        self.assertEqual((r2.input_tokens, r2.cache_read_tokens, r2.cache_write_tokens), (3321, 3072, 0))
+        # Gemini 4 showed no cache hits live, its results keep the zero defaults
+        p3, _, _ = self._make("google", [(200, GOOGLE_OK, {})], model="gemini-4-neon")
+        self.assertEqual(p3.complete("S", "U")[5:], (0, 0))
+
+    def test_cache_tokens_reach_the_budget_log(self):
+        reply = {"content": [{"type": "text", "text": "{}"}], "usage": {"input_tokens": 39, "cache_read_input_tokens": 4336, "output_tokens": 9}}
+        t = ScriptedTransport([(200, reply, {})])
+        router = Router(load_providers_config(), env={"ANTHROPIC_API_KEY": "k", "GOOGLE_API_KEY": "g", "DEEPSEEK_API_KEY": "d"},
+                        transport=t, sleep=lambda s: None)
+        router.for_role("pass1").complete("S", "U")
+        rec = router.budget.records[-1]
+        self.assertEqual((rec["input_tokens"], rec["cache_read_tokens"]), (4375, 4336))
+        self.assertNotIn("cache_write_tokens", rec)
 
     def test_google_request_shape(self):
         p, t, _ = self._make("google", [(200, GOOGLE_OK, {})], model="gemini-4-neon")

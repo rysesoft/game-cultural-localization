@@ -5,6 +5,7 @@ All notable changes to this plugin are documented here. The version number lives
 ## [Unreleased]
 
 ### Added
+- Prompt caching for Claude. Anthropic caches only on request (checked live, no marker meant no cache), so `providers/anthropic.py` sends the system prompt as one block with `cache_control`. Live through the plugin the second jury call of a run read 4178 of 4396 prompt tokens from the cache and its cost fell from $0.00066 to $0.00017. DeepSeek caches on its own (3072 of 3321 tokens on the second call), Gemini 4 showed no hits in twelve live calls even at 7700 tokens. `ChatResult`, the budget log and `budget_report.py` carry the cache read and write tokens, priced with the new `price_cache_read` and `price_cache_write` fields of `providers.config.json`.
 - Native critic and Pass 2 prompts for the remaining 13 locales (`en`, `fr`, `es-ES`, `it-IT`, `pt-BR`, `pt-PT`, `pl-PL`, `lt-LT`, `ru-RU`, `ja-JP`, `ko-KR`, `zh-CN`, `zh-Hant`), each written in its own language with a local player or writer persona, so every locale now has `prompts/critic.<locale>.md` and `prompts/pass2.<locale>.md`. The English generic prompts stay as a fallback for locales a project adds.
 - The KDE source of `langpack/sources.manifest.json` lists the Turkish and German translations of five KDE games (KPatience, KMines, KNavalBattle, KSudoku, KBounce), pinned to a Subversion revision.
 - `text_style.punctuation_problems(..., exempt_examples=True)` checks explanations while quoted, italic and non-Latin target-language examples keep their own punctuation.

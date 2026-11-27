@@ -41,7 +41,7 @@ class DeepSeekProvider(HttpProvider):
             body["thinking"] = {"type": "enabled" if thinking else "disabled"}
         return body
 
-    def _parse(self, data: Dict[str, Any]) -> Tuple[str, Optional[int], Optional[int]]:
+    def _parse(self, data: Dict[str, Any]) -> Tuple[Any, ...]:
         choices = data.get("choices")
         if not isinstance(choices, list) or not choices:
             raise ProviderError(f"deepseek/{self.model}: response has no choices")
@@ -49,4 +49,7 @@ class DeepSeekProvider(HttpProvider):
         usage = data.get("usage") or {}
         tin = usage.get("prompt_tokens")
         tout = usage.get("completion_tokens")
-        return str(msg.get("content") or ""), tin if isinstance(tin, int) else None, tout if isinstance(tout, int) else None
+        # DeepSeek caches prompt prefixes on its own (checked live), the hit share is billed at the cache price
+        hit = usage.get("prompt_cache_hit_tokens")
+        return (str(msg.get("content") or ""), tin if isinstance(tin, int) else None, tout if isinstance(tout, int) else None,
+                hit if isinstance(hit, int) else 0, 0)

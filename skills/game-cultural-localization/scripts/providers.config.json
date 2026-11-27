@@ -1,19 +1,19 @@
 {
-  "_comment": "Model ids verified 2026-11-26 against the official model pages (see ARGE brief B3.2). Prices are USD per 1M tokens, null = price not entered yet. API keys are never stored here, only the environment variable names. deepseek.thinking maps a role (pass1, pass2, roundtrip, literal, J1, J2, J3) or 'default' to true / false, a missing entry keeps the API default (thinking on). literal and roundtrip are mechanical tasks and run without thinking, live runs showed thinking alone can use up the output limit there.",
+  "_comment": "Model ids verified 2026-11-26 against the official model pages (see ARGE brief B3.2). Prices are USD per 1M tokens, null = price not entered yet. price_cache_read and price_cache_write price prompt tokens served from or written to the provider's prompt cache (Anthropic needs the cache marker the adapter sends, DeepSeek caches on its own, Gemini 4 showed no cache hits live), a missing value means price_in. DeepSeek prices are the off-peak rates. API keys are never stored here, only the environment variable names. deepseek.thinking maps a role (pass1, pass2, roundtrip, literal, J1, J2, J3) or 'default' to true / false, a missing entry keeps the API default (thinking on). literal and roundtrip are mechanical tasks and run without thinking, live runs showed thinking alone can use up the output limit there.",
   "providers": {
     "anthropic": {"env_key": "ANTHROPIC_API_KEY", "rps": 5, "endpoint": "https://api.anthropic.com/v1/messages"},
     "google":    {"env_key": "GOOGLE_API_KEY",    "rps": 5, "endpoint": "https://generativelanguage.googleapis.com/v1beta"},
     "deepseek":  {"env_key": "DEEPSEEK_API_KEY",  "rps": 5, "endpoint": "https://api.deepseek.com/chat/completions", "thinking": {"literal": false, "roundtrip": false}}
   },
   "models": {
-    "haiku":    {"provider": "anthropic", "id": "claude-haiku-5-5",  "price_in": 0.10, "price_out": 0.50},
-    "sonnet":   {"provider": "anthropic", "id": "claude-sonnet-5-5", "price_in": 2.0,  "price_out": 10.0},
-    "opus":     {"provider": "anthropic", "id": "claude-opus-5-5",   "price_in": 4.0,  "price_out": 20.0},
+    "haiku":    {"provider": "anthropic", "id": "claude-haiku-5-5",  "price_in": 0.10, "price_out": 0.50, "price_cache_read": 0.01, "price_cache_write": 0.125},
+    "sonnet":   {"provider": "anthropic", "id": "claude-sonnet-5-5", "price_in": 2.0,  "price_out": 10.0, "price_cache_read": 0.10, "price_cache_write": 2.5},
+    "opus":     {"provider": "anthropic", "id": "claude-opus-5-5",   "price_in": 4.0,  "price_out": 20.0, "price_cache_read": 0.20, "price_cache_write": 5.0},
     "hydrogen": {"provider": "google",    "id": "gemini-4-hydrogen", "price_in": null, "price_out": null},
     "neon":     {"provider": "google",    "id": "gemini-4-neon",     "price_in": null, "price_out": null},
     "carbon":   {"provider": "google",    "id": "gemini-4-carbon",   "price_in": 4.0,  "price_out": 20.0},
-    "v4flash":  {"provider": "deepseek",  "id": "deepseek-flash",    "price_in": 0.15, "price_out": 0.60},
-    "v4pro":    {"provider": "deepseek",  "id": "deepseek-v4-pro",   "price_in": 0.66, "price_out": 1.98, "fallback": "v4flash", "fallback_thinking": true}
+    "v4flash":  {"provider": "deepseek",  "id": "deepseek-flash",    "price_in": 0.15, "price_out": 0.60, "price_cache_read": 0.003},
+    "v4pro":    {"provider": "deepseek",  "id": "deepseek-v4-pro",   "price_in": 0.66, "price_out": 1.98, "price_cache_read": 0.022, "fallback": "v4flash", "fallback_thinking": true}
   },
   "roles": {
     "pass1":     "sonnet",

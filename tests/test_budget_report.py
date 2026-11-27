@@ -45,6 +45,37 @@ class AggregateTests(unittest.TestCase):
         self.assertIsNone(br.cost_of("gemini-4-hydrogen", 1, 1, self.prices))
         self.assertIsNone(br.cost_of("unknown-model", 1, 1, self.prices))
 
+    def test_prompt_cache_prices(self):
+        # 1M prompt tokens on Sonnet 5.5: all fresh $2.00, all written to the cache $2.50, all read from it $0.10
+        self.assertAlmostEqual(br.cost_of("claude-sonnet-5-5", 1_000_000, 0, self.prices), 2.00)
+        self.assertAlmostEqual(br.cost_of("claude-sonnet-5-5", 1_000_000, 0, self.prices, cache_write=1_000_000), 2.50)
+        self.assertAlmostEqual(br.cost_of("claude-sonnet-5-5", 1_000_000, 0, self.prices, cache_read=1_000_000), 0.10)
+        # the live probe on Haiku 5.5: 4375 prompt tokens with 4336 read from the cache costs about a tenth
+        fresh = br.cost_of("claude-haiku-5-5", 4375, 0, self.prices)
+        cached = br.cost_of("claude-haiku-5-5", 4375, 0, self.prices, cache_read=4336)
+        self.assertLess(cached, fresh * 0.12)
+        # DeepSeek hits are billed at about 2% of the miss price
+        self.assertAlmostEqual(br.cost_of("deepseek-flash", 1_000_000, 0, self.prices, cache_read=1_000_000), 0.003)
+        # a model without cache prices falls back to price_in, never cheaper than it really is
+        bare = {"m": (1.0, 1.0)}
+        self.assertAlmostEqual(br.cost_of("m", 1_000_000, 0, bare, cache_read=1_000_000), 1.0)
+
+    def test_cache_tokens_in_groups_and_report(self):
+        recs = [{"role": "J1", "provider": "anthropic", "model": "claude-haiku-5-5", "input_tokens": 4375, "output_tokens": 10,
+                 "cache_read_tokens": 4336, "latency_ms": 5, "ok": True},
+                {"role": "J1", "provider": "anthropic", "model": "claude-haiku-5-5", "input_tokens": 4374, "output_tokens": 10,
+                 "cache_write_tokens": 4336, "latency_ms": 5, "ok": True}]
+        g = br.aggregate(recs, ["model"], self.prices)[0]
+        self.assertEqual((g["cache_read_tokens"], g["cache_write_tokens"]), (4336, 4336))
+        with TempDir() as td:
+            log = td / "budget.jsonl"
+            log.write_text("\n".join(json.dumps(r) for r in recs) + "\n", encoding="utf-8")
+            code, out, err = run_cli("budget_report.py", str(log))
+            self.assertEqual(code, 0, err)
+            self.assertIn("Prompt cache  read 4336 (50% of the input), written 4336", out)
+            log.write_text(json.dumps({**recs[0], "cache_read_tokens": -1}) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli("budget_report.py", str(log))[0], 2)
+
     def test_group_by_role_provider_model(self):
         by_model = {g["model"]: g for g in br.aggregate(RECORDS, ["provider", "model"], self.prices)}
         haiku = by_model["claude-haiku-5-5"]

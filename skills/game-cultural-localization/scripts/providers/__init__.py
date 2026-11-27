@@ -73,6 +73,8 @@ class ModelSpec(NamedTuple):
     price_out: Optional[float]
     fallback: Optional[str]
     fallback_thinking: bool
+    price_cache_read: Optional[float] = None    # USD per 1M prompt tokens served from the cache, None = price_in
+    price_cache_write: Optional[float] = None   # USD per 1M prompt tokens written to the cache, None = price_in
 
 
 class ProvidersConfig:
@@ -85,7 +87,8 @@ class ProvidersConfig:
         self.models: Dict[str, ModelSpec] = {}
         for alias, m in data["models"].items():
             self.models[alias] = ModelSpec(alias, m["provider"], m["id"], m.get("price_in"), m.get("price_out"),
-                                           m.get("fallback"), bool(m.get("fallback_thinking", False)))
+                                           m.get("fallback"), bool(m.get("fallback_thinking", False)),
+                                           m.get("price_cache_read"), m.get("price_cache_write"))
         self.roles: Dict[str, Union[str, List[str]]] = data["roles"]
         self.agreement: Dict[str, Any] = {**_DEFAULTS["agreement"], **(data.get("agreement") or {})}
         self.budget_caps: Dict[str, Any] = {**_DEFAULTS["budget_caps"], **(data.get("budget_caps") or {})}
@@ -158,7 +161,7 @@ def load_providers_config(path: Optional[Path] = None) -> ProvidersConfig:
             raise L10nError(f"{path}: models.{alias}.provider '{m.get('provider')}' is not defined under 'providers'")
         if not isinstance(m.get("id"), str) or not m["id"].strip():
             raise L10nError(f"{path}: models.{alias}.id must be a non-empty string")
-        for pk in ("price_in", "price_out"):
+        for pk in ("price_in", "price_out", "price_cache_read", "price_cache_write"):
             if not _num_or_none(m.get(pk)):
                 raise L10nError(f"{path}: models.{alias}.{pk} must be a number >= 0 or null (USD per 1M tokens)")
         fb = m.get("fallback")
@@ -278,6 +281,10 @@ class RoleProvider:
         rec: Dict[str, Any] = {"role": self.role, "provider": self.spec.provider, "alias": self.spec.alias, "model": self.spec.id,
                                "input_tokens": res.input_tokens if res else 0, "output_tokens": res.output_tokens if res else 0,
                                "latency_ms": res.latency_ms if res else 0, "ok": error is None}
+        if res is not None and res.cache_read_tokens:
+            rec["cache_read_tokens"] = res.cache_read_tokens
+        if res is not None and res.cache_write_tokens:
+            rec["cache_write_tokens"] = res.cache_write_tokens
         if self.router.dry_run:
             rec["dry_run"] = True
         if self.fallback_from:

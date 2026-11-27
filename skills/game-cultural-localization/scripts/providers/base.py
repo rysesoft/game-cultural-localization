@@ -38,12 +38,18 @@ OFFLINE_ENV = "GCL_OFFLINE"  # "1" refuses every network call (tests set it as a
 
 
 class ChatResult(NamedTuple):
-    """One completed chat call."""
+    """One completed chat call. input_tokens is the whole prompt, cached parts included.
+
+    cache_read_tokens are prompt tokens served from the provider's prompt cache (billed at the cache read price),
+    cache_write_tokens were written to it on this call (Anthropic bills them at 1.25x the input price).
+    """
     text: str
     input_tokens: int
     output_tokens: int
     model: str
     latency_ms: int
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
 
 
 class Provider(Protocol):
@@ -308,7 +314,8 @@ class HttpProvider:
     def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> Dict[str, Any]:
         raise NotImplementedError
 
-    def _parse(self, data: Dict[str, Any]) -> Tuple[str, Optional[int], Optional[int]]:
+    def _parse(self, data: Dict[str, Any]) -> Tuple[Any, ...]:
+        """(text, input_tokens, output_tokens) or (text, input_tokens, output_tokens, cache_read, cache_write)."""
         raise NotImplementedError
 
     # public --------------------------------------------------------------- #
@@ -320,10 +327,12 @@ class HttpProvider:
                          transport=self._transport, sleep=self._sleep, timeout=self._timeout,
                          max_attempts=self._max_attempts, label=f"{self.name}/{self.model}", before_attempt=self._limiter.wait,
                          secrets=(self._key,))
-        text, tin, tout = self._parse(data)
+        parsed = self._parse(data)
+        text, tin, tout = parsed[:3]
+        cread, cwrite = (int(parsed[3] or 0), int(parsed[4] or 0)) if len(parsed) >= 5 else (0, 0)
         latency = int((time.monotonic() - started) * 1000)
         return ChatResult(text, tin if tin is not None else estimate_tokens(system + user),
-                          tout if tout is not None else estimate_tokens(text), self.model, latency)
+                          tout if tout is not None else estimate_tokens(text), self.model, latency, cread, cwrite)
 
 
 JSON_ONLY_HINT = "Reply with one JSON object only. No Markdown fences, no prose outside the JSON."
