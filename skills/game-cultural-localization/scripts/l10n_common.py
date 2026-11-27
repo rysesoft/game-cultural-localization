@@ -552,9 +552,66 @@ _YAML_SCALAR_RE = re.compile(r"^(\s*)(?:- )?(m_Localized|m_Key|m_Id|m_Code|m_Nam
 _YAML_DQ_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "\\": "\\", '"': '"', "0": "\0", "/": "/"}
 
 
-def _yaml_scalar(value: str, following: List[str], indent: int) -> Tuple[str, int]:
-    """Decode a YAML scalar (plain, 'single', "double", | or > block). Returns (text, lines consumed)."""
+def _quote_end(text: str, quote: str) -> int:
+    """Index of the quote that closes a quoted YAML scalar (text starts after the opening quote), -1 when open."""
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if quote == '"' and c == "\\":
+            i += 2
+            continue
+        if c == quote:
+            if quote == "'" and text[i + 1:i + 2] == "'":
+                i += 2
+                continue
+            return i
+        i += 1
+    return -1
+
+
+def _fold_flow(lines: List[str], double: bool) -> str:
+    """YAML line folding of a multi line flow scalar. One line break is a space, every empty line is a newline."""
+    out = lines[0].rstrip(" \t")
+    empties = 0
+    for ln in lines[1:]:
+        s = ln.strip(" \t")
+        if s == "":
+            empties += 1
+            continue
+        tail = len(out) - len(out.rstrip("\\"))
+        if double and tail % 2 == 1 and not empties:  # an escaped line break joins without a space
+            out = out[:-1] + s
+        else:
+            out += ("\n" * empties if empties else " ") + s
+        empties = 0
+    return out + "\n" * empties
+
+
+def _yaml_scalar(value: str, following: List[str], indent: int, content_indent: Optional[int] = None) -> Tuple[str, int]:
+    """Decode a YAML scalar (plain, 'single', "double", | or > block), also one that spans several lines.
+
+    Returns (text, lines consumed). Unity writes long texts as folded quoted or plain scalars over
+    several lines, an empty line inside them is a paragraph break that must survive.
+    """
     v = value.strip()
+    if v[:1] in ("'", '"'):
+        q = v[0]
+        body = [value.lstrip()[1:]]
+        used = 0
+        while _quote_end("\n".join(body), q) < 0 and used < len(following):
+            body.append(following[used])
+            used += 1
+        if used:
+            joined = "\n".join(body)
+            end = _quote_end(joined, q)
+            inner = _fold_flow((joined[:end] if end >= 0 else joined).split("\n"), q == '"')
+            if q == "'":
+                return inner.replace("''", "'"), used
+            return re.sub(
+                r"\\(u[0-9A-Fa-f]{4}|x[0-9A-Fa-f]{2}|.)",
+                lambda m: _YAML_DQ_ESCAPES.get(m.group(1), m.group(1)) if len(m.group(1)) == 1 else chr(int(m.group(1)[1:], 16)),
+                inner,
+            ), used
     if v in ("|", "|-", "|+", ">", ">-", ">+"):
         block: List[str] = []
         used = 0
@@ -582,6 +639,17 @@ def _yaml_scalar(value: str, following: List[str], indent: int) -> Tuple[str, in
         ), 0
     if len(v) >= 2 and v[0] == "'" and v[-1] == "'":
         return v[1:-1].replace("''", "'"), 0
+    if v and content_indent is not None:  # a plain scalar continues on lines indented deeper than its key
+        more: List[str] = []
+        for ln in following:
+            if ln.strip() == "" or (len(ln) - len(ln.lstrip(" "))) > content_indent:
+                more.append(ln)
+            else:
+                break
+        while more and more[-1].strip() == "":
+            more.pop()
+        if more:
+            return _fold_flow([v] + more, False), len(more)
     return v, 0
 
 
@@ -604,8 +672,8 @@ def parse_unity_yaml(text: str) -> Dict[str, Any]:
             i += 1
             continue
         indent, field, value = len(m.group(1)), m.group(2), m.group(3)
-        scalar, used = _yaml_scalar(value, lines[i + 1:], indent)
         is_item = ln.lstrip().startswith("- ")
+        scalar, used = _yaml_scalar(value, lines[i + 1:], indent, indent + 2 if is_item else indent)
         if field in ("m_Id", "m_Key", "m_Localized"):
             attr = {"m_Id": "id", "m_Key": "key", "m_Localized": "text"}[field]
             if is_item or cur is None or cur.get(attr) is not None:

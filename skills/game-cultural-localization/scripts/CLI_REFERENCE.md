@@ -243,23 +243,31 @@ Exit codes. 0 config, keys and pings are fine. 1 a model was not found and its f
 
 ```
 python build_context_map.py --scan --project "<unity project>" --out loc_work/context [--keys-from loc_work/reference/tr.csv]
+python build_context_map.py --scan --project "<unity project>" --out loc_work/context --slices slices.json --locale tr-TR [--keys-from loc_work/reference/tr.csv]
+python build_context_map.py --check-slices --out loc_work/context
 ```
 
-The context map is the mandatory first step (Phase 0 step 0). `context-cartographer` on Claude Opus and its `context-scout` agents on Claude Sonnet write `CONTEXT_MAP.md` and ask the user whatever stays unclear. This tool collects the facts they need. It reads the project only and never writes into it.
+The context map is the mandatory first step (Phase 0 step 0). `context-cartographer` on Claude Opus and its `context-scout` agents on Claude Sonnet write `CONTEXT_MAP.md` and ask the user whatever stays unclear. This tool collects the facts they need, builds the input of every scout and checks that the scout reports cover every key. It reads the project only and never writes into it.
 
-For a Unity project it reads the Unity Localization string tables (Shared Data assets) and every reference in prefabs, scenes and ScriptableObjects, by table GUID or table name and by key id or key name (`LocalizedString` fields and `LocalizeStringEvent` components). For every key it records the file, the object with its hierarchy path, the class and the field, and the code lines of that class that show the field. A code line is flagged `concat` when it glues the text to something else (`+`, string interpolation, `string.Format`), those lines belong in the transcreation ledger. Paths longer than the Windows limit are read with the long path prefix. Other engines exit 2 for now, the agents read their code directly.
+For a Unity project it reads the Unity Localization string tables (Shared Data assets) and every reference in prefabs, scenes and ScriptableObjects, by table GUID or table name and by key id or key name (`LocalizedString` fields and `LocalizeStringEvent` components). A scene or prefab that binds a key through a prefab override (`m_Modifications` of a `PrefabInstance`) counts too, its object reads `<prefab> (override)`. For every key it records the file, the object with its hierarchy path, the class and the field, and the code lines of that class that show the field. A code line is flagged `concat` when it glues the text to something else (`+`, string interpolation, `string.Format`), those lines belong in the transcreation ledger. Paths longer than the Windows limit are read with the long path prefix. Other engines exit 2 for now, the agents read their code directly.
 
 | Flag | Meaning |
 |---|---|
-| `--scan` | scan the project, the only mode for now |
+| `--scan` | scan the project |
+| `--slices` | also write one scout input per slice to `<out>/slices/<slice>.input.json`, the value is a JSON file `{"slice": ["TableName", "Table*"]}` (implies `--scan`) |
+| `--locale` | target locale whose existing texts go into the slice inputs, for example `tr-TR` |
+| `--source-locale` | locale of the source texts in the slice inputs, default `en` |
+| `--check-slices` | check `<out>/slices`, every key of `<slice>.input.json` must sit in exactly one entry of the scout's `<slice>.report.json` |
 | `--project` | the game project folder (a Unity project or its Assets folder) |
 | `--out` | output folder, for example `loc_work/context`, refused inside the game project |
-| `--keys-from` | a string table whose keys must be covered, for example the studio reference, the report lists keys without a usage |
+| `--keys-from` | a string table whose keys must be covered, for example the studio reference, the report lists keys without a usage. Its `category` and `speaker` columns go into the slice inputs |
 | `--code-lines` | code lines kept per localized field, default 4 |
 
-Output files. `key_usage.json` (`engine`, `project`, `tables`, `keys` with `table`, `usages` of `{file, object, class, field}` and `code` of `{file, line, text, concat}`, `unresolved_references`) and `scan_summary.md` (coverage, tables, main classes per table, keys without a usage). Paths are relative to the project.
+Output files. `key_usage.json` (`engine`, `project`, `tables`, `keys` with `table`, `usages` of `{file, object, class, field}` and `code` of `{file, line, text, concat}`, `unresolved_references` for references to a key its table no longer has, `missing_table_references` for references to a table the project no longer has) and `scan_summary.md` (coverage, tables, main classes per table, stale references, keys without a usage). Paths are relative to the project.
 
-Exit codes. 0 scan written. 1 scan written but keys of `--keys-from` have no usage. 2 usage or input error (not a Unity project, no string table, `--out` inside the project).
+Slice inputs. A list of rows `{key, table, <source locale>, <target locale>, category, speaker, usages, code}`. The texts come from the project's own locale tables (`<Collection>_<locale>.asset` next to the Shared Data asset, matched by its GUID), so line and paragraph breaks stay intact. Never build scout inputs by hand from an export, the first project lost every paragraph break that way. Every table lands in exactly one slice. A table claimed by two slices or a slice that claims no table is an input error, tables no slice claims go to `unassigned.input.json`. The scout writes `<slice>.report.json` next to its input, a list of entries with `keys` (a list) and the fields of `agents/context-scout.md`.
+
+Exit codes. 0 written, or every key covered. 1 findings, keys of `--keys-from` without a usage, tables no slice claims, a locale table that was not found, or keys a scout report misses, repeats or invents. 2 usage or input error (not a Unity project, no string table, `--out` inside the project, a bad slice file, no slice inputs to check).
 
 ## build_language_pack.py (language asset pack with a five-layer filter)
 

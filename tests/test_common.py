@@ -199,6 +199,26 @@ class LoaderTests(unittest.TestCase):
             with self.assertRaises(lc.L10nError):
                 lc.load_table(shared)
 
+    def test_unity_yaml_multi_line_scalars_keep_paragraphs(self):
+        # Unity folds long texts over several lines. An empty line is a paragraph break, one line break is a space.
+        # The first project lost every paragraph of its codex and news before this was read right.
+        text = ("MonoBehaviour:\n  m_LocaleId:\n    m_Code: en\n  m_TableData:\n"
+                "  - m_Id: 1\n    m_Localized: 'First paragraph ends here.\n\n\n      It''s the second one,\n      folded.'\n"
+                "    m_Metadata:\n      m_Items: []\n"
+                "  - m_Id: 2\n    m_Localized: \"Line\\tone\\nTwo \\\n      joined\n\n      last\"\n"
+                "    m_Metadata:\n      m_Items: []\n"
+                "  - m_Id: 3\n    m_Localized: A plain text that\n      goes on here\n\n      and has a paragraph\n"
+                "    m_Metadata:\n      m_Items: []\n"
+                "  - m_Id: 4\n    m_Localized: Short\n    m_Metadata:\n      m_Items: []\n"
+                "  - m_Id: 5\n    m_Localized: 'One line, it''s closed'\n")
+        texts = {e["id"]: e["text"] for e in lc.parse_unity_yaml(text)["entries"]}
+        self.assertEqual(texts["1"], "First paragraph ends here.\n\nIt's the second one, folded.")
+        self.assertEqual(texts["2"], "Line\tone\nTwo joined\nlast")
+        self.assertEqual(texts["3"], "A plain text that goes on here\nand has a paragraph")
+        self.assertEqual(texts["4"], "Short")
+        self.assertEqual(texts["5"], "One line, it's closed")
+        self.assertEqual(len(texts), 5)
+
 
 class GlossaryTests(unittest.TestCase):
     def test_wide_layout(self):

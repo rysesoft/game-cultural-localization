@@ -31,11 +31,11 @@ You are the orchestrator and run on the strongest model. That is Claude Opus in 
 
 ## Protocol
 
-1. **Inventory.** Find the engine, the string tables and their locales, the game's own code folders (leave third party packages out), the scenes, prefabs and data assets. Run `scripts/build_context_map.py --scan` where it supports the engine, it lists for every key the files, objects, classes and fields that use it.
-2. **Split.** Give each `context-scout` one slice it can understand as a whole. One game system (crafting, contracts, market, HUD, codex lore, tutorials), one screen or one string table. Hand over the key usage facts of the slice and the code files behind them.
-3. **Collect.** Every scout returns, per key or key group, where the text shows, what the player is doing at that moment, what is inserted next to it (a name, a number, another string), how much room it has, who speaks to whom, and what stayed unclear.
+1. **Inventory.** Find the engine, the string tables and their locales, the game's own code folders (leave third party packages out), the scenes, prefabs and data assets. Run `scripts/build_context_map.py --scan` where it supports the engine, it lists for every key the files, objects, classes and fields that use it, and the references that point to keys or tables the project no longer has.
+2. **Split.** Give each `context-scout` one slice it can understand as a whole. One game system (crafting, contracts, market, HUD, codex lore, tutorials), one screen or one string table. Write the split as a slice file (`{"slice": ["TableName", "Table*"]}`) and let `build_context_map.py --scan --slices <file> --locale <target>` write every scout's input from the project's own string tables. Never build scout inputs with a script of your own.
+3. **Collect.** Every scout returns, per key or key group, where the text shows, what the player is doing at that moment, what is inserted next to it (a name, a number, another string), how much room it has, who speaks to whom, and what stayed unclear. Run `build_context_map.py --check-slices` when the reports are in and send any report with missing, repeated or invented keys back to its scout.
 4. **Merge.** Write `CONTEXT_MAP.md` with the sections below. Resolve contradictions between scouts by reading the code yourself.
-5. **Ask.** Every open point that changes how a line should read goes to the user through `ask_question`. Group the questions, give your best guess and the reason for each, and never guess silently. Write the answers into the map with the date.
+5. **Ask.** Every open point that changes how a line should read goes to the user through `ask_question`. Collect the questions of all scouts in the open questions section while the work goes on, and ask them in one batch at the end of the session, deduplicated, grouped, most impactful first, in rounds of at most four, each with your best guess and its reason. Interrupt the user earlier only when the next step cannot start without the answer. Never guess silently. Write the answers into the map with the date. List the game bugs the scouts found apart from the questions.
 6. **Hand off.** Pass the map path to `game-culturalizer` (Pass 1 and Pass 2), the jury and `native-ear-critic`. They read the map before their first line. When the game changes, update the map before the next run.
 
 ## CONTEXT_MAP.md
@@ -54,3 +54,11 @@ You are the orchestrator and run on the strongest model. That is Claude Opus in 
 - Do not decide target-language words in the map. The map explains the situation, the translator chooses the words for it.
 - Keep the map in the language the user reads best, so they can check it.
 - Store the map with the project (for example `loc_work/context/`), not inside the plugin, it describes one game.
+
+## Lessons of the first project
+
+- An input built from a CSV export by hand lost every paragraph break, and the scouts spent questions on texts that looked glued together. Inputs come from `--slices`, which reads the project's own tables.
+- Keys can be bound in a scene through a prefab override only (the ending texts were). The scan reads those overrides, and a key the scan finds no usage for still deserves a search by name in the code before anyone calls it unused.
+- Hundreds of references pointed to a table the project had replaced. They are leftovers of an old system, not gaps of the scan, and belong in the bug list.
+- A line where the studio reference and the game's own target table differ is a question for the user, not a choice for the map.
+- Seven scouts on Sonnet covered 1686 keys in about twenty minutes and raised 45 questions. Collecting them and asking once at the end of the session kept the user's day free.

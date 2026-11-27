@@ -115,9 +115,77 @@ public class DayStartHUDController {
 """
 
 
+SHARED_ASSET_GUID = "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+PREFAB_GUID = "7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b"
+
+
+def locale_table(code: str, shared_guid: str, rows: str) -> str:
+    return (f"%YAML 1.1\n--- !u!114 &11400000\nMonoBehaviour:\n  m_Name: HudTable_{code}\n  m_LocaleId:\n    m_Code: {code}\n"
+            f"  m_SharedData: {{fileID: 11400000, guid: {shared_guid}, type: 2}}\n  m_TableData:\n{rows}")
+
+
+EN_ROWS = ("  - m_Id: 100\n    m_Localized: Deadline\n    m_Metadata:\n      m_Items: []\n"
+           "  - m_Id: 102\n    m_Localized: 'A can of food.\n\n\n      Restores some energy.'\n    m_Metadata:\n      m_Items: []\n")
+TR_ROWS = ("  - m_Id: 100\n    m_Localized: Son Tarih\n    m_Metadata:\n      m_Items: []\n"
+           "  - m_Id: 102\n    m_Localized: 'Bir kutu yemek.\n\n\n      Biraz enerji verir.'\n    m_Metadata:\n      m_Items: []\n")
+
+# a scene that binds Hud.Unused through a prefab override, as the ending scenes of the first project did
+SCENE = f"""%YAML 1.1
+--- !u!1001 &500
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {{fileID: 0}}
+    m_Modifications:
+    - target: {{fileID: 50, guid: {PREFAB_GUID}, type: 3}}
+      propertyPath: m_StringReference.m_TableEntryReference.m_KeyId
+      value: 103
+      objectReference: {{fileID: 0}}
+    - target: {{fileID: 50, guid: {PREFAB_GUID}, type: 3}}
+      propertyPath: m_StringReference.m_TableReference.m_TableCollectionName
+      value: GUID:{TABLE_GUID}
+      objectReference: {{fileID: 0}}
+    - target: {{fileID: 41, guid: {PREFAB_GUID}, type: 3}}
+      propertyPath: m_AnchorMax.x
+      value: 1
+      objectReference: {{fileID: 0}}
+  m_SourcePrefab: {{fileID: 100100000, guid: {PREFAB_GUID}, type: 3}}
+"""
+
+STALE_SO = """%YAML 1.1
+--- !u!114 &11400000
+MonoBehaviour:
+  m_GameObject: {fileID: 0}
+  m_Name: OldNews
+  title:
+    m_TableReference:
+      m_TableCollectionName: OldEvents
+    m_TableEntryReference:
+      m_KeyId: 0
+      m_Key: Old.News.Title
+  body:
+    m_TableReference:
+      m_TableCollectionName: HudTable
+    m_TableEntryReference:
+      m_KeyId: 999
+      m_Key:
+"""
+
+
 def put(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     return write_text(path, text)
+
+
+def add_locales(proj: Path) -> None:
+    """English and Turkish tables of HudTable, and a Turkish table of another collection in the same folder."""
+    folder = proj / "Assets" / "Localisation" / "Tables" / "Hud"
+    put(folder / "HudTable Shared Data.asset.meta", f"fileFormatVersion: 2\nguid: {SHARED_ASSET_GUID}\n")
+    put(folder / "HudTable_en.asset", locale_table("en", SHARED_ASSET_GUID, EN_ROWS))
+    put(folder / "HudTable_tr-TR.asset", locale_table("tr-TR", SHARED_ASSET_GUID, TR_ROWS))
+    put(folder / "Other_tr-TR.asset", locale_table("tr-TR", "0" * 32, "  - m_Id: 100\n    m_Localized: Yanlış tablo\n"))
 
 
 def make_project(td: Path) -> Path:
@@ -166,6 +234,68 @@ class ScanTests(unittest.TestCase):
             with self.assertRaises(L10nError):
                 bcm.find_unity_root(td)
 
+    def test_prefab_override_and_stale_references(self):
+        with TempDir() as td:
+            proj = make_project(td)
+            put(proj / "Assets" / "Prefabs" / "UI" / "DayStart_HUD.prefab.meta", f"fileFormatVersion: 2\nguid: {PREFAB_GUID}\n")
+            put(proj / "Assets" / "Scenes" / "End.unity", SCENE)
+            put(proj / "Assets" / "ScriptableObjects" / "News" / "OldNews.asset", STALE_SO)
+            scan = bcm.scan_unity(proj)
+        self.assertEqual(scan["keys"]["Hud.Unused"]["usages"], [{"file": "Assets/Scenes/End.unity", "object": "DayStart_HUD (override)",
+                                                                 "class": "LocalizeStringEvent", "field": "m_StringReference"}])
+        self.assertEqual(scan["missing_table_references"], {"OldEvents": 1})   # a table the project no longer has
+        self.assertEqual(scan["unresolved_references"], 1)                     # key id 999 is not in HudTable
+        s = bcm.summary(scan)
+        self.assertEqual(s["used"], 4)
+        md = bcm.render_summary(scan, s)
+        self.assertIn("OldEvents (1)", md)
+        self.assertEqual(text_style.punctuation_problems(md), [])
+
+
+class SliceTests(unittest.TestCase):
+    """Scout inputs come from the project's own string tables, never from an ad hoc export."""
+
+    def _scan(self, td: Path):
+        proj = make_project(td)
+        add_locales(proj)
+        tables: dict = {}
+        return bcm.scan_unity(proj, tables_out=tables), tables
+
+    def test_rows_keep_paragraphs_and_every_key_lands_once(self):
+        with TempDir() as td:
+            scan, tables = self._scan(td)
+            meta = {"Item.Name.Can": {"category": "ui", "speaker": ""}}
+            slices, stats = bcm.build_slices(scan, tables, {"hud": ["Hud*"]}, "en", "tr-TR", meta)
+        self.assertEqual(list(slices), ["hud"])
+        rows = {r["key"]: r for r in slices["hud"]}
+        self.assertEqual(sorted(rows), ["Hud.Deadline", "Hud.Stamina", "Hud.Unused", "Item.Name.Can"])
+        self.assertEqual(rows["Item.Name.Can"]["en"], "A can of food.\n\nRestores some energy.")
+        self.assertEqual(rows["Item.Name.Can"]["tr-TR"], "Bir kutu yemek.\n\nBiraz enerji verir.")
+        self.assertEqual(rows["Hud.Deadline"]["tr-TR"], "Son Tarih")                 # not the decoy table of another collection
+        self.assertEqual(rows["Hud.Stamina"]["tr-TR"], "")
+        self.assertEqual(rows["Item.Name.Can"]["category"], "ui")
+        self.assertEqual(rows["Hud.Deadline"]["usages"][0]["field"], "deadlineTextLoc")
+        self.assertEqual(stats, {"slices": {"hud": 4}, "unassigned_tables": [], "missing_locale_tables": []})
+
+    def test_unclaimed_overlapping_and_unknown_tables(self):
+        with TempDir() as td:
+            scan, tables = self._scan(td)
+            slices, stats = bcm.build_slices(scan, tables, {"menus": ["Menu*", "Hud*"]}, "en", "de-DE")
+            self.assertEqual(stats["missing_locale_tables"], ["HudTable de-DE"])
+            scan["tables"].append("Codex")                                          # a second table no slice claims
+            scan["keys"]["Codex.Intro"] = {"table": "Codex", "usages": [], "code": []}
+            tables["Codex"] = {"shared": tables["HudTable"]["shared"], "ids": {}}
+            slices, stats = bcm.build_slices(scan, tables, {"hud": ["HudTable"]}, "en")
+            self.assertEqual([r["key"] for r in slices[bcm.UNASSIGNED]], ["Codex.Intro"])
+            self.assertEqual(stats["unassigned_tables"], ["Codex"])
+            with self.assertRaises(L10nError):
+                bcm.build_slices(scan, tables, {"a": ["HudTable"], "b": ["Hud*"]}, "en")   # one table in two slices
+            with self.assertRaises(L10nError):
+                bcm.build_slices(scan, tables, {"a": ["Nope*"]}, "en")                     # a typo claims nothing
+            for bad in ('{"unassigned": ["Hud*"]}', '{"a b": ["Hud*"]}', '{"a": []}', '[]'):
+                with self.assertRaises(L10nError):
+                    bcm.load_slice_spec(write_text(td / "spec.json", bad))
+
 
 class CliTests(unittest.TestCase):
     def test_scan_cli_and_exit_codes(self):
@@ -182,6 +312,33 @@ class CliTests(unittest.TestCase):
             self.assertEqual(run_cli("build_context_map.py", "--scan", "--project", str(td), "--out", str(out))[0], 2)        # not a Unity project
             self.assertEqual(run_cli("build_context_map.py", "--scan", "--project", str(proj), "--out", str(proj / "ctx"))[0], 2)  # never writes into the game
             self.assertEqual(run_cli("build_context_map.py", "--project", str(proj), "--out", str(out))[0], 2)                # no mode
+
+    def test_slices_and_check_slices_cli(self):
+        with TempDir() as td:
+            proj = make_project(td)
+            add_locales(proj)
+            out = td / "context"
+            spec = write_text(td / "spec.json", '{"hud": ["HudTable"]}')
+            code, _, err = run_cli("build_context_map.py", "--scan", "--project", str(proj), "--out", str(out), "--slices", str(spec), "--locale", "tr-TR")
+            self.assertEqual(code, 0, err)
+            rows = json.loads((out / "slices" / "hud.input.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(rows), 4)
+            self.assertIn("\n\n", next(r["en"] for r in rows if r["key"] == "Item.Name.Can"))
+            check = ("build_context_map.py", "--check-slices", "--out", str(out))
+            self.assertEqual(run_cli(*check)[0], 1)                                 # no scout report yet
+            entry = {"screen": "", "element": "", "player_action": "", "inserted": "", "limit": "", "speaker": "",
+                     "listener": "", "register_hint": "", "notes": "", "questions": ["who reads this"]}
+            report = out / "slices" / "hud.report.json"
+            write_text(report, json.dumps([dict(entry, keys=["Hud.Deadline", "Hud.Stamina"]), dict(entry, keys=["Hud.Unused", "Item.Name.Can"])]))
+            code, stdout, err = run_cli(*check, "--json")
+            self.assertEqual(code, 0, err)
+            self.assertEqual(json.loads(stdout)["slices"]["hud"]["questions"], 2)
+            write_text(report, json.dumps([dict(entry, keys=["Hud.Deadline", "Hud.Stamina", "Hud.Unused"]), dict(entry, keys=["Hud.Unused", "Nope"])]))
+            code, stdout, _ = run_cli(*check, "--json")
+            res = json.loads(stdout)["slices"]["hud"]
+            self.assertEqual((code, res["missing"], res["duplicated"], res["unknown"]), (1, ["Item.Name.Can"], ["Hud.Unused"], ["Nope"]))
+            self.assertEqual(run_cli(*check, "--scan", "--project", str(proj))[0], 2)  # one mode at a time
+            self.assertEqual(run_cli("build_context_map.py", "--check-slices", "--out", str(td / "empty"))[0], 2)
 
 
 class ContextFirstRuleTests(unittest.TestCase):
