@@ -40,6 +40,7 @@ from l10n_common import (  # noqa: E402
     EXIT_FINDINGS, EXIT_OK, L10nError, add_common_args, add_input_argument, emit_report, load_json_data, normalize_locale,
     resolve_input, run_main, __version__,
 )
+from build_context_map import ContextPack, load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR  # noqa: E402
 from llm_tasks import add_model_args, default_budget_path, make_router, pairwise_choices, score_entries  # noqa: E402
 from prompt_templates import render_contrastive, render_prompt  # noqa: E402
@@ -134,7 +135,8 @@ def _mean(xs: Sequence[float]) -> Optional[float]:
 
 def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dict[str, Any]], shots_pairs: Sequence[Dict[str, Any]],
              *, warmup: bool, pack_dir: Optional[Path], seed: int, warmup_count: int, pairwise_min: float,
-             langpack_version: Optional[str], workers: int = 1, store: Optional[Path] = None) -> Dict[str, Any]:
+             langpack_version: Optional[str], workers: int = 1, store: Optional[Path] = None,
+             context: Optional[ContextPack] = None) -> Dict[str, Any]:
     """Run the calibration once (with or without warm-up) and return the B3.6 report.
 
     With workers > 1 every distinct model is calibrated in its own thread and sends up to `workers`
@@ -148,6 +150,14 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
         warm_text = render_warmup(load_warmup(pack_dir, regs, warmup_count, seed))
     system = render_prompt("critic", locale, warmup=warm_text, contrastive=render_contrastive(shots_pairs, count=len(shots_pairs), seed=seed))
     pw, native_side, entries, meta = build_items(pairs, seed)
+    context_lines = 0
+    if context is not None and context.text:  # jurors read the map and the neutral line fields, never the locale appendix
+        system = context.system(system)
+        context_lines = context.enrich(pw, "id")
+        for e in entries:
+            ctx = context.line(meta[e["key"]][1])
+            if ctx:
+                e["context"] = ctx
     unique: Dict[str, Tuple[str, Any]] = {}
     for tier in tiers:
         for m in router.jury(tier):
@@ -221,6 +231,7 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
     secondary = all((m["native_mean"] or 0) > NATIVE_MEAN_MIN and (m["robot_mean"] if m["robot_mean"] is not None else 5) < ROBOT_MEAN_MAX for m in members)
     return {"locale": locale, "langpack_version": langpack_version, "warmup": bool(warm_text), "warmup_lines": sum(1 for l in warm_text.splitlines() if l.startswith("- ")),
             "shots": len(shots_pairs), "seed": seed, "members": members,
+            "context_map": context.source if context is not None and context.text else None, "context_lines": context_lines,
             "inter_family_kappa": _mean(inter), "intra_family_kappa": _mean(intra),
             "gate": {"pairwise_min": pairwise_min, "passed": gate_passed},
             "secondary": {"native_mean_min": NATIVE_MEAN_MIN, "robot_mean_max": ROBOT_MEAN_MAX, "passed": secondary}}
@@ -252,6 +263,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--update-trust-card", action="store_true", help="Store the result in langpack/<locale>/trust_card.json under 'calibration'")
     ap.add_argument("--workers", type=int, default=4, help="Batches in flight per model, models run in parallel when above 1 (default 4, 1 = one call at a time)")
     ap.add_argument("--cache", default=None, help="JSON file that keeps every finished model; a rerun with the same pairs, seed and prompt only calls the missing models")
+    ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md of the game, its line_notes.json next to it gives every pair its context")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap
@@ -275,7 +287,8 @@ def main() -> int:
     if args.workers < 1:
         raise L10nError("--workers must be 1 or more")
     kw = {"pack_dir": pack_dir, "seed": args.seed, "warmup_count": args.warmup_count, "pairwise_min": args.pairwise_min, "langpack_version": version,
-          "workers": args.workers, "store": Path(args.cache) if args.cache else None}
+          "workers": args.workers, "store": Path(args.cache) if args.cache else None,
+          "context": load_context(Path(args.context_map), locale) if args.context_map else None}
     if args.compare_warmup:
         with_w = evaluate(router, locale, tiers, evald, shots, warmup=True, **kw)
         without_w = evaluate(router, locale, tiers, evald, shots, warmup=False, **kw)
@@ -302,9 +315,13 @@ def main() -> int:
         trust["calibration"] = {"gate": main_rep["gate"], "secondary": main_rep["secondary"], "pairs": len(evald),
                                 "members": [{k: m[k] for k in ("tier", "model", "pairwise_accuracy", "native_mean", "robot_mean")} for m in main_rep["members"]],
                                 "inter_family_kappa": main_rep["inter_family_kappa"], "intra_family_kappa": main_rep["intra_family_kappa"],
-                                "langpack_version": version, "source": Path(args.input).name}  # file name only, no local path in a shipped card
+                                "langpack_version": version, "source": Path(args.input).name,  # file name only, no local path in a shipped card
+                                "context_map": main_rep.get("context_map"), "context_lines": main_rep.get("context_lines", 0)}
         card.write_text(json.dumps(trust, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     exit_code = EXIT_OK if gate["passed"] else EXIT_FINDINGS
+    main_rep = report.get("with_warmup", report)
+    if main_rep.get("context_map"):
+        lines.append(f"  context map {main_rep['context_map']}, {main_rep['context_lines']} of {len(evald)} pairs with line context")
     lines.append(f"  Gate pairwise >= {gate['pairwise_min']} {'PASSED' if gate['passed'] else 'FAILED'}")
     for n in router.notes:
         lines.append(f"  NOTE: {n}")

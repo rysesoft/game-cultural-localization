@@ -99,12 +99,14 @@ The rewrite rate is a consequence, not a target. A Pass 1 that needs 10 % rewrit
 The jury flow replaces the single critic with three tiers of three models, one model from each family (Anthropic, Google, DeepSeek). A family that likes its own style is outvoted by the two others, and no human native reviewer is needed in the loop. Model ids, prices and tiers live in `scripts/providers.config.json`, the API keys in `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` and `DEEPSEEK_API_KEY`. Every step runs offline with `--dry-run`.
 
 ```bash
-python scripts/jury.py blind_<locale>_<batch>.json --locale <locale> --source-table pass1_<locale>_<batch>.json --tm loc_work/tm.sqlite
-python scripts/pass2_rewrite.py verdicts_<locale>_<batch>.json --source-table pass1_<locale>_<batch>.json --locale <locale> --critique-out critique_<locale>_<batch>.json
+python scripts/jury.py blind_<locale>_<batch>.json --locale <locale> --source-table pass1_<locale>_<batch>.json --tm loc_work/tm.sqlite --context-map loc_work/context/CONTEXT_MAP.md
+python scripts/pass2_rewrite.py verdicts_<locale>_<batch>.json --source-table pass1_<locale>_<batch>.json --locale <locale> --critique-out critique_<locale>_<batch>.json --context-map loc_work/context/CONTEXT_MAP.md
 python scripts/report_changes.py verdicts_<locale>_<batch>.json --locale <locale> --rewrites rewrites_<locale>_<batch>.json --budget-log loc_work/
 ```
 
-`python scripts/orchestrator_stub.py --live --locale <locale> --input <table> --workdir <dir>` chains Phase 0 to 3 with these steps.
+`python scripts/orchestrator_stub.py --live --locale <locale> --input <table> --workdir <dir> --context-map loc_work/context/CONTEXT_MAP.md` chains Phase 0 to 3 with these steps.
+
+`--context-map` hands the map of step 0 to every model call. The map joins the system prompt, where the prompt cache keeps it cheap from the second batch on, and every line carries its own note from `line_notes.json`. Jurors and blind pickers read the neutral fields only (screen, element, player action, inserted text, room, speaker, listener, register). Pass 1 and Pass 2 also read the scout notes and the locale appendix `CONTEXT_MAP.<locale>.md` with the choices of an existing translation. Jurors never read that appendix, it would hand a calibration its answer key. `eval_critic.py --context-map` calibrates the jury the same way.
 
 ### Tiers and agreement
 

@@ -107,7 +107,7 @@ Anchors use generic roles and items only (*the Mentor*, *the Rival*, `{itemName}
 3. **Phase 2, blind critique and Pass 2.**
    `python scripts/make_blind_slice.py pass1_<locale>_<batch>.json --locale <locale> --out blind_<locale>_<batch>.json --key-col key --target-col dst --context-cols category,speaker,archetype`
    Then run `native-ear-critic` on the blind file only, check it with `python scripts/validate_critique.py critique_<locale>_<batch>.json --slice blind_<locale>_<batch>.json` and run `game-culturalizer` with `pass: 2` to get `final_<locale>_<batch>.json`.
-   With API keys the whole phase also runs as a jury, `python scripts/jury.py blind_<locale>_<batch>.json --locale <locale> --source-table pass1_<locale>_<batch>.json`, followed by `pass2_rewrite.py` and `report_changes.py`.
+   With API keys the whole phase also runs as a jury, `python scripts/jury.py blind_<locale>_<batch>.json --locale <locale> --source-table pass1_<locale>_<batch>.json --context-map loc_work/context/CONTEXT_MAP.md`, followed by `pass2_rewrite.py` and `report_changes.py`. `--context-map` gives every juror the map and every line its note, writers also get the locale appendix.
 4. **Phase 3, automated gate.**
    `python scripts/lqa_linter.py --input final_<locale>.json --locale <locale> --src-field en --dst-field dst --fail-on-error`
    `python scripts/ui_expansion_checker.py --input final_<locale>.json --locale <locale> --src-field en --dst-field dst --fail-on-high`

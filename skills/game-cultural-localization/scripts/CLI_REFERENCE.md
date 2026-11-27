@@ -194,6 +194,7 @@ Legacy flow (`--provider module:function`). Any callable `complete(system: str, 
 | `--providers-config`, `--fake-scenario`, `--budget-log` | model access of the jury flow, the budget log defaults to `<workdir>/budget.jsonl` |
 | `--langpack-dir` | root of the language packs, default the skill's `langpack/` |
 | `--tm` | translation memory (`tm.py` SQLite) for Pass 1 RAG and the jury evidence |
+| `--context-map` | `CONTEXT_MAP.md` of the game, the output of Phase 0 step 0 (also `context_map` in `l10n.config.json`). Pass 1 and Pass 2 read the map, the locale appendix and the full line notes, the jury and the blind pickers read the map and the neutral line fields only. Without it the run logs that every step works without the game's context |
 | `--no-deliberation` | leave J3 disagreements unresolved |
 | `--no-budget-caps` | never stop at the J2 or J3 cap |
 | `--candidates` | Pass 2 candidates per flagged line, default 3 |
@@ -414,6 +415,7 @@ The system prompt is `prompts/critic.<locale>.md` with a seeded warm-up sample f
 | `--pairwise-min` | gate, default 0.85 |
 | `--workers` | batches in flight per model, default 4. Above 1 every distinct model is calibrated in its own thread. The report is the same for every value, only the wall clock changes. A live full run with 8 models drops from hours to minutes |
 | `--cache` | JSON file that keeps the answers of every finished model under a signature of model, tier, prompt and items. When one model fails the others are kept and the run stops with a hint, the same command then only calls the missing models. Keep it out of the shipped pack, for example in `loc_work/` |
+| `--context-map` | `CONTEXT_MAP.md` of the game. The map joins the critic prompt and every pair and entry gets the neutral fields of its line note from `line_notes.json` next to the map (screen, element, player action, inserted text, room, speaker, listener, register). The locale appendix `CONTEXT_MAP.<locale>.md` is never read here, it holds the studio's own choices and would hand the jurors the answer key. The report and the trust card name the map and count the pairs with line context |
 | `--update-trust-card` | store the result under `calibration` in `langpack/<locale>/trust_card.json` |
 | `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
 
@@ -477,6 +479,7 @@ Evidence per line. `ban_hits` (locale rules of `rules/<locale>.json` on the targ
 | `--no-deliberation` | leave J3 disagreements `unresolved` instead of running the deliberation round |
 | `--tm` | translation memory (`tm.py` SQLite file) for the `tm_neighbors` evidence, queried by the English source when `--source-table` is given, else by the target |
 | `--workers` | batches in flight per member, default 4. The three members of a tier, the back-translations and the disputed J3 lines of the deliberation round run in parallel, the verdicts are the same as with 1 |
+| `--context-map` | `CONTEXT_MAP.md` of the game. The map joins the critic prompt (and the deliberation round), every entry without a `context` gets the neutral fields of its line note from `line_notes.json` next to the map. Jurors never read the locale appendix. The verdict file records the map under `prompt` |
 | `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
 
 Vote (B3.3). `{key, tier, member, family, model, score, issue_type, reason, suggested}`. Verdict (B3.4). `{key, final_tier (J1, J2, J3 or deliberation), score, status (pass, rewrite_light, rewrite, critical, unresolved), votes, evidence{ban_hits, tm_neighbors, roundtrip}, rationales}`. The verdict file holds `locale`, `source_file`, `langpack_version`, `prompt`, `stats` (lines per tier, escalation ratios, status counts), `halted`, `verdicts`, `pending` and `notes`.
@@ -559,6 +562,7 @@ For every verdict with status `rewrite_light`, `rewrite`, `critical` or `unresol
 | `--src-field` / `--dst-field` / `--key-field` | columns of `--source-table` |
 | `--candidates` | candidates per line, default 3 (1 to 6) |
 | `--workers` | batches in flight per model, default 4. The three J1 pickers run in parallel, the result is the same as with 1 |
+| `--context-map` | `CONTEXT_MAP.md` of the game. The Pass 2 writer reads the map, the locale appendix `CONTEXT_MAP.<locale>.md` and the full line notes (scout notes included), the blind J1 pickers read the map and the neutral line fields only |
 | `--statuses` | verdict statuses to rewrite, default `rewrite_light,rewrite,critical,unresolved` |
 | `--placeholder-style` / `--tag-style` | token syntax for the parity check |
 | `--langpack-dir` / `--no-warmup` / `--seed` | warm-up and few-shots of the prompts, seed of the candidate order |
@@ -637,11 +641,12 @@ Phase 0 pre-flight, Phase 1 Pass 1 (`game-culturalizer`, parallel per batch, fai
   "placeholder_style": "unity", "tag_style": "tmp", "placeholder_regex": "\\$\\w+\\$",
   "rules_dir": "loc/rules", "glossary": "loc/termbase.csv", "glossary_severity": "ERR",
   "max_width": {"*": 40, "BTN_APPLY": 12, "ja-JP": 30}, "expansion": {"de-DE": 1.4}, "cjk_cell_width": 1.8,
-  "ambiguous_wide": false, "fail_on_warn": false, "forbid_chars": ";—", "forbid_spaced_hyphen": true, "strict_whitespace": true
+  "ambiguous_wide": false, "fail_on_warn": false, "forbid_chars": ";—", "forbid_spaced_hyphen": true, "strict_whitespace": true,
+  "context_map": "loc_work/context/CONTEXT_MAP.md"
 }
 ```
 
-Unknown keys or wrong types abort with exit 2. Relative `rules_dir` / `glossary` paths resolve from the config file's folder.
+Unknown keys or wrong types abort with exit 2. Relative `rules_dir`, `glossary` and `context_map` paths resolve from the config file's folder.
 
 ---
 

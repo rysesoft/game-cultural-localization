@@ -64,7 +64,7 @@ Sıradaki kilometre taşı, jürinin bu referansa karşı canlı kalibrasyonu. K
 python scripts/orchestrator_stub.py --dry-run --locale tr-TR --input strings.json --workdir out/
 ```
 
-API anahtarları yalnızca `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` ve `DEEPSEEK_API_KEY` ortam değişkenlerinden, model kimlikleri `scripts/providers.config.json` dosyasından okunur. `--live` aynı akışı gerçek API'lerle çalıştırır, `budget_report.py` de kayda geçen çağrılardan bütün proje için bir maliyet tahmini çıkarır. Ayrıntılar [methodology_and_qa.md](./skills/game-cultural-localization/references/methodology_and_qa.md) ve [CLI_REFERENCE.md](./skills/game-cultural-localization/scripts/CLI_REFERENCE.md) dosyalarında.
+Gerçek bir oyunda önce bağlam haritasını çıkarın ve `--context-map loc_work/context/CONTEXT_MAP.md` ile verin, böylece her çevirmen ve jüri üyesi her satırın nerede göründüğünü bilir. API anahtarları yalnızca `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` ve `DEEPSEEK_API_KEY` ortam değişkenlerinden, model kimlikleri `scripts/providers.config.json` dosyasından okunur. `--live` aynı akışı gerçek API'lerle çalıştırır, `budget_report.py` de kayda geçen çağrılardan bütün proje için bir maliyet tahmini çıkarır. Ayrıntılar [methodology_and_qa.md](./skills/game-cultural-localization/references/methodology_and_qa.md) ve [CLI_REFERENCE.md](./skills/game-cultural-localization/scripts/CLI_REFERENCE.md) dosyalarında.
 
 ## Neler Var
 

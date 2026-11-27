@@ -64,7 +64,7 @@ Live calibration of the jury against this reference is the next milestone. Until
 python scripts/orchestrator_stub.py --dry-run --locale tr-TR --input strings.json --workdir out/
 ```
 
-API keys come only from `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` and `DEEPSEEK_API_KEY`, model ids from `scripts/providers.config.json`. `--live` runs the same flow with the real APIs, and `budget_report.py` turns the logged calls into a cost estimate for a full project. Details are in [methodology_and_qa.md](./skills/game-cultural-localization/references/methodology_and_qa.md) and [CLI_REFERENCE.md](./skills/game-cultural-localization/scripts/CLI_REFERENCE.md).
+On a real game, build the context map first and pass it with `--context-map loc_work/context/CONTEXT_MAP.md`, so every translator and juror knows where each line is shown. API keys come only from `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` and `DEEPSEEK_API_KEY`, model ids from `scripts/providers.config.json`. `--live` runs the same flow with the real APIs, and `budget_report.py` turns the logged calls into a cost estimate for a full project. Details are in [methodology_and_qa.md](./skills/game-cultural-localization/references/methodology_and_qa.md) and [CLI_REFERENCE.md](./skills/game-cultural-localization/scripts/CLI_REFERENCE.md).
 
 ## What You Get
 

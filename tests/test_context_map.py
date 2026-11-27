@@ -5,6 +5,7 @@ import json
 import re
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -16,6 +17,7 @@ import text_style  # noqa: E402
 from l10n_common import L10nError  # noqa: E402
 from providers import load_providers_config  # noqa: E402
 
+NO_KEYS = {"ANTHROPIC_API_KEY": "", "GOOGLE_API_KEY": "", "DEEPSEEK_API_KEY": "", "GCL_OFFLINE": "1"}
 TABLE_GUID = "6ca99244aa860c74f86f800bd96c8a57"
 SCRIPT_GUID = "1111aaaa2222bbbb3333cccc4444dddd"
 
@@ -360,6 +362,115 @@ class CliTests(unittest.TestCase):
             self.assertEqual((code, res["missing"], res["duplicated"], res["unknown"]), (1, ["Item.Name.Can"], ["Hud.Unused"], ["Nope"]))
             self.assertEqual(run_cli(*check, "--scan", "--project", str(proj))[0], 2)  # one mode at a time
             self.assertEqual(run_cli("build_context_map.py", "--check-slices", "--out", str(td / "empty"))[0], 2)
+
+
+class ContextInPromptTests(unittest.TestCase):
+    """Jurors read the map and the neutral line fields. Writers also read the scout notes and the locale appendix,
+    which holds the studio's own choices and would hand a calibrated juror its answer key."""
+
+    def _map(self, td: Path) -> Path:
+        folder = td / "context"
+        m = put(folder / "CONTEXT_MAP.md", "MAP-TEXT the game on one page\n")
+        put(folder / "CONTEXT_MAP.tr-TR.md", "APPENDIX-TR studio choices\n")
+        notes = {"HudTable:Hud.Deadline": {"screen": "day start HUD", "element": "label", "notes": "SCOUT-NOTE", "questions": ["q"]},
+                 "DLG_1": {"screen": "workshop", "speaker": "Mentor", "notes": "SCOUT-NOTE"},
+                 "K00": {"screen": "contract letter", "notes": "SCOUT-NOTE"}}
+        put(folder / "line_notes.json", json.dumps(notes))
+        return m
+
+    def test_pack(self):
+        with TempDir() as td:
+            m = self._map(td)
+            pack = bcm.load_context(m, "tr-TR")
+            self.assertEqual(pack.line("Hud.Deadline"), {"screen": "day start HUD", "element": "label"})   # plain name of a Table:Key label
+            self.assertEqual(pack.line("Hud.Deadline", writer=True)["notes"], "SCOUT-NOTE")
+            self.assertEqual(pack.line("Nope"), {})
+            juror, writer = pack.system("BASE"), pack.system("BASE", writer=True)
+            self.assertTrue(juror.startswith("BASE") and "MAP-TEXT" in juror and "APPENDIX-TR" not in juror)
+            self.assertIn("APPENDIX-TR", writer)
+            items = [{"key": "DLG_1"}, {"key": "K00", "context": {"screen": "given"}}, {"key": "none"}]
+            self.assertEqual(pack.enrich(items), 1)
+            self.assertEqual((items[0]["context"], items[1]["context"]), ({"screen": "workshop", "speaker": "Mentor"}, {"screen": "given"}))
+            self.assertEqual(bcm.load_context(m, "de-DE").appendix, "")
+            self.assertEqual(bcm.load_context(None).system("BASE"), "BASE")
+            self.assertEqual(text_style.punctuation_problems(bcm.MAP_HEADER + "\n" + bcm.APPENDIX_HEADER), [])
+            with self.assertRaises(L10nError):
+                bcm.load_context(td / "missing.md")
+            with self.assertRaises(L10nError):
+                bcm.load_context(put(td / "empty" / "CONTEXT_MAP.md", "  \n"))
+            put(td / "bad" / "line_notes.json", "{oops")
+            with self.assertRaises(L10nError):
+                bcm.load_context(put(td / "bad" / "CONTEXT_MAP.md", "map"))
+
+    def test_calibration_jurors_get_the_map_but_no_answer_key(self):
+        import eval_critic as ec
+        from providers import Router, load_providers_config
+        seen = []
+
+        def spy(real):
+            def call(provider, items, locale, **kw):
+                seen.append((kw["system"], items))
+                return real(provider, items, locale, **kw)
+            return call
+        pairs = [{"key": f"K0{i}", "native": f"Acele etme evlat {i}.", "robot": f"Zamanını al çocuk {i}.", "register": "dialogue_casual"} for i in range(3)]
+        with TempDir() as td, mock.patch.object(ec, "pairwise_choices", spy(ec.pairwise_choices)), mock.patch.object(ec, "score_entries", spy(ec.score_entries)):
+            rep = ec.evaluate(Router(load_providers_config(), dry_run=True), "tr-TR", ["J1"], pairs, [], warmup=False, pack_dir=None, seed=1,
+                              warmup_count=5, pairwise_min=0.85, langpack_version=None, context=bcm.load_context(self._map(td), "tr-TR"))
+        self.assertEqual((rep["context_map"], rep["context_lines"]), ("CONTEXT_MAP.md", 1))
+        self.assertTrue(seen)
+        for system, items in seen:
+            self.assertIn("MAP-TEXT", system)
+            self.assertNotIn("APPENDIX-TR", system)
+            blob = json.dumps(items)
+            self.assertIn("contract letter", blob)
+            self.assertNotIn("SCOUT-NOTE", blob)
+
+    def test_jury_cli_records_the_map(self):
+        with TempDir() as td:
+            m = self._map(td)
+            blind = write_text(td / "blind_tr-TR_01.json", json.dumps({"entries": [{"key": "Hud.Deadline", "target": "Son tarih"}, {"key": "X", "target": "Kaydet"}]}))
+            out = td / "v.json"
+            common = ("jury.py", str(blind), "--locale", "tr-TR", "--dry-run", "--langpack-dir", str(td / "np"), "--out", str(out))
+            code, _, err = run_cli(*common, "--context-map", str(m), env_extra=NO_KEYS)
+            self.assertEqual(code, 0, err)
+            prompt = json.loads(out.read_text(encoding="utf-8"))["prompt"]
+            self.assertEqual((prompt["context_map"], prompt["context_lines"]), ("CONTEXT_MAP.md", 1))
+            self.assertEqual(run_cli(*common, "--context-map", str(td / "nope.md"), env_extra=NO_KEYS)[0], 2)
+
+    def test_orchestrator_writers_and_jurors(self):
+        import jury
+        import llm_tasks
+        import orchestrator_stub as orch
+        import pass2_rewrite
+        import test_orchestrator_jury as toj
+        from providers import FakeScenario, Router, load_providers_config
+        seen: dict = {"pass1": [], "jury": [], "pass2": [], "pick": []}
+
+        def spy(name, real):
+            def call(provider, items, locale, **kw):
+                seen[name].append((kw["system"], json.dumps(items, ensure_ascii=False)))
+                return real(provider, items, locale, **kw)
+            return call
+        with TempDir() as td, \
+                mock.patch.object(llm_tasks, "translate_rows", spy("pass1", llm_tasks.translate_rows)), \
+                mock.patch.object(jury, "score_entries", spy("jury", jury.score_entries)), \
+                mock.patch.object(pass2_rewrite, "pass2_candidates", spy("pass2", pass2_rewrite.pass2_candidates)), \
+                mock.patch.object(pass2_rewrite, "pick_candidates", spy("pick", pass2_rewrite.pick_candidates)):
+            src = write_text(td / "src.json", json.dumps(toj.SOURCE))
+            router = Router(load_providers_config(), dry_run=True, scenario=FakeScenario(toj.SCENARIO))
+            res = orch.run_jury_pipeline(src, "tr-TR", td / "w", router, budget_caps=False, langpack_dir=td / "np", context_map=self._map(td))
+            verdicts = json.loads((td / "w" / "verdicts_tr-TR_01.json").read_text(encoding="utf-8"))
+        self.assertTrue(any("Phase 0: context map CONTEXT_MAP.md" in line for line in res["log"]))
+        self.assertEqual(verdicts["prompt"]["context_lines"], 1)
+        for name in seen:
+            self.assertTrue(seen[name], name)
+            for system, items in seen[name]:
+                self.assertIn("MAP-TEXT", system)
+                writer = name in ("pass1", "pass2")
+                self.assertEqual("APPENDIX-TR" in system, writer, name)   # the appendix reaches writers only
+                if "DLG_1" in items:
+                    self.assertIn("workshop", items)
+                    self.assertEqual("SCOUT-NOTE" in items, writer, name)
 
 
 class ContextFirstRuleTests(unittest.TestCase):

@@ -46,6 +46,7 @@ from l10n_common import (  # noqa: E402
     normalize_locale, resolve_input, run_main, __version__,
 )
 import lqa_linter  # noqa: E402
+from build_context_map import load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR, infer_register  # noqa: E402
 from llm_tasks import add_model_args, default_budget_path, make_router, score_entries  # noqa: E402
 from prompt_templates import render_contrastive, render_prompt  # noqa: E402
@@ -342,6 +343,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--no-deliberation", action="store_true", help="Leave J3 disagreements unresolved instead of running the deliberation round")
     ap.add_argument("--tm", default=None, help="Translation memory (tm.py SQLite) for the evidence: closest approved lines")
     ap.add_argument("--workers", type=int, default=4, help="Batches in flight per member, the three members of a tier and the disputed lines run in parallel (default 4, 1 = one call at a time)")
+    ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md of the game, its line_notes.json next to it gives every line its context")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap
@@ -361,6 +363,11 @@ def main() -> int:
     pack_dir = (Path(args.langpack_dir) if args.langpack_dir else LANGPACK_DIR) / locale
     system, info = build_system_prompt(locale, entries, pack_dir, warmup=not args.no_warmup, warmup_count=args.warmup_count,
                                        shots=args.shots, seed=args.seed)
+    if args.context_map:  # jurors read the map and the neutral line fields, never the locale appendix
+        ctx = load_context(Path(args.context_map), locale)
+        info["context_map"] = ctx.source
+        info["context_lines"] = ctx.enrich(entries)
+        system = ctx.system(system)
     roundtrip_fn = None
     if args.source_table:
         sources = load_source_rows(Path(args.source_table), args.src_field, args.dst_field, args.key_field)
@@ -401,7 +408,8 @@ def main() -> int:
 def write_report(args: Any, locale: str, out: Path, source_file: str, info: Dict[str, Any], router: Any, res: Dict[str, Any]) -> int:
     """Write the verdict file and print the summary; returns the exit code."""
     doc = {"locale": locale, "source_file": source_file, "langpack_version": info.get("langpack_version"),
-           "prompt": {"warmup_lines": info.get("warmup_lines", 0), "shots": info.get("shots", 0)},
+           "prompt": {"warmup_lines": info.get("warmup_lines", 0), "shots": info.get("shots", 0),
+                      "context_map": info.get("context_map"), "context_lines": info.get("context_lines", 0)},
            "stats": res["stats"], "halted": res["halted"], "verdicts": res["verdicts"], "pending": res["pending"], "notes": router.notes}
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

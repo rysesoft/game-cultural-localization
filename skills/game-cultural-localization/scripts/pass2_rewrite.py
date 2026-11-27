@@ -41,6 +41,7 @@ from l10n_common import (  # noqa: E402
     load_json_data, load_table, normalize_locale, resolve_input, run_main, __version__,
 )
 import validate_critique  # noqa: E402
+from build_context_map import ContextPack, load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR, infer_register  # noqa: E402
 from llm_tasks import ISSUE_TYPES, add_model_args, default_budget_path, make_router, pass2_candidates, pick_candidates  # noqa: E402
 from prompt_templates import render_contrastive, render_prompt  # noqa: E402
@@ -89,11 +90,16 @@ def main_issue(verdict: Dict[str, Any]) -> str:
 def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[str, Any]], locale: str, router: Any, *,
                   pass2_system: str, pick_system: str, n: int = 3, seed: int = 1234, ph_style: str = "auto",
                   tag_style: str = "auto", statuses: Sequence[str] = DEFAULT_STATUSES, source_file: str = "",
-                  workers: int = 1) -> Dict[str, Any]:
+                  workers: int = 1, context: Optional[ContextPack] = None) -> Dict[str, Any]:
     """Generate, pick blind, validate. Returns {'lines', 'critique'}.
 
     workers > 1 sends up to `workers` batches at once and lets the three J1 pickers run side by side.
+    With a context map the writer reads the map, the locale appendix and the full line notes, the blind
+    pickers read the map and the neutral line fields only.
     """
+    ctx = context if context is not None and context.text else None
+    if ctx is not None:
+        pass2_system, pick_system = ctx.system(pass2_system, writer=True), ctx.system(pick_system)
     todo = [v for v in verdicts if v.get("status") in statuses]
     missing = [v["key"] for v in todo if v["key"] not in sources]
     if missing:
@@ -107,6 +113,8 @@ def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[st
                      "suggestions": [x.get("suggested") for x in fv if x.get("suggested")],
                      "suggested": next((x.get("suggested") for x in fv if x.get("suggested")), ""),
                      "tm": [{"target": t.get("dst", ""), "category": t.get("category", "")} for t in (v.get("evidence", {}).get("tm_neighbors") or [])[:3]]})
+        if ctx is not None and ctx.line(v["key"], writer=True):
+            rows[-1]["context"] = ctx.line(v["key"], writer=True)
     cands = pass2_candidates(router.for_role("pass2"), rows, locale, n=n, system=pass2_system, workers=workers) if rows else {}
     rng = random.Random(seed)
     items: List[Dict[str, Any]] = []
@@ -117,6 +125,7 @@ def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[st
         rng.shuffle(order)
         id_maps[r["key"]] = {f"c{i + 1}": idx for i, idx in enumerate(order)}
         items.append({"key": r["key"], **{k: r[k] for k in CONTEXT_FIELDS if r.get(k)},
+                      **({"context": ctx.line(r["key"])} if ctx is not None and ctx.line(r["key"]) else {}),
                       "candidates": [{"id": f"c{i + 1}", "text": texts[idx]} for i, idx in enumerate(order)]})
     picks_by_member: List[Tuple[Any, Dict[str, str]]] = []
     if items:
@@ -199,6 +208,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--no-warmup", action="store_true", help="Leave the warm-up block out of the prompts")
     ap.add_argument("--seed", type=int, default=1234, help="Seed of the candidate order and the warm-up sample (default 1234)")
     ap.add_argument("--workers", type=int, default=4, help="Batches in flight per model, the three J1 pickers run in parallel (default 4, 1 = one call at a time)")
+    ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md of the game, with line_notes.json and CONTEXT_MAP.<locale>.md next to it")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap
@@ -227,7 +237,8 @@ def main() -> int:
     pass2_system, pick_system = build_systems(locale, pack_dir, regs, warmup=not args.no_warmup, seed=args.seed)
     res = rewrite_lines(doc["verdicts"], sources, locale, router, pass2_system=pass2_system, pick_system=pick_system, n=args.candidates,
                         seed=args.seed, ph_style=args.placeholder_style, tag_style=args.tag_style, statuses=statuses,
-                        source_file=str(doc.get("source_file") or Path(args.source_table).name), workers=args.workers)
+                        source_file=str(doc.get("source_file") or Path(args.source_table).name), workers=args.workers,
+                        context=load_context(Path(args.context_map), locale) if args.context_map else None)
     result = {"locale": locale, "source_file": doc.get("source_file"), "verdicts": str(inp), "lines": res["lines"], "critique": res["critique"],
               "notes": router.notes}
     out.parent.mkdir(parents=True, exist_ok=True)

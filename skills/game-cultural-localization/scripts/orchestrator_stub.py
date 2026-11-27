@@ -310,11 +310,15 @@ def _write_report(report_changes: Any, verdict_doc: Dict[str, Any], locale: str,
 def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any, *, src_field: str = "en", key_field: str = "key",
                       ph_style: str = "auto", tag_style: str = "auto", batch_size: int = 50, fonts: Optional[List[Path]] = None,
                       langpack_dir: Optional[Path] = None, tm_path: Optional[Path] = None, deliberation: bool = True,
-                      budget_caps: bool = True, candidates: int = 3, seed: int = 1234, workers: int = 1) -> Dict[str, Any]:
+                      budget_caps: bool = True, candidates: int = 3, seed: int = 1234, workers: int = 1,
+                      context_map: Optional[Path] = None) -> Dict[str, Any]:
     """Phase 0-3 with the multi-family jury. Returns {'passed', 'flow', 'summary', 'log', 'finals', 'batches', 'halted', ...}.
 
     workers > 1 sends model calls in parallel inside Pass 1, the jury and Pass 2, the result does not change.
+    context_map is CONTEXT_MAP.md of the game. Pass 1 and Pass 2 read it with the locale appendix and the full
+    line notes, the jury and the blind pickers read the map and the neutral line fields only.
     """
+    from build_context_map import load_context
     import deliberate
     import jury
     import pass2_rewrite
@@ -350,6 +354,13 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
     pass1_system = system_prompt("game-culturalizer", locale, state.bible)
     if warm:
         pass1_system += "\n\n# Native warm-up (read aloud before translating)\n" + warm
+    ctx = load_context(Path(context_map), locale) if context_map is not None else None
+    if ctx is not None:
+        pass1_system = ctx.system(pass1_system, writer=True)
+        state.say(f"Phase 0: context map {ctx.source}, line notes for {len(ctx.notes)} keys"
+                  + (f", {locale} appendix" if ctx.appendix else ""))
+    else:
+        state.say("Phase 0: no context map given, every later step works without the game's context")
     rt_cfg = router.config.roundtrip
     threshold, _thr_src = load_threshold(locale, packs)
     finals: List[Path] = []
@@ -371,6 +382,8 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
                     nb = tm.neighbors(locale, r.src, category=str(r.meta.get("category") or ""), speaker=str(r.meta.get("speaker") or ""), k=3)
                     if nb:
                         pr["tm"] = [{"source": x["src"], "target": x["dst"], "similarity": x["similarity"]} for x in nb]
+                if ctx is not None and ctx.line(r.key, writer=True):
+                    pr["context"] = ctx.line(r.key, writer=True)
                 payload_rows.append(pr)
             targets = translate_rows(router.for_role("pass1"), payload_rows, locale, task="pass1", system=pass1_system,
                                      extra={"placeholder_style": ph_style, "tag_style": tag_style}, workers=workers)
@@ -388,6 +401,9 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
             make_blind_slice.write_slice(entries, blind, locale, p1.name)
             jentries, _sf = jury.load_blind_slice(blind)
             critic_system, info = jury.build_system_prompt(locale, jentries, pack_dir, warmup=True, warmup_count=40, shots=6, seed=seed)
+            if ctx is not None:
+                info["context_map"], info["context_lines"] = ctx.source, ctx.enrich(jentries)
+                critic_system = ctx.system(critic_system)
             src_by_key = {r.key: r.src for r in batch}
 
             def rt_fn(lines: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
@@ -403,7 +419,8 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
                                 deliberator=deliberate.make_deliberator(router, locale, critic_system) if deliberation else None,
                                 workers=workers)
             verdict_doc = {"locale": locale, "source_file": p1.name, "langpack_version": info.get("langpack_version"),
-                           "prompt": {"warmup_lines": info.get("warmup_lines", 0), "shots": info.get("shots", 0)},
+                           "prompt": {"warmup_lines": info.get("warmup_lines", 0), "shots": info.get("shots", 0),
+                                      "context_map": info.get("context_map"), "context_lines": info.get("context_lines", 0)},
                            "stats": res["stats"], "halted": res["halted"], "verdicts": res["verdicts"], "pending": res["pending"],
                            "notes": router.notes}
             vpath = workdir / f"verdicts_{tag}.json"
@@ -424,7 +441,7 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
             p2_system, pick_system = pass2_rewrite.build_systems(locale, pack_dir, regs, warmup=True, seed=seed)
             rw = pass2_rewrite.rewrite_lines(res["verdicts"], sources, locale, router, pass2_system=p2_system, pick_system=pick_system,
                                              n=candidates, seed=seed, ph_style=ph_style, tag_style=tag_style, source_file=p1.name,
-                                             workers=workers)
+                                             workers=workers, context=ctx)
             rpath = workdir / f"rewrites_{tag}.json"
             rpath.write_text(json.dumps({"locale": locale, "source_file": p1.name, "verdicts": vpath.name, **rw, "notes": router.notes},
                                         ensure_ascii=False, indent=2), encoding="utf-8")
@@ -475,6 +492,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--budget-log", default=None, help="budget.jsonl (default: <workdir>/budget.jsonl)")
     ap.add_argument("--langpack-dir", default=None, help="Root of the language packs (default: the skill's langpack/)")
     ap.add_argument("--tm", default=None, help="Translation memory (tm.py SQLite) for Pass 1 RAG and jury evidence")
+    ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md of the game (Phase 0 step 0), with line_notes.json and CONTEXT_MAP.<locale>.md next to it")
     ap.add_argument("--no-deliberation", action="store_true", help="Leave J3 disagreements unresolved")
     ap.add_argument("--no-budget-caps", action="store_true", help="Do not stop at the J2 or J3 escalation cap")
     ap.add_argument("--candidates", type=int, default=3, help="Pass 2 candidates per flagged line (default 3)")
@@ -510,7 +528,8 @@ def main() -> int:
             Path(args.input), locale, workdir, router, src_field=src_field, key_field=key_field, ph_style=ph_style, tag_style=tag_style,
             batch_size=args.batch_size, fonts=[Path(f) for f in args.font], langpack_dir=Path(args.langpack_dir) if args.langpack_dir else None,
             tm_path=Path(args.tm) if args.tm else None, deliberation=not args.no_deliberation, budget_caps=not args.no_budget_caps,
-            candidates=args.candidates, seed=args.seed, workers=args.workers)
+            candidates=args.candidates, seed=args.seed, workers=args.workers,
+            context_map=Path(args.context_map or cfg["context_map"]) if (args.context_map or cfg.get("context_map")) else None)
         exit_code = EXIT_OK if result["passed"] else EXIT_FINDINGS
         text = "\n".join([f"Orchestrator run (jury flow, {'dry run' if args.dry_run else 'live'}):"] + ["  " + l for l in result["log"]]
                          + [f"  NOTE: {n}" for n in result["notes"]] + [f"  Exit code: {exit_code}"])

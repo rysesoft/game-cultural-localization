@@ -47,6 +47,7 @@ import os
 import re
 import sys
 from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -378,6 +379,94 @@ def render_summary(scan: Dict[str, Any], s: Dict[str, Any]) -> str:
 
 _SLICE_NAME = re.compile(r"[A-Za-z0-9_.-]+")
 UNASSIGNED = "unassigned"
+
+# --------------------------------------------------------------------------- #
+# The map in model prompts (used by eval_critic, jury, pass2_rewrite, orchestrator_stub)
+# --------------------------------------------------------------------------- #
+JUROR_FIELDS = ("screen", "element", "player_action", "inserted", "limit", "speaker", "listener", "register_hint")
+WRITER_FIELDS = JUROR_FIELDS + ("notes",)
+MAP_HEADER = ("# Context map of this game\n\n"
+              "Read this map before the first line. It describes the game, its world, its systems and its screens, as a professional "
+              "translator learns them from the code before translating. It never decides a word for you. The same source word takes "
+              "different words in your language depending on where the game shows it, so judge and write every line for its place. "
+              "An item may carry a `context` object with the screen and the element that show the line, what the player is doing, "
+              "what the code inserts next to it, the room it has, the speaker and the listener.")
+APPENDIX_HEADER = ("# Decisions of the existing {locale} version\n\n"
+                   "The published {locale} version of the game made these choices. Stay consistent with them unless the context of a line "
+                   "says otherwise.")
+
+
+@dataclass
+class ContextPack:
+    """CONTEXT_MAP.md, its per key line notes and the locale appendix, ready for model prompts.
+
+    Jurors and critics get the map and the neutral line fields only. Writers (Pass 1, Pass 2) also get the
+    scout notes and the locale appendix, which holds the existing translation's choices and would hand a
+    calibrated juror its answer key.
+    """
+    text: str = ""
+    notes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    appendix: str = ""
+    locale: str = ""
+    source: str = ""
+
+    def __post_init__(self) -> None:
+        plain: Dict[str, List[str]] = defaultdict(list)
+        for label in self.notes:
+            if ":" in label:
+                plain[label.split(":", 1)[1]].append(label)
+        self._plain = {k: v[0] for k, v in plain.items() if len(v) == 1}
+
+    def line(self, key: str, writer: bool = False) -> Dict[str, str]:
+        """Context fields of one key (exact label, or a plain name that labels exactly one Table:Key)."""
+        n = self.notes.get(key) or self.notes.get(self._plain.get(key, ""), {})
+        return {f: str(n[f]) for f in (WRITER_FIELDS if writer else JUROR_FIELDS) if n.get(f)}
+
+    def system(self, base: str, writer: bool = False) -> str:
+        """The system prompt with the map appended (and the locale appendix for writers). Unchanged without a map."""
+        if not self.text:
+            return base
+        out = base.rstrip() + "\n\n" + MAP_HEADER + "\n\n" + self.text.strip() + "\n"
+        if writer and self.appendix:
+            out += "\n" + APPENDIX_HEADER.format(locale=self.locale) + "\n\n" + self.appendix.strip() + "\n"
+        return out
+
+    def enrich(self, items: Sequence[Dict[str, Any]], key_field: str = "key", writer: bool = False) -> int:
+        """Add a `context` object to every item that has none. Returns how many items got one."""
+        n = 0
+        for it in items:
+            if it.get("context"):
+                continue
+            ctx = self.line(str(it.get(key_field, "")), writer)
+            if ctx:
+                it["context"] = ctx
+                n += 1
+        return n
+
+
+def load_context(map_path: Optional[Path], locale: str = "") -> ContextPack:
+    """ContextPack from CONTEXT_MAP.md, line_notes.json next to it and CONTEXT_MAP.<locale>.md when present."""
+    if map_path is None:
+        return ContextPack()
+    map_path = Path(map_path)
+    if not map_path.is_file():
+        raise L10nError(f"--context-map file not found: {map_path}")
+    text = read_text(map_path).lstrip("﻿")
+    if not text.strip():
+        raise L10nError(f"{map_path}: the context map is empty")
+    notes: Dict[str, Dict[str, Any]] = {}
+    notes_path = map_path.with_name("line_notes.json")
+    if notes_path.is_file():
+        try:
+            data = json.loads(read_text(notes_path).lstrip("﻿"))
+        except json.JSONDecodeError as exc:
+            raise L10nError(f"{notes_path}: invalid JSON at line {exc.lineno}: {exc.msg}")
+        if not isinstance(data, dict):
+            raise L10nError(f"{notes_path}: expected an object {{key: line note}}")
+        notes = {str(k): v for k, v in data.items() if isinstance(v, dict)}
+    appendix_path = map_path.with_name(f"{map_path.stem}.{locale}.md") if locale else None
+    appendix = read_text(appendix_path).lstrip("﻿") if appendix_path is not None and appendix_path.is_file() else ""
+    return ContextPack(text, notes, appendix, locale, map_path.name)
 
 
 def locale_tables(shared: Path) -> Dict[str, Path]:

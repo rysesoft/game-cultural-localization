@@ -858,6 +858,7 @@ CONFIG_KEYS: Dict[str, Any] = {
     "max_width": (int, float, dict), "expansion": dict, "cjk_cell_width": (int, float),
     "fail_on_warn": bool, "variant": str, "delimiter": str, "ambiguous_wide": bool,
     "forbid_chars": str, "forbid_spaced_hyphen": bool, "strict_whitespace": bool,
+    "context_map": str,
 }
 
 
@@ -875,7 +876,7 @@ def load_config(path: Optional[Path]) -> Dict[str, Any]:
             raise L10nError(f"{path}: unknown config key '{k}'; known keys: {', '.join(sorted(CONFIG_KEYS))}")
         if not isinstance(v, CONFIG_KEYS[k]) or isinstance(v, bool) and CONFIG_KEYS[k] is not bool:
             raise L10nError(f"{path}: config key '{k}' has wrong type {type(v).__name__}")
-    for k in ("rules_dir", "glossary"):
+    for k in ("rules_dir", "glossary", "context_map"):
         if k in data and not os.path.isabs(data[k]):
             data[k] = str((path.parent / data[k]).resolve())
     return data
