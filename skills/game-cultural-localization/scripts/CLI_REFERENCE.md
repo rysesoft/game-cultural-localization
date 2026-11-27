@@ -598,6 +598,8 @@ Writes `changes_<locale>_<batch>.json` and `changes_<locale>_<batch>.md` (B3.8).
 | `estimated` | a language pack is installed, judgement rests on proxy signals |
 | `rule_based` | no language pack, only the rule based gates speak for the line |
 
+The level follows the pairwise gate of the calibration. When its second check failed (native mean above 4.5, literal mean below 3), the header of a measured report says so and `secondary_passed` is `false`. The jurors then rank a native line above a literal one, but a single score is no grade.
+
 Confidence is the tier base (J1 0.90, J2 0.80, J3 0.70, deliberation 0.60, unresolved 0.30), minus 0.10 per point of spread among the settling votes, plus 0.05 for a ban list hit and 0.05 for a back-translation calque flag, halved when no Pass 2 candidate passed validation, clamped to 0 and 1.
 
 The Markdown follows the house punctuation style. Model text is rewritten to that style, game text stays verbatim in code spans (pipes escaped), and the tool refuses to write a report that breaks the style.

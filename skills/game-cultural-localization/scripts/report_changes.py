@@ -9,7 +9,9 @@ Writes changes_<locale>_<batch>.json and changes_<locale>_<batch>.md.
   unresolved  lines the jury could not settle, with their three rationales
 
 Trust level (A9)
-  measured   the pack has a professional reference and a passing eval_critic calibration
+  measured   the pack has a professional reference and a passing eval_critic calibration (the pairwise
+             gate). When the second check of the calibration (absolute means) failed, the header says so
+             and secondary_passed is false.
   estimated  a language pack is installed, judgement rests on proxy signals
   rule_based no language pack, only the rule based gates speak for the line
 
@@ -71,6 +73,21 @@ def trust_level(pack_dir: Path) -> Tuple[str, Optional[str]]:
     if trust.get("trust_level") == "measured" and (cal.get("gate") or {}).get("passed"):
         return "measured", version
     return "estimated", version
+
+
+SECONDARY_FAILED = ("The jurors passed the pairwise gate, they pick the native line over the literal one. Their absolute scores "
+                    "did not pass the second check, a literal line still averages above 3 for some of them, so read the score "
+                    "of a line as a ranking and not as a grade.")
+
+
+def secondary_passed(pack_dir: Path) -> Optional[bool]:
+    """The second check of the calibration (native mean above 4.5, literal mean below 3), None when not calibrated."""
+    card = pack_dir / "trust_card.json"
+    if not card.is_file():
+        return None
+    cal = load_json_data(card).get("calibration") or {}
+    passed = (cal.get("secondary") or {}).get("passed")
+    return passed if isinstance(passed, bool) else None
 
 
 def votes_summary(votes: Sequence[Dict[str, Any]]) -> Dict[str, List[int]]:
@@ -143,7 +160,9 @@ def build_report(doc: Dict[str, Any], locale: str, batch: str, *, rewrites: Opti
             unresolved.append({"key": key, "old": old, "proposal": new if new != old else "",
                                "rationales": [sanitize_prose(x) for x in v.get("rationales", [])], "votes": line["votes"]})
     lines.sort(key=lambda l: (STATUS_ORDER.index(l["status"]) if l["status"] in STATUS_ORDER else 9, -l["confidence"], l["key"]))
-    header = {"trust_level": level, "trust_text": TRUST_TEXT[level], "langpack_version": version or doc.get("langpack_version"),
+    secondary = secondary_passed(pack_dir) if level == "measured" else None
+    header = {"trust_level": level, "trust_text": TRUST_TEXT[level] + (". " + SECONDARY_FAILED if secondary is False else ""),
+              "secondary_passed": secondary, "langpack_version": version or doc.get("langpack_version"),
               "budget": budget, "jury_stats": doc.get("stats", {}), "halted": doc.get("halted"), "notes": doc.get("notes", [])}
     return {"locale": locale, "batch": batch, "source_file": doc.get("source_file"), "header": header, "summary": counts,
             "changed": sum(1 for l in lines if l["changed"]), "lines": lines, "unresolved": unresolved}

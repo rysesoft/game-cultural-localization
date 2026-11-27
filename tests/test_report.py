@@ -48,11 +48,12 @@ REWRITES = {"lines": [
 ]}
 
 
-def make_pack(root: Path, measured: bool = True, calibrated: bool = True) -> Path:
+def make_pack(root: Path, measured: bool = True, calibrated: bool = True, secondary: Any = None) -> Path:
     pack = root / "tr-TR"
     pack.mkdir(parents=True)
+    cal = {"gate": {"passed": True}, **({"secondary": {"passed": secondary}} if secondary is not None else {})}
     write_json(pack / "trust_card.json", {"locale": "tr-TR", "langpack_version": "tr-TR-abc", "trust_level": "measured" if measured else "estimated",
-                                          "calibration": {"gate": {"passed": True}} if calibrated else None})
+                                          "calibration": cal if calibrated else None})
     return pack
 
 
@@ -72,6 +73,20 @@ class UnitTests(unittest.TestCase):
             self.assertEqual(rcg.trust_level(make_pack(td / "a")), ("measured", "tr-TR-abc"))
             self.assertEqual(rcg.trust_level(make_pack(td / "b", calibrated=False))[0], "estimated")
             self.assertEqual(rcg.trust_level(make_pack(td / "c", measured=False))[0], "estimated")
+            self.assertIsNone(rcg.secondary_passed(td / "a" / "tr-TR"))
+            self.assertFalse(rcg.secondary_passed(make_pack(td / "d", secondary=False)))
+
+    def test_failed_secondary_check_is_named(self):
+        # a measured pack whose absolute scores missed the second check says so, the level itself stays measured
+        with TempDir() as td:
+            for sec, expect in ((False, False), (True, True)):
+                rep = rcg.build_report(VERDICTS, "tr-TR", "01", rewrites=REWRITES, sources={}, budget=None,
+                                       pack_dir=make_pack(td / str(sec), secondary=sec))
+                self.assertEqual((rep["header"]["trust_level"], rep["header"]["secondary_passed"]), ("measured", expect))
+                self.assertEqual(rcg.SECONDARY_FAILED in rep["header"]["trust_text"], not expect)
+                md = rcg.render_markdown(rep)
+                self.assertEqual("ranking and not as a grade" in md, not expect)
+                self.assertEqual(text_style.punctuation_problems(md), [])
 
     def test_reason_is_house_style(self):
         r = rcg.reason_of(VERDICTS["verdicts"][2])
