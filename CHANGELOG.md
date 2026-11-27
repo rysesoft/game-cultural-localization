@@ -4,6 +4,10 @@ All notable changes to this plugin are documented here. The version number lives
 
 ## [Unreleased]
 
+## [3.1.0] 2026-11-27
+
+The cost cuts the studio approved after the first real run, where the plugin reviewed or translated all thirteen languages of a game in one day for 452.98 USD and one provider saw 2696 requests. Batch mode at half the price, fewer and larger calls, cache priming and batched deliberation, a budget report that counts requests, and the fixes that day taught us (gate rules that cried wolf, a font check that did not follow the engine's fallback chain, an AssetTable read as text, empty Pass 1 targets). The devlog `docs/devlog/2026-11-27-v3.1.0.md` tells the story.
+
 ### Changed
 - Fewer and larger model calls, as approved by the studio after the 13 language run of 2026-11-27, where one provider saw 2696 requests and 69M tokens in a day. A batched task now sends up to 100 rows per call for Pass 1, the back-translation and the jury (30 and 40 before), 30 for Pass 2 (10 before) and 50 for the blind pick and the pairwise task (20 before). Every call also has a character budget (20000 characters of source for Pass 1, 24000 of target for the jury, 10000 for Pass 2), so a hundred long letters never land in one call. Every call resends the system prompt, which held up to 48000 tokens for Pass 1, so the larger calls cut most of that cost. `--batch-size` of `jury.py`, `roundtrip_check.py` and `build_contrastive_set.py` now defaults to the new limits.
 - Cache priming. When a step sends several batches at once, the first batch goes alone and the others start after it. Parallel first calls could not read a prompt cache the others were still writing, so on the same run eight of them all paid the cache write and the Sonnet cache hit rate was 61 percent.

@@ -24,8 +24,9 @@ Dördüncü sütun paketin ulaşmak istediği sonuç. Sayfanın geri kalanı ora
 |---|---|
 | Bağlam (3.0) | Tek bir satıra dokunulmadan önce Claude Opus üzerinde çalışan bir orkestratör ve Claude Sonnet üzerinde çalışan ajanlar oyunun kodunu, sahnelerini, prefab'larını ve metin tablolarını inceler, belirsiz kalan her şeyi stüdyoya sorar ve bir bağlam haritası yazar. Çevirmen, eleştirmen ve jüri işe bu haritayı okuyarak başlar, çünkü aynı kelime yerine göre değişir (*Play* bir oyun için *Oyna*, müzik için *Çal* olur) |
 | Zanaat | Golden Voice Anchors satırları ve beş ses arketipi içeren 15 kültürelleştirme rehberi. Kültürelleştirme ajanı Pass 1 ve Pass 2'yi yazar, anadil kulağı denetçisi İngilizceyi hiç göstermeyen kör bir dilimi puanlar |
-| Kapılar | Saf Python ile yazılmış linter, arayüz taşma denetçisi, font glif tarayıcısı ve eleştiri doğrulayıcısı, çıkış kodları 0, 1 ve 2. Bozuk bir yer tutucu, kesilen bir buton ya da eksik bir glif derlemeye ulaşmaz |
+| Kapılar | Saf Python ile yazılmış linter, arayüz taşma denetçisi, font glif tarayıcısı ve eleştiri doğrulayıcısı, çıkış kodları 0, 1 ve 2. Bozuk bir yer tutucu, kesilen bir buton ya da eksik bir glif derlemeye ulaşmaz. Glif tarayıcısı TextMesh Pro'nun yedek font zincirini izler ve tam genişlikte bir glife düşen işareti bildirir |
 | Ölçüm (2.2, 3.0) | Claude, Gemini ve DeepSeek her satırı üç kademede kör olarak değerlendirir, profesyonel bir referans onları kalibre eder ve her değişiklik gerekçe, kanıt, güven oranı ve güven seviyesiyle gelir |
+| Maliyet (3.1) | `--batch` Anthropic ve Google çağrılarını yarı fiyattan batch API'lerinden gönderir. Çağrılar karakter bütçesiyle 100 satıra kadar taşır, bir dalganın ilk çağrısı istem önbelleğini bir kez yazar ve tartışma turu toplu oy verir. Bütçe raporu istek sayısını maliyetin yanında gösterir |
 
 ## Çok Aileli Jüri (2.2)
 
@@ -223,6 +224,10 @@ skills/game-cultural-localization/
 tests/                      python -m unittest discover tests
 .github/                    CI iş akışı, issue ve PR şablonları
 ```
+
+## Devlog
+
+[3.1.0, 27 Kasım 2026](./docs/devlog/2026-11-27-v3.1.0_TR.md). Bir oyunun on üç dili bir günde, maliyeti, ters gidenler ve sürümün değiştirdikleri.
 
 ## Katkı
 

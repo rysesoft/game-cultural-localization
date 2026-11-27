@@ -24,8 +24,9 @@ The fourth column is what the suite aims for. The rest of this page shows how it
 |---|---|
 | Context (3.0) | Before any line is touched, an orchestrator on Claude Opus with agents on Claude Sonnet studies the game's code, scenes, prefabs and string tables, asks the studio whatever stays unclear and writes a context map. Translators, critic and jury read it first, because the same word changes with the place (*Play* is *Oyna* for a game and *Çal* for music in Turkish) |
 | Craft | 15 culturalization playbooks with Golden Voice Anchors and five voice archetypes. A culturalizer agent writes Pass 1 and Pass 2, and a native ear critic scores a blind slice that never shows the English |
-| Gates | Linter, UI overflow checker, font glyph scanner and critique validator in pure Python with exit codes 0, 1 and 2. A broken placeholder, a clipped button or a missing glyph never reaches the build |
+| Gates | Linter, UI overflow checker, font glyph scanner and critique validator in pure Python with exit codes 0, 1 and 2. A broken placeholder, a clipped button or a missing glyph never reaches the build. The glyph scanner follows the TextMesh Pro fallback chain and flags a mark that falls back to a full width glyph |
 | Measurement (2.2, 3.0) | Claude, Gemini and DeepSeek judge every line blind in three tiers, a professional reference calibrates them, and every change arrives with a reason, evidence, confidence and a trust level |
+| Cost (3.1) | `--batch` sends the Anthropic and Google calls through their batch APIs at half the price. Calls carry up to 100 rows with a character budget, the first call of a wave writes the prompt cache once and the deliberation round re-votes in batches. The budget report shows the request count next to the cost |
 
 ## Multi-Family Jury (2.2)
 
@@ -223,6 +224,10 @@ skills/game-cultural-localization/
 tests/                      python -m unittest discover tests
 .github/                    CI workflow, issue and PR templates
 ```
+
+## Devlog
+
+[3.1.0, 27 November 2026](./docs/devlog/2026-11-27-v3.1.0.md). The thirteen languages of a game in one day, what they cost, what went wrong and what the version changes.
 
 ## Contributing
 

@@ -30,7 +30,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 
 # --------------------------------------------------------------------------- #
 # Exit-code contract (shared by every script)
