@@ -257,7 +257,8 @@ def phase2_critique_and_pass2(state: PipelineState, pass1_files: List[Path], pro
 
 def phase3_gate(state: PipelineState, finals: List[Path], fonts: List[Path]) -> Dict[str, Any]:
     rules = lqa_linter.load_rules(state.locale)
-    summary = {"errors": 0, "warnings": 0, "high": 0, "warn": 0, "missing_glyphs": 0}
+    summary = {"errors": 0, "warnings": 0, "high": 0, "warn": 0, "missing_glyphs": 0, "glyphs_checked": bool(fonts)}
+    missing: set = set()
     for f in finals:
         rows = load_table(f, state.src_field, state.locale, state.key_field)
         findings = lqa_linter.lint_rows(rows, rules, lqa_linter.LintOptions(
@@ -271,16 +272,22 @@ def phase3_gate(state: PipelineState, finals: List[Path], fonts: List[Path]) -> 
         summary["warn"] += sum(1 for r in risks if r.level == "WARN")
         (state.workdir / f"lqa_{state.locale}_{f.stem[-2:]}.json").write_text(json.dumps({"findings": [x.as_dict() for x in findings], "risks": [r.as_dict() for r in risks]}, ensure_ascii=False, indent=2), encoding="utf-8")
         if fonts:
-            cmd = [sys.executable, str(SCRIPTS_DIR / "font_glyph_scanner.py"), "--input", str(f), "--dst-field", state.locale]
+            cmd = [sys.executable, str(SCRIPTS_DIR / "font_glyph_scanner.py"), "--input", str(f), "--dst-field", state.locale, "--json"]
             for font in fonts:
                 cmd += ["--font", str(font)]
             proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
             if proc.returncode == 2:
                 raise L10nError("font scan failed: " + proc.stderr.strip())
-            summary["missing_glyphs"] += 1 if proc.returncode == 1 else 0
+            try:  # the distinct missing characters, not the number of batches with any
+                missing |= {m["codepoint"] for m in json.loads(proc.stdout).get("missing", [])}
+            except (json.JSONDecodeError, AttributeError, KeyError, TypeError):
+                missing.add(f"batch {f.stem}") if proc.returncode == 1 else None
+    summary["missing_glyphs"] = len(missing)
     summary["passed"] = (summary["errors"] == 0 and summary["high"] == 0 and summary["missing_glyphs"] == 0
                          and not (state.gate.get("fail_on_warn") and summary["warnings"]))
-    state.say(f"Phase 3: gate {'PASSED' if summary['passed'] else 'FAILED'} {summary}")
+    if not fonts:
+        state.say("Phase 3: no --font given, the glyph scan did not run, the gate says nothing about missing glyphs")
+    state.say(f"Phase 3: gate {'PASSED' if summary['passed'] else 'FAILED'}" + ("" if fonts else " (glyphs not checked)") + f" {summary}")
     return summary
 
 

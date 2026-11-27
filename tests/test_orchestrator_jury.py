@@ -91,6 +91,10 @@ class JuryFlowTests(unittest.TestCase):
                                    budget_caps=False, langpack_dir=td / "np")
             budget = json.loads((td / "w" / "changes_tr-TR_01.json").read_text(encoding="utf-8"))["header"]["budget"]
             self.assertGreater(budget["calls"], 0)                                # the orchestrator's reports had no cost before
+            log = "\n".join(orch.run_jury_pipeline(src, "tr-TR", td / "nf", Router(load_providers_config(), dry_run=True), budget_caps=False,
+                                                   langpack_dir=td / "np")["log"])
+            self.assertIn("glyph scan did not run", log)                          # a gate without fonts no longer passes silently
+            self.assertIn("(glyphs not checked)", log)
             semi = write_json(td / "semi.json", [{"key": "A", "en": "Save; then quit", "category": "ui"}])
 
             def gate_run(name, gate):

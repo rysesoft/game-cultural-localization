@@ -194,6 +194,7 @@ Legacy flow (`--provider module:function`). Any callable `complete(system: str, 
 | `--providers-config`, `--fake-scenario`, `--budget-log` | model access of the jury flow, the budget log defaults to `<workdir>/budget.jsonl` |
 | `--langpack-dir` | root of the language packs, default the skill's `langpack/` |
 | `--tm` | translation memory (`tm.py` SQLite) for Pass 1 RAG and the jury evidence |
+| `--font` | font files for the glyph scan of the Phase 3 gate, repeatable. Without one the gate says so in its log and summary (`glyphs_checked` false, `PASSED (glyphs not checked)`), and `missing_glyphs` counts the distinct characters no font covers |
 | `--no-resume` | ignore the finished model batches in `<workdir>/model_batches.json` and call every model again. By default every finished batch of Pass 1, the jury, the back-translations and Pass 2 is kept there, and the same command with the same `--workdir` resumes a stopped run at the batch where it stopped without paying for the finished ones again. A changed source line, prompt or model makes a new batch, an old answer is never reused for it |
 | `--context-map` | `CONTEXT_MAP.md` of the game, the output of Phase 0 step 0 (also `context_map` in `l10n.config.json`). Pass 1 and Pass 2 read the map, the locale appendix and the full line notes, the jury and the blind pickers read the map and the neutral line fields only. Without it the run logs that every step works without the game's context |
 | `--no-deliberation` | leave J3 disagreements unresolved |
