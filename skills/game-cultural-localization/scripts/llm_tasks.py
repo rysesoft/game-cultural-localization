@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -59,22 +60,35 @@ DEFAULT_SYSTEM: Dict[str, str] = {
                  "or say. Reply with JSON only."),
 }
 
+# The first question a juror asks of a line, set by the studio. Every word of it must be part of everyday use of the
+# language. A correct but rare, bookish or dictionary word is what makes a translation sound translated. The answer
+# weighs heavily, the code caps the score of a line with such a word (EVERYDAY_CAP), so it never passes a tier.
+EVERYDAY_CAP = 3
+EVERYDAY_CHECK = ('First ask of every word of the line whether it belongs to everyday use of the target language. Would a native '
+                  'speaker use it in daily life for this meaning, or read it in this kind of game text? A rare, bookish, archaic, '
+                  'made up, word for word or dictionary choice is not everyday, even when it is correct. Proper names, placeholders, '
+                  'tags and the game\'s own terms that the context map names are not judged this way. List the words of the line '
+                  'that are not everyday in "odd_words", an empty list when there is none. This answer weighs heavily, a line with '
+                  'such a word scores 3 at most. ')
+
 INSTRUCTIONS: Dict[str, str] = {
     "pass1": 'Translate every row. Reply with {"rows": [{"key": "...", "target": "..."}]} and nothing else.',
     "literal": 'Translate every row literally. Reply with {"rows": [{"key": "...", "target": "..."}]} and nothing else.',
     "roundtrip": 'Back-translate every row into English. Reply with {"rows": [{"key": "...", "back": "..."}]} and nothing else.',
-    "jury": ('Score every entry. Reply with {"votes": [{"key": "...", "score": 1-5, "issue_type": "translationese|register|tense|'
-             'regional_leak|gender_leak|ui_verb|placeholder_grammar|terminology|other|none", "reason": "...", "suggested": "..."}]}. '
-             'Use issue_type "none" and empty reason and suggested for score 5.'),
+    "jury": (EVERYDAY_CHECK + 'Then score every entry. Reply with {"votes": [{"key": "...", "odd_words": ["..."], "score": 1-5, '
+             '"issue_type": "translationese|register|tense|regional_leak|gender_leak|ui_verb|placeholder_grammar|terminology|other|none", '
+             '"reason": "...", "suggested": "..."}]}. Use issue_type "none" and empty reason and suggested for score 5.'),
     "pairwise": 'For every pair reply with {"choices": [{"id": "...", "choice": "a" or "b"}]} and nothing else.',
-    "pass2": ('Rewrite every row. Reply with {"rows": [{"key": "...", "candidates": ["...", "...", "..."]}]}, exactly the requested '
-              'number of different candidates per row, and nothing else.'),
+    "pass2": ('Rewrite every row. A row may carry "odd_words", words the jurors found not everyday for a native speaker. Replace '
+              'them with words a native uses every day, unless the context map names one as the game\'s own term. Reply with '
+              '{"rows": [{"key": "...", "candidates": ["...", "...", "..."]}]}, exactly the requested number of different candidates '
+              'per row, and nothing else.'),
     "pick": ('For every item choose the candidate a native player would find most natural for this context. Reply with '
              '{"picks": [{"key": "...", "choice": "<candidate id>"}]} and nothing else.'),
     "deliberate": ('You already scored this line ("own"). "others" are the anonymous votes of two other jurors and "evidence" is the '
                    'mechanical evidence package (ban list hits, closest approved translation memory lines, back-translation signal). '
-                   'Weigh them and vote once more. You may keep or change your score. Reply with {"score": 1-5, "issue_type": "...", '
-                   '"reason": "...", "suggested": "..."} and nothing else.'),
+                   'Weigh them and vote once more. You may keep or change your score. ' + EVERYDAY_CHECK + 'Reply with '
+                   '{"odd_words": ["..."], "score": 1-5, "issue_type": "...", "reason": "...", "suggested": "..."} and nothing else.'),
 }
 
 
@@ -222,7 +236,7 @@ def translate_rows(provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *
         got = _call_keyed(provider, sys_prompt, task, {"locale": locale, **(extra or {})}, batch, "rows", "rows", "key",
                           lambda it: isinstance(it.get("target"), str), max_tokens)
         return {k: str(v["target"]) for k, v in got.items()}
-    tag = (task, getattr(provider, "model", "?"), sys_prompt, locale, extra or {}, max_tokens)
+    tag = (task, getattr(provider, "model", "?"), sys_prompt, INSTRUCTIONS[task], locale, extra or {}, max_tokens)
     return run_batches(list(chunked(list(rows), batch_size)), one, workers, memo, tag)
 
 
@@ -235,7 +249,7 @@ def backtranslate_rows(provider: Any, rows: Sequence[Dict[str, Any]], locale: st
         got = _call_keyed(provider, sys_prompt, "roundtrip", {"locale": locale}, batch, "rows", "rows", "key",
                           lambda it: isinstance(it.get("back"), str), max_tokens)
         return {k: str(v["back"]) for k, v in got.items()}
-    tag = ("roundtrip", getattr(provider, "model", "?"), sys_prompt, locale, max_tokens)
+    tag = ("roundtrip", getattr(provider, "model", "?"), sys_prompt, INSTRUCTIONS["roundtrip"], locale, max_tokens)
     return run_batches(list(chunked([{"key": r["key"], "target": r["target"]} for r in rows], batch_size)), one, workers, memo, tag)
 
 
@@ -253,7 +267,35 @@ def normalize_vote(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         it = "other"
     if score == 5:
         it = "none"
-    return {"score": score, "issue_type": it, "reason": str(item.get("reason") or ""), "suggested": str(item.get("suggested") or "")}
+    odd = item.get("odd_words") or []
+    if isinstance(odd, str):
+        odd = re.split(r"[,;\n]", odd)
+    words = [str(w).strip() for w in odd if isinstance(w, (str, int, float)) and str(w).strip()] if isinstance(odd, list) else []
+    return {"score": score, "issue_type": it, "reason": str(item.get("reason") or ""), "suggested": str(item.get("suggested") or ""),
+            "odd_words": words}
+
+
+def everyday_check(vote: Dict[str, Any], target: str) -> Dict[str, Any]:
+    """Apply the everyday word check to a normalized vote (in place).
+
+    Only words the line really holds count, so a word a model made up or took from another line never lowers a
+    score, and placeholders or tags are no words. A line with a word that is not everyday scores EVERYDAY_CAP
+    at most, whatever score the juror gave, and its reason names the words.
+    """
+    low = str(target).casefold()
+    words: List[str] = []
+    for w in vote.get("odd_words") or []:
+        w = str(w).strip().strip("\"'.,!?")
+        if w and any(ch.isalpha() for ch in w) and not any(ch in w for ch in "{}<>%[]") and w.casefold() in low and w not in words:
+            words.append(w)
+    vote["odd_words"] = words[:10]
+    if words and vote["score"] > EVERYDAY_CAP:
+        vote["score"] = EVERYDAY_CAP
+        if vote["issue_type"] == "none":
+            vote["issue_type"] = "translationese"
+        note = "words a native would not use every day (" + ", ".join(words) + ")"
+        vote["reason"] = f"{vote['reason'].rstrip('. ')}. {note}" if vote["reason"].strip() else note
+    return vote
 
 
 def score_entries(provider: Any, entries: Sequence[Dict[str, Any]], locale: str, *, tier: str = "J1",
@@ -265,8 +307,9 @@ def score_entries(provider: Any, entries: Sequence[Dict[str, Any]], locale: str,
     def one(batch: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         got = _call_keyed(provider, sys_prompt, "jury", {"locale": locale, "tier": tier, **(extra or {})}, batch, "entries", "votes", "key",
                           lambda it: normalize_vote(it) is not None, max_tokens)
-        return {k: normalize_vote(v) for k, v in got.items()}  # type: ignore[misc]
-    tag = ("jury", getattr(provider, "model", "?"), sys_prompt, locale, tier, extra or {}, max_tokens)
+        targets = {str(e.get("key")): str(e.get("target", "")) for e in batch}
+        return {k: everyday_check(normalize_vote(v), targets.get(k, "")) for k, v in got.items()}  # type: ignore[arg-type]
+    tag = ("jury", getattr(provider, "model", "?"), sys_prompt, INSTRUCTIONS["jury"], locale, tier, extra or {}, max_tokens)
     return run_batches(list(chunked(list(entries), batch_size)), one, workers, memo, tag)
 
 
@@ -279,7 +322,7 @@ def pairwise_choices(provider: Any, pairs: Sequence[Dict[str, Any]], locale: str
         got = _call_keyed(provider, sys_prompt, "pairwise", {"locale": locale}, batch, "pairs", "choices", "id",
                           lambda it: str(it.get("choice", "")).strip().lower() in ("a", "b"), max_tokens)
         return {k: str(v["choice"]).strip().lower() for k, v in got.items()}
-    tag = ("pairwise", getattr(provider, "model", "?"), sys_prompt, locale, max_tokens)
+    tag = ("pairwise", getattr(provider, "model", "?"), sys_prompt, INSTRUCTIONS["pairwise"], locale, max_tokens)
     return run_batches(list(chunked(list(pairs), batch_size)), one, workers, memo, tag)
 
 
@@ -297,7 +340,7 @@ def revote(provider: Any, payload: Dict[str, Any], locale: str, *, system: Optio
             continue
         vote = normalize_vote(data) if isinstance(data, dict) else None
         if vote is not None:
-            return vote
+            return everyday_check(vote, str(payload.get("target", "")))
     raise L10nError(f"deliberate: model {getattr(provider, 'model', '?')} returned no valid vote for {payload.get('key')}")
 
 
@@ -313,7 +356,7 @@ def pass2_candidates(provider: Any, rows: Sequence[Dict[str, Any]], locale: str,
     def one(batch: List[Dict[str, Any]]) -> Dict[str, List[str]]:
         got = _call_keyed(provider, sys_prompt, "pass2", {"locale": locale, "n_candidates": n}, batch, "rows", "rows", "key", ok, max_tokens)
         return {k: ordered_unique(str(x) for x in v["candidates"] if isinstance(x, str) and x.strip())[:n] for k, v in got.items()}
-    tag = ("pass2", getattr(provider, "model", "?"), sys_prompt, locale, n, max_tokens)
+    tag = ("pass2", getattr(provider, "model", "?"), sys_prompt, INSTRUCTIONS["pass2"], locale, n, max_tokens)
     return run_batches(list(chunked(list(rows), batch_size)), one, workers, memo, tag)
 
 
@@ -327,7 +370,7 @@ def pick_candidates(provider: Any, items: Sequence[Dict[str, Any]], locale: str,
         got = _call_keyed(provider, sys_prompt, "pick", {"locale": locale}, batch, "items", "picks", "key",
                           lambda it: str(it.get("choice")) in ids.get(str(it.get("key")), set()), max_tokens)
         return {k: str(v["choice"]) for k, v in got.items()}
-    tag = ("pick", getattr(provider, "model", "?"), sys_prompt, locale, max_tokens)
+    tag = ("pick", getattr(provider, "model", "?"), sys_prompt, INSTRUCTIONS["pick"], locale, max_tokens)
     return run_batches(list(chunked(list(items), batch_size)), one, workers, memo, tag)
 
 

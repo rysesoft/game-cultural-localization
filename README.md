@@ -42,7 +42,9 @@ Version 2.2 replaces the single critic with a jury of three model families and m
 
 **Agreement.** Every tier holds one model from each family. A line passes when all three scores are 4 or 5 and differ by at most 1. Any score of 3 or lower, or a spread of 2 or more, moves the line to the next tier. Any score of 2 or lower sends it straight to J3. When J3 still disagrees, the jurors read each other's reasons without model names and vote again. A majority settles the line, otherwise it goes to the developer as unresolved.
 
-**Budget caps.** When more than 30% of a batch would go to J2, or more than 10% to J3, the run stops and writes the report. At that point the problem is in Pass 1 or in the prompt, not in single lines.
+**Everyday words first.** Before a juror scores a line it asks of every word whether a native speaker uses it in everyday life. A rare, bookish or dictionary word is the clearest mark of a translated text, even when it is correct. The answer weighs heavily, a line with such a word scores 3 at most, so it never passes a tier, and Pass 2 gets the words to replace. Proper names, placeholders and the game's own terms are not judged this way.
+
+**Budget caps.** When more than 30% of the judged lines of a run would go to J2, or more than 10% to J3, the run stops and writes the report. The count starts after 100 judged lines, so one bad line in a small last batch never stops a game. At that point the problem is in Pass 1 or in the prompt, not in single lines.
 
 **Trust levels.** Every change report says how far its verdicts can be trusted.
 

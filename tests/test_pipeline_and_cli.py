@@ -72,6 +72,8 @@ class WorkflowTemplateTests(unittest.TestCase):
         self.assertIn("loc_work/context/line_notes.jury.json", critic)
         self.assertIn("Only when loc_work/context/CONTEXT_MAP.jury.md does not exist", critic)
         self.assertIn("never a pass1 or final batch", critic)
+        self.assertLess(critic.index("First ask of every word"), critic.index("score naturalness"))   # the everyday word check comes first
+        self.assertIn("scores 3 at most", critic)
         self.assertIn("never loc_work/context/CONTEXT_MAP.tr-TR.md", critic)    # the appendix would hand the critic the answer key
         self.assertIn("player_action", critic)
         self.assertIn("CONTEXT_MAP.tr-TR.md", by_role["tr-TR Pass-2 Editor 01"])

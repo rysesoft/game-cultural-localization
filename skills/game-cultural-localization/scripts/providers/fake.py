@@ -165,6 +165,8 @@ class FakeProvider:
                     score = int(rule.get("score", 5))
                     vote = {"key": key, "score": score, "issue_type": str(rule.get("issue_type", "none" if score == 5 else "other")),
                             "reason": str(rule.get("reason", "" if score == 5 else "scenario rule")), "suggested": str(rule.get("suggested", ""))}
+                    if "odd_words" in rule:  # the everyday word check of the juror
+                        vote["odd_words"] = list(rule["odd_words"])
                 elif LITERAL_MARK in tgt:
                     vote = {"key": key, "score": 2, "issue_type": "translationese", "reason": "word for word calque", "suggested": self._unmark(tgt)}
                 else:

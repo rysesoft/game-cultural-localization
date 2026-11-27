@@ -13,6 +13,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parent))
 from _helpers import SCRIPTS, TempDir, run_cli, write_json  # noqa: E402
 
 import jury  # noqa: E402
+import text_style  # noqa: E402
 from l10n_common import L10nError  # noqa: E402
 from providers import FakeScenario, Router, load_providers_config  # noqa: E402
 
@@ -72,6 +73,72 @@ class RuleTests(unittest.TestCase):
         self.assertEqual([jury.status_for(s) for s in (5, 4, 3, 2, 1)], ["pass", "rewrite_light", "rewrite", "critical", "critical"])
 
 
+class EverydayWordTests(unittest.TestCase):
+    """The first question of a juror, set by the studio. Is every word of the line part of everyday use of the language?"""
+
+    def test_a_word_that_is_not_everyday_caps_the_score(self):
+        from llm_tasks import EVERYDAY_CAP, INSTRUCTIONS, everyday_check, normalize_vote
+        self.assertTrue(INSTRUCTIONS["jury"].startswith("First ask of every word"))     # asked before the score
+        self.assertIn("odd_words", INSTRUCTIONS["jury"])
+        self.assertIn("odd_words", INSTRUCTIONS["deliberate"])
+        self.assertIn("odd_words", INSTRUCTIONS["pass2"])
+        line = "Mevcut bakiyeniz yetersizdir."
+        v = everyday_check(normalize_vote({"score": 5, "odd_words": ["Mevcut", "yetersizdir"]}), line)
+        self.assertEqual((v["score"], v["issue_type"], v["odd_words"]), (EVERYDAY_CAP, "translationese", ["Mevcut", "yetersizdir"]))
+        self.assertIn("not use every day (Mevcut, yetersizdir)", v["reason"])
+        self.assertEqual(text_style.punctuation_problems(v["reason"]), [])
+        v = everyday_check(normalize_vote({"score": 4, "issue_type": "register", "reason": "stiff.", "odd_words": "Mevcut"}), line)
+        self.assertEqual((v["score"], v["issue_type"]), (3, "register"))
+        self.assertTrue(v["reason"].startswith("stiff. words a native"))
+        v = everyday_check(normalize_vote({"score": 2, "issue_type": "ui_verb", "reason": "x", "odd_words": ["Mevcut"]}), line)
+        self.assertEqual(v["score"], 2)                                               # a lower score stays as it is
+        # only words the line holds count, placeholders and tags are no words, an empty list changes nothing
+        v = everyday_check(normalize_vote({"score": 5, "odd_words": ["müstakbel", "{0}", "<b>", "123"]}), "{0} <b>123</b> kredi kazandın")
+        self.assertEqual((v["score"], v["odd_words"]), (5, []))
+        self.assertEqual(everyday_check(normalize_vote({"score": 5}), line)["score"], 5)
+
+    def test_the_jury_sends_such_a_line_on_and_pass2_gets_the_words(self):
+        sc = {"scores": [{"key": "ESC", "tier": "J1", "family": "google", "score": 5, "odd_words": ["koyulalım"]}]}
+        v = {x["key"]: x for x in run(sc, slice_doc())["verdicts"]}
+        esc = v["ESC"]
+        self.assertEqual([x["score"] for x in esc["votes"] if x["tier"] == "J1"], [5, 5, 3])   # one juror, the whole line escalates
+        self.assertEqual(esc["final_tier"], "J2")
+        self.assertIn("koyulalım", [w for x in esc["votes"] for w in x["odd_words"]])
+        self.assertEqual(v["OK"]["status"], "pass")
+        import pass2_rewrite as p2
+        rows: List[Dict[str, Any]] = []
+        real = p2.pass2_candidates
+
+        def spy(provider, rws, locale, **kw):
+            rows.extend(rws)
+            return real(provider, rws, locale, **kw)
+        verdict = dict(esc, status="rewrite", votes=[dict(x, tier="J2") for x in esc["votes"] if x["tier"] == "J1"], final_tier="J2")
+        router = Router(load_providers_config(), dry_run=True, scenario=FakeScenario({}))
+        from unittest import mock
+        with mock.patch.object(p2, "pass2_candidates", spy):
+            p2.rewrite_lines([verdict], {"ESC": {"en": "Let's get to work.", "target": "Hadi bakalım, işe koyulalım."}}, "tr-TR", router,
+                             pass2_system="P2", pick_system="CRITIC")
+        self.assertEqual(rows[0]["odd_words"], ["koyulalım"])
+
+    def test_a_changed_instruction_never_reuses_cached_batches(self):
+        import llm_tasks
+        router = Router(load_providers_config(), dry_run=True, scenario=FakeScenario({}))
+        m = router.jury("J1")[0]
+        with TempDir() as td:
+            memo = llm_tasks.BatchMemo(td / "memo.json")
+            entries = [{"key": "A", "target": "Kaydet"}]
+            llm_tasks.score_entries(m.provider, entries, "tr-TR", system="S", memo=memo)
+            self.assertEqual(len(memo), 1)
+            with mock_dict(llm_tasks.INSTRUCTIONS, "jury", llm_tasks.INSTRUCTIONS["jury"] + " Changed."):
+                llm_tasks.score_entries(m.provider, entries, "tr-TR", system="S", memo=memo)
+            self.assertEqual(len(memo), 2)                                              # a new batch, not the old answer
+
+
+def mock_dict(d: Dict[str, Any], key: str, value: Any) -> Any:
+    from unittest import mock
+    return mock.patch.dict(d, {key: value})
+
+
 class RunTests(unittest.TestCase):
     def test_pass_escalate_critical_unresolved(self):
         res = run(SCENARIO, slice_doc())
@@ -96,7 +163,7 @@ class RunTests(unittest.TestCase):
         v = {x["key"]: x for x in res["verdicts"]}
         self.assertEqual(set(v["OK"]), {"key", "final_tier", "score", "status", "votes", "evidence", "rationales"})
         vote = v["CRIT"]["votes"][0]
-        self.assertEqual(set(vote), {"key", "tier", "member", "family", "model", "score", "issue_type", "reason", "suggested"})
+        self.assertEqual(set(vote), {"key", "tier", "member", "family", "model", "score", "issue_type", "reason", "suggested", "odd_words"})
         self.assertEqual({x["family"] for x in v["CRIT"]["votes"][:3]}, {"anthropic", "google", "deepseek"})
         self.assertEqual({x["model"] for x in v["CRIT"]["votes"][3:]}, {"claude-opus-5-5", "deepseek-v4-pro", "gemini-4-carbon"})
         self.assertEqual(set(v["BAN"]["evidence"]), {"ban_hits", "tm_neighbors", "roundtrip"})

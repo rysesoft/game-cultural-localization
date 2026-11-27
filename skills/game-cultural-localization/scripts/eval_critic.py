@@ -43,7 +43,7 @@ from l10n_common import (  # noqa: E402
 )
 from build_context_map import ContextPack, load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR  # noqa: E402
-from llm_tasks import BatchMemo, add_model_args, default_budget_path, make_router, pairwise_choices, score_entries  # noqa: E402
+from llm_tasks import INSTRUCTIONS, BatchMemo, add_model_args, default_budget_path, make_router, pairwise_choices, score_entries  # noqa: E402
 from prompt_templates import render_contrastive, render_prompt  # noqa: E402
 from warmup_loader import REGISTERS, load_warmup, render_warmup  # noqa: E402
 
@@ -190,7 +190,9 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
     memo = BatchMemo(Path(store).with_name(Path(store).stem + ".batches.json")) if store is not None else None
 
     def signature(model: str, tier: str) -> str:
-        blob = json.dumps({"model": model, "tier": tier, "system": system, "pairs": pw, "entries": entries}, ensure_ascii=False, sort_keys=True)
+        # the task instructions belong to the signature, a changed instruction (the everyday word check) must not reuse old scores
+        blob = json.dumps({"model": model, "tier": tier, "system": system, "pairs": pw, "entries": entries,
+                           "instructions": [INSTRUCTIONS["pairwise"], INSTRUCTIONS["jury"]]}, ensure_ascii=False, sort_keys=True)
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
     def calibrate(item: Tuple[str, Tuple[str, Any]]) -> Tuple[str, Optional[Dict[str, Any]], Optional[str]]:

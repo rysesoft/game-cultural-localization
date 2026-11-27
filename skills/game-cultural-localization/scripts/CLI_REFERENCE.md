@@ -459,6 +459,8 @@ python jury.py blind_tr-TR_01.json --locale tr-TR [--source-table pass1_tr-TR_01
 
 Three tiers of three members, one from each family (`J1` Haiku, V4 Flash, Hydrogen, `J2` Sonnet, V4 Pro, Neon, `J3` Opus, V4 Pro, Carbon by default). The members read only the blind slice (key, `register`, `category`, `speaker`, `archetype`, target). A slice that carries a source column (`en`, `source`, `src`) is refused with exit 2. The system prompt is `prompts/critic.<locale>.md` with the pack's seeded warm-up and contrastive few-shots.
 
+Every juror first asks of every word of a line whether it belongs to everyday use of the language, a rare, bookish, archaic, word for word or dictionary choice is not everyday even when it is correct (proper names, placeholders, tags and the game's own terms in the map are not judged this way). The juror lists such words in `odd_words`. The answer weighs heavily, the code caps the score of a line with such a word at 3 (`llm_tasks.EVERYDAY_CAP`), so the line never passes a tier and its reason names the words. Only words the line really holds count, so a made up word never lowers a score. The deliberation round keeps the check, and Pass 2 gets the words of the settling votes as `odd_words` and replaces them.
+
 | Outcome of one tier | Rule | Next |
 |---|---|---|
 | pass | every score 4 or 5 and a spread of at most 1 | settled, line score is the minimum, 5 gives `pass`, 4 gives `rewrite_light` |

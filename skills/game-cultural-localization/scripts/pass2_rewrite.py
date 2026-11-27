@@ -117,6 +117,9 @@ def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[st
                      "suggestions": [x.get("suggested") for x in fv if x.get("suggested")],
                      "suggested": next((x.get("suggested") for x in fv if x.get("suggested")), ""),
                      "tm": [{"target": t.get("dst", ""), "category": t.get("category", "")} for t in (v.get("evidence", {}).get("tm_neighbors") or [])[:3]]})
+        odd = list(dict.fromkeys(w for x in fv for w in (x.get("odd_words") or [])))
+        if odd:  # words the jurors found not everyday, the writer replaces them
+            rows[-1]["odd_words"] = odd
         if ctx is not None and ctx.line(v["key"], writer=True):
             rows[-1]["context"] = ctx.line(v["key"], writer=True)
     cands = pass2_candidates(router.for_role("pass2"), rows, locale, n=n, system=pass2_system, workers=workers, memo=memo) if rows else {}
