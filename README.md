@@ -69,7 +69,7 @@ On a real game, build the context map first and pass it with `--context-map loc_
 ## What You Get
 
 1. **15 culturalization playbooks** with Golden Voice Anchors tagged with five voice archetypes (A1 to A5).
-2. **Two agent prompts.** A culturalizer for Pass 1 and Pass 2, and a blind native ear critic that only ever reads a target only slice.
+2. **Four agent prompts.** A context cartographer and its context scouts that map the game before the first line, a culturalizer for Pass 1 and Pass 2, and a blind native ear critic that only ever reads a target only slice and the map.
 3. **Native jury prompts in all 15 languages.** Every locale has its own critic and Pass 2 prompt, written in that language with a local player or writer persona.
 4. **Deterministic gates.** Linter, UI overflow checker, font tofu scanner, blind slice generator and critique validator, all pure Python with zero dependencies.
 5. **Mixed-family LLM jury.** Claude, Gemini and DeepSeek judge every line blind in three tiers, settle disagreements by anonymous deliberation and hand the developer a change report with reasons, evidence and confidence.

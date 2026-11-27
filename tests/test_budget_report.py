@@ -24,7 +24,7 @@ def rec(role: str, provider: str, model: str, tin: int, tout: int, ms: int = 100
 RECORDS = [
     rec("J1", "anthropic", "claude-haiku-5-5", 1_000_000, 200_000, 100),
     rec("J1", "anthropic", "claude-haiku-5-5", 1_000_000, 0, 300),
-    rec("J1", "google", "gemini-4-hydrogen", 500_000, 100_000),
+    rec("J1", "google", "gemini-x-unpriced", 500_000, 100_000),
     rec("J1", "deepseek", "deepseek-flash", 2_000_000, 1_000_000),
     rec("J2", "deepseek", "deepseek-flash", 0, 0, 50, fallback_from="deepseek-v4-pro"),
     rec("pass1", "anthropic", "claude-sonnet-5-5", 100_000, 50_000, 900, ok=False),
@@ -42,7 +42,8 @@ class AggregateTests(unittest.TestCase):
     def test_costs_from_config_prices(self):
         self.assertAlmostEqual(br.cost_of("claude-haiku-5-5", 1_000_000, 1_000_000, self.prices), 0.60)
         self.assertAlmostEqual(br.cost_of("deepseek-flash", 2_000_000, 1_000_000, self.prices), 0.90)
-        self.assertIsNone(br.cost_of("gemini-4-hydrogen", 1, 1, self.prices))
+        self.assertIsNone(br.cost_of("gemini-x-unpriced", 1, 1, self.prices))
+        self.assertAlmostEqual(br.cost_of("gemini-4-hydrogen", 1_000_000, 1_000_000, self.prices), 9.0)   # AI Studio paid tier 1.50 and 7.50
         self.assertIsNone(br.cost_of("unknown-model", 1, 1, self.prices))
 
     def test_prompt_cache_prices(self):
@@ -82,11 +83,11 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual((haiku["calls"], haiku["input_tokens"], haiku["output_tokens"]), (2, 2_000_000, 200_000))
         self.assertAlmostEqual(haiku["cost_usd"], 0.30)
         self.assertEqual(haiku["mean_latency_ms"], 200.0)
-        self.assertEqual(by_model["gemini-4-hydrogen"]["cost_note"], br.PRICE_NOT_SET)
+        self.assertEqual(by_model["gemini-x-unpriced"]["cost_note"], br.PRICE_NOT_SET)
         self.assertEqual(by_model["claude-sonnet-5-5"]["errors"], 1)
         by_role = {g["role"]: g for g in br.aggregate(RECORDS, ["role"], self.prices)}
         self.assertEqual(by_role["J1"]["calls"], 4)
-        self.assertFalse(by_role["J1"]["priced"])          # hydrogen has no price
+        self.assertFalse(by_role["J1"]["priced"])          # a model without a price in the config
         self.assertAlmostEqual(by_role["J1"]["cost_usd"], 0.30 + 0.90)
         self.assertTrue(by_role["pass1"]["priced"])
         by_provider = {g["provider"]: g for g in br.aggregate(RECORDS, ["provider"], self.prices)}
@@ -102,7 +103,7 @@ class AggregateTests(unittest.TestCase):
         totals = br.aggregate(RECORDS, [], self.prices)[0]
         p = br.project(totals, 10, 20000, 15)
         self.assertFalse(p["complete"])
-        self.assertIn("gemini-4-hydrogen", p["note"])
+        self.assertIn("gemini-x-unpriced", p["note"])
 
     def test_reads_router_budget_lines(self):
         with TempDir() as td:
@@ -137,7 +138,7 @@ class CliTests(unittest.TestCase):
             data = json.loads(out)
             self.assertEqual(len(data["files"]), 2)
             self.assertEqual(data["records"], 6)
-            self.assertEqual(data["missing_prices"], ["gemini-4-hydrogen"])
+            self.assertEqual(data["missing_prices"], ["gemini-x-unpriced"])
             self.assertEqual(data["fallbacks"], ["deepseek-v4-pro -> deepseek-flash"])
             self.assertEqual(data["projection"]["project_rows"], 20000)
             self.assertEqual(data["projection"]["project_locales"], 15)

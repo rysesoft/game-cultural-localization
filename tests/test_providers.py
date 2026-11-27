@@ -69,7 +69,7 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(sorted(fams), ["anthropic", "deepseek", "google"], tier)
         self.assertEqual(cfg.role_model("pass1").alias, "sonnet")
         self.assertEqual(cfg.models["v4pro"].fallback, "v4flash")
-        self.assertIsNone(cfg.models["hydrogen"].price_in)
+        self.assertEqual((cfg.models["hydrogen"].price_in, cfg.models["neon"].price_out), (1.5, 15.0))   # AI Studio paid tier, 2026-11-27
         self.assertEqual(cfg.agreement, {"pass_min": 4, "max_spread": 1, "critical_max": 2})
         self.assertEqual(cfg.roundtrip["min_words"], 6)
         text = (SCRIPTS / "providers.config.json").read_text(encoding="utf-8")

@@ -69,7 +69,7 @@ Gerçek bir oyunda önce bağlam haritasını çıkarın ve `--context-map loc_w
 ## Neler Var
 
 1. **15 kültürelleştirme rehberi.** Beş ses arketipiyle (A1 ile A5 arası) etiketlenmiş Golden Voice Anchors satırları içerir.
-2. **İki ajan promptu.** Pass 1 ve Pass 2 için bir kültürelleştirici, bir de yalnızca hedef dildeki kör dilimi okuyan anadil kulağı denetçisi.
+2. **Dört ajan promptu.** İlk satırdan önce oyunun haritasını çıkaran bir bağlam kartografı ve onun bağlam izcileri, Pass 1 ve Pass 2 için bir kültürelleştirici, bir de yalnızca hedef dildeki kör dilimi ve haritayı okuyan anadil kulağı denetçisi.
 3. **15 dilin hepsinde yerli jüri promptları.** Her dilin kendi diliyle yazılmış, yerel bir oyuncu ya da yazar kimliği taşıyan denetçi ve Pass 2 promptu var.
 4. **Deterministik kapılar.** Linter, arayüz taşma denetçisi, font tofu tarayıcısı, kör dilim üreteci ve eleştiri doğrulayıcısı. Hepsi saf Python, hiçbir bağımlılık yok.
 5. **Karma aileli LLM jürisi.** Claude, Gemini ve DeepSeek her satırı üç kademede kör olarak değerlendirir, anlaşmazlıkları anonim müzakereyle çözer ve geliştiriciye gerekçe, kanıt ve güven oranı içeren bir değişiklik raporu verir.

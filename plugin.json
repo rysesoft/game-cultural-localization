@@ -5,10 +5,12 @@
   "version": "2.2.0",
   "description": "Game localization and culturalization plugin for AI coding agents. 15 languages, blind native ear critique, five voice archetypes, deterministic LQA gates.",
   "logo": "assets/logo.svg",
+  "repository": "https://github.com/rysesoft/game-cultural-localization",
   "suggestedPrompts": [
-    "Localize and culturalize the next game locale with the 4-phase blind native-ear workflow (Phase 0-3)",
+    "Build the context map of our game first, then localize the next locale with the 4-phase blind native-ear workflow (Phase 0-3)",
     "Make a blind slice of our Pass 1 strings, run the native-ear critique, and rewrite every flagged entry",
-    "Run lqa_linter, ui_expansion_checker, and font_glyph_scanner on our localized string tables and fix all errors"
+    "Run lqa_linter, ui_expansion_checker, and font_glyph_scanner on our localized string tables and fix all errors",
+    "Apply my accept and reject decisions and export the final texts into our game's own string tables"
   ],
   "author": {
     "name": "Game Cultural Localization Contributors"
