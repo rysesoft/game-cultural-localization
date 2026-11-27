@@ -253,7 +253,7 @@ class CliTests(unittest.TestCase):
             make_pack(td / "packs")
             c = write_json(td / "c.json", cset())
             code, out, err = run_cli("eval_critic.py", str(c), "--locale", "tr-TR", "--tiers", "J1", "--dry-run", "--langpack-dir", str(td / "packs"),
-                                     "--compare-warmup", "--update-trust-card", "--json", env_extra=NO_KEYS)
+                                     "--compare-warmup", "--update-trust-card", "--json", "--keep-mixed-robots", env_extra=NO_KEYS)
             self.assertEqual(code, 0, err)
             data = json.loads(out)
             self.assertTrue(data["with_warmup"]["warmup"])
@@ -269,28 +269,47 @@ class CliTests(unittest.TestCase):
     def test_deterministic_and_exit_1(self):
         with TempDir() as td:
             c = write_json(td / "c.json", cset())
-            args = [str(c), "--locale", "tr-TR", "--tiers", "J1", "--dry-run", "--no-warmup", "--seed", "9", "--json"]
+            args = [str(c), "--locale", "tr-TR", "--tiers", "J1", "--dry-run", "--no-warmup", "--seed", "9", "--json", "--keep-mixed-robots"]
             code, out1, err = run_cli("eval_critic.py", *args, env_extra=NO_KEYS)
             self.assertEqual(code, 0, err)
             code, out2, _ = run_cli("eval_critic.py", *args, env_extra=NO_KEYS)
             self.assertEqual(json.loads(out1)["members"], json.loads(out2)["members"])
             sc = write_json(td / "sc.json", {"pairwise": [{"contains": "literal]", "model": "claude-haiku-5-5", "pick_containing": True}]})
-            code, out, err = run_cli("eval_critic.py", str(c), "--locale", "tr-TR", "--tiers", "J1", "--dry-run", "--fake-scenario", str(sc), env_extra=NO_KEYS)
+            code, out, err = run_cli("eval_critic.py", str(c), "--locale", "tr-TR", "--tiers", "J1", "--dry-run", "--fake-scenario", str(sc),
+                                     "--keep-mixed-robots", env_extra=NO_KEYS)
             self.assertEqual(code, 1, err)
             self.assertIn("LOW", out)
+            # the fake literal lines keep their English words, by default such pairs are left out and nothing is left to measure
+            self.assertEqual(run_cli("eval_critic.py", str(c), "--locale", "tr-TR", "--tiers", "J1", "--dry-run", env_extra=NO_KEYS)[0], 2)
             self.assertIn("FAILED", out)
 
     def test_exit_2(self):
         with TempDir() as td:
             c = write_json(td / "c.json", cset())
             self.assertEqual(run_cli("eval_critic.py", str(c), "--locale", "tr-TR", "--tiers", "J9", "--dry-run", env_extra=NO_KEYS)[0], 2)
-            code, _, err = run_cli("eval_critic.py", str(c), "--locale", "tr-TR", env_extra=NO_KEYS)
+            code, _, err = run_cli("eval_critic.py", str(c), "--locale", "tr-TR", "--keep-mixed-robots", env_extra=NO_KEYS)
             self.assertEqual(code, 2)
             self.assertIn("API_KEY", err)
             bad = write_json(td / "bad.json", {"pairs": [{"key": "A", "native": "x"}]})
             self.assertEqual(run_cli("eval_critic.py", str(bad), "--locale", "tr-TR", "--dry-run", env_extra=NO_KEYS)[0], 2)
-            self.assertEqual(run_cli("eval_critic.py", str(c), "--locale", "tr-TR", "--dry-run", "--update-trust-card",
+            self.assertEqual(run_cli("eval_critic.py", str(c), "--locale", "tr-TR", "--dry-run", "--update-trust-card", "--keep-mixed-robots",
                                      "--langpack-dir", str(td / "none"), env_extra=NO_KEYS)[0], 2)
+
+    def test_untranslated_literal_lines_are_left_out_and_short_labels_judged_apart(self):
+        broken = {"key": "L1", "en": "Uncle Joe worked local systems across decades as a veteran mechanic.",
+                  "native": "Joe Amca onlarca yıl yerel sistemlerde çalışmış usta bir tamircidir.",
+                  "robot": "Uncle Joe local systems across decades boyunca worked veteran bir mechanic'tir."}
+        fine = {"key": "L2", "en": "Gamma Research Station", "native": "Gamma Araştırma İstasyonu", "robot": "Gamma Research İstasyonu"}
+        literal = {"key": "L3", "en": "Take your time, kid.", "native": "Acele etme evlat.", "robot": "Al senin zamanını, çocuk."}
+        self.assertEqual([ec.mixed_robot(p) for p in (broken, fine, literal)], [True, False, False])
+        self.assertEqual([ec.is_short(p) for p in (broken, fine, literal)], [False, True, False])
+        pairs = [dict(literal, key=f"S{i}", en="Save") for i in range(4)] + [dict(literal, key=f"G{i}") for i in range(4)]
+        router = Router(load_providers_config(), dry_run=True)
+        rep = ec.evaluate(router, "tr-TR", ["J1"], pairs, [], warmup=False, pack_dir=None, seed=1, warmup_count=5, pairwise_min=0.85,
+                          langpack_version=None)
+        m = rep["members"][0]
+        self.assertIn("pairwise_short", m)
+        self.assertIn("pairwise_long", m)
 
     def test_help_flags_documented(self):
         doc = (SCRIPTS / "CLI_REFERENCE.md").read_text(encoding="utf-8")

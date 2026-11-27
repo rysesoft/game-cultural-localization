@@ -384,6 +384,8 @@ UNASSIGNED = "unassigned"
 # The map in model prompts (used by eval_critic, jury, pass2_rewrite, orchestrator_stub)
 # --------------------------------------------------------------------------- #
 JUROR_FIELDS = ("screen", "element", "player_action", "inserted", "limit", "speaker", "listener", "register_hint")
+JURY_MAP = "CONTEXT_MAP.jury.md"        # the jurors' view of the map, in English
+JURY_NOTES = "line_notes.jury.json"     # the jurors' view of the line notes, in English
 WRITER_FIELDS = JUROR_FIELDS + ("notes",)
 MAP_HEADER = ("# Context map of this game\n\n"
               "Read this map before the first line. It describes the game, its world, its systems and its screens, as a professional "
@@ -415,24 +417,31 @@ class ContextPack:
     appendix: str = ""
     locale: str = ""
     source: str = ""
+    jury_text: str = ""                                                     # CONTEXT_MAP.jury.md, English
+    jury_notes: Dict[str, Dict[str, Any]] = field(default_factory=dict)     # line_notes.jury.json, English
 
     def __post_init__(self) -> None:
-        plain: Dict[str, List[str]] = defaultdict(list)
-        for label in self.notes:
-            if ":" in label:
-                plain[label.split(":", 1)[1]].append(label)
-        self._plain = {k: v[0] for k, v in plain.items() if len(v) == 1}
+        self._plain = _plain_labels(self.notes)
+        self._jury_plain = _plain_labels(self.jury_notes)
 
     def line(self, key: str, writer: bool = False) -> Dict[str, str]:
-        """Context fields of one key (exact label, or a plain name that labels exactly one Table:Key)."""
-        n = self.notes.get(key) or self.notes.get(self._plain.get(key, ""), {})
+        """Context fields of one key (exact label, or a plain name that labels exactly one Table:Key).
+
+        Jurors read the jury notes when they exist. The notes of the user's map are written in the user's language
+        by scouts who may have seen an existing translation, so they can carry that translation's words.
+        """
+        notes, plain = (self.jury_notes, self._jury_plain) if not writer and self.jury_notes else (self.notes, self._plain)
+        n = notes.get(key) or notes.get(plain.get(key, ""), {})
         return {f: str(n[f]) for f in (WRITER_FIELDS if writer else JUROR_FIELDS) if n.get(f)}
 
     def system(self, base: str, writer: bool = False) -> str:
-        """The system prompt with the map appended (and the locale appendix for writers). Unchanged without a map."""
-        if not self.text:
+        """The system prompt with the map appended (and the locale appendix for writers). Unchanged without a map.
+
+        Jurors read the English jury map when it exists, writers the user's map."""
+        text = self.jury_text if not writer and self.jury_text else self.text
+        if not text:
             return base
-        out = base.rstrip() + "\n\n" + MAP_HEADER + "\n\n" + self.text.strip() + "\n"
+        out = base.rstrip() + "\n\n" + MAP_HEADER + "\n\n" + text.strip() + "\n"
         if writer and self.appendix:
             out += "\n" + APPENDIX_HEADER.format(locale=self.locale) + "\n\n" + self.appendix.strip() + "\n"
         return out
@@ -450,8 +459,33 @@ class ContextPack:
         return n
 
 
+def _plain_labels(notes: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
+    plain: Dict[str, List[str]] = defaultdict(list)
+    for label in notes:
+        if ":" in label:
+            plain[label.split(":", 1)[1]].append(label)
+    return {k: v[0] for k, v in plain.items() if len(v) == 1}
+
+
+def _load_notes(path: Path) -> Dict[str, Dict[str, Any]]:
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(read_text(path).lstrip("﻿"))
+    except json.JSONDecodeError as exc:
+        raise L10nError(f"{path}: invalid JSON at line {exc.lineno}: {exc.msg}")
+    if not isinstance(data, dict):
+        raise L10nError(f"{path}: expected an object {{key: line note}}")
+    return {str(k): v for k, v in data.items() if isinstance(v, dict)}
+
+
 def load_context(map_path: Optional[Path], locale: str = "") -> ContextPack:
-    """ContextPack from CONTEXT_MAP.md, line_notes.json next to it and CONTEXT_MAP.<locale>.md when present."""
+    """ContextPack from CONTEXT_MAP.md and the files next to it.
+
+    line_notes.json (scout notes), CONTEXT_MAP.<locale>.md (choices of an existing translation, writers only),
+    CONTEXT_MAP.jury.md and line_notes.jury.json (the jurors' English view, used instead of the map and the
+    notes when present).
+    """
     if map_path is None:
         return ContextPack()
     map_path = Path(map_path)
@@ -460,19 +494,60 @@ def load_context(map_path: Optional[Path], locale: str = "") -> ContextPack:
     text = read_text(map_path).lstrip("﻿")
     if not text.strip():
         raise L10nError(f"{map_path}: the context map is empty")
-    notes: Dict[str, Dict[str, Any]] = {}
-    notes_path = map_path.with_name("line_notes.json")
-    if notes_path.is_file():
-        try:
-            data = json.loads(read_text(notes_path).lstrip("﻿"))
-        except json.JSONDecodeError as exc:
-            raise L10nError(f"{notes_path}: invalid JSON at line {exc.lineno}: {exc.msg}")
-        if not isinstance(data, dict):
-            raise L10nError(f"{notes_path}: expected an object {{key: line note}}")
-        notes = {str(k): v for k, v in data.items() if isinstance(v, dict)}
+    notes = _load_notes(map_path.with_name("line_notes.json"))
     appendix_path = map_path.with_name(f"{map_path.stem}.{locale}.md") if locale else None
     appendix = read_text(appendix_path).lstrip("﻿") if appendix_path is not None and appendix_path.is_file() else ""
-    return ContextPack(text, notes, appendix, locale, map_path.name)
+    jury_path = map_path.with_name(JURY_MAP)
+    jury_text = read_text(jury_path).lstrip("﻿") if jury_path.is_file() else ""
+    return ContextPack(text, notes, appendix, locale, map_path.name, jury_text, _load_notes(map_path.with_name(JURY_NOTES)))
+
+
+# --------------------------------------------------------------------------- #
+# Leak check of the jurors' view
+# --------------------------------------------------------------------------- #
+_WORD = re.compile(r"[^\W\d_]{4,}")
+
+
+def _words(text: str) -> set:
+    return {w.casefold() for w in _WORD.findall(text or "")}
+
+
+def target_only_words(rows: Sequence[Any]) -> set:
+    """Words (4 letters or more) of an existing translation that its source never uses. Juror text must not hold them."""
+    src: set = set()
+    tgt: set = set()
+    for r in rows:
+        src |= _words(r.src)
+        tgt |= _words(r.dst)
+    return tgt - src
+
+
+def check_leak(pack: ContextPack, rows: Sequence[Any], quote_min: int = 25) -> Dict[str, Any]:
+    """What the jurors read against an existing translation. Words only that translation uses, and quoted source lines.
+
+    The first calibration with a map passed partly on such words. Its scouts wrote the map in Turkish after reading the
+    studio's Turkish, so the jurors saw the studio's names (on 400 pairs the juror fields shared words with the studio
+    line only 115 times and with the literal line only 18 times).
+    """
+    vocab = target_only_words(rows)
+    texts: List[Tuple[str, str]] = [("map", pack.jury_text or pack.text)]
+    for key in (pack.jury_notes or pack.notes):
+        texts.append((key, " ".join(pack.line(key).values())))
+    hits: Counter = Counter()
+    first: Dict[str, str] = {}
+    leaky_notes = 0
+    for name, text in texts:
+        found = _words(text) & vocab
+        if found and name != "map":
+            leaky_notes += 1
+        for w in found:
+            hits[w] += 1
+            first.setdefault(w, name)
+    sources = {r.src.strip().casefold() for r in rows if len(r.src.strip()) >= quote_min}
+    juror_text = "\n".join(t for _, t in texts).casefold()
+    quoted = sorted(s for s in sources if s in juror_text)
+    return {"view": "jury" if pack.jury_text or pack.jury_notes else "user map", "words": [[w, n, first[w]] for w, n in hits.most_common()],
+            "notes_with_leaks": leaky_notes, "notes": len(texts) - 1, "quoted_source_lines": quoted}
 
 
 def locale_tables(shared: Path) -> Dict[str, Path]:
@@ -608,6 +683,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--source-locale", default="en", help="Locale of the source texts in the slice inputs (default en)")
     ap.add_argument("--locale", default=None, help="Target locale whose existing texts go into the slice inputs, for example tr-TR")
     ap.add_argument("--check-slices", action="store_true", help="Check that every key of <out>/slices/<slice>.input.json sits in exactly one entry of <slice>.report.json")
+    ap.add_argument("--check-leak", action="store_true", help="Check the jurors' view of --context-map against an existing translation (--reference) for its words and quoted source lines")
+    ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md for --check-leak (the jury files next to it are checked when present)")
+    ap.add_argument("--reference", default=None, help="Existing translation with key, en and the --locale column, for --check-leak")
     ap.add_argument("--project", default=None, help="Game project folder (a Unity project or its Assets folder)")
     ap.add_argument("--out", default=None, help="Output folder, for example loc_work/context (never inside the game project)")
     ap.add_argument("--keys-from", default=None, help="String table whose keys must be covered (for example the studio reference), reports keys without a usage")
@@ -635,12 +713,41 @@ def _check_main(args: argparse.Namespace, out: Path) -> int:
     return exit_code
 
 
+def _leak_main(args: argparse.Namespace) -> int:
+    ref = Path(args.reference)
+    if not ref.is_file():
+        raise L10nError(f"--reference file not found: {ref}")
+    rows = None
+    for col in (args.locale, "dst", "target"):
+        try:
+            rows = load_table(ref, "en", col, "key")
+            break
+        except L10nError:
+            continue
+    if rows is None:
+        raise L10nError(f"{ref}: no '{args.locale}' column")
+    res = check_leak(load_context(Path(args.context_map), args.locale), rows)
+    exit_code = EXIT_FINDINGS if res["words"] or res["quoted_source_lines"] else EXIT_OK
+    lines = [f"Leak check of the jurors' view ({res['view']}) against {ref.name}: {res['notes']} line notes, "
+             f"{res['notes_with_leaks']} with words of the existing translation, {len(res['words'])} distinct words, "
+             f"{len(res['quoted_source_lines'])} quoted source lines"]
+    for w, n, first in res["words"][:15]:
+        lines.append(f"  {w} {n}x, first in {first}")
+    lines.append(f"  Exit code: {exit_code}")
+    emit_report("\n".join(lines), {"tool": TOOL, "version": __version__, **res, "exit_code": exit_code}, args.json, args.output)
+    return exit_code
+
+
 def main() -> int:
     ap = build_parser()
     args = ap.parse_args()
-    modes = sum(1 for m in (args.scan or bool(args.slices), args.check_slices) if m)
+    modes = sum(1 for m in (args.scan or bool(args.slices), args.check_slices, args.check_leak) if m)
     if modes != 1:
-        ap.error("choose one mode, --scan (optionally with --slices) or --check-slices")
+        ap.error("choose one mode, --scan (optionally with --slices), --check-slices or --check-leak")
+    if args.check_leak:
+        if not (args.context_map and args.reference and args.locale):
+            ap.error("--check-leak needs --context-map, --reference and --locale")
+        return _leak_main(args)
     if not args.out:
         ap.error("--out is required")
     out = Path(args.out)

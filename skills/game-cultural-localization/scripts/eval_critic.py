@@ -27,6 +27,7 @@ import argparse
 import hashlib
 import json
 import random
+import re
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -88,6 +89,26 @@ def load_pairs(path: Path) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     if not pairs:
         raise L10nError(f"{path}: the contrastive set has no pairs")
     return data, sorted(pairs, key=lambda p: p["key"])
+
+
+_LATIN_WORD = re.compile(r"[A-Za-z]{3,}")
+SHORT_WORDS = 3  # a pair whose English has at most this many words is a short label, judged apart
+
+
+def mixed_robot(pair: Dict[str, Any]) -> bool:
+    """A literal line that kept English words of its source untranslated, the literal model failed on it.
+
+    Such a line is no test of a native ear, any reader spots it. The first set held 39 of them, all long lore lines.
+    """
+    src = {w.lower() for w in _LATIN_WORD.findall(str(pair.get("en", "")))}
+    native = {w.lower() for w in _LATIN_WORD.findall(pair["native"])}
+    robot = [w.lower() for w in _LATIN_WORD.findall(pair["robot"])]
+    kept = [w for w in robot if w in src and w not in native]
+    return len(kept) >= 3 and len(kept) >= 0.25 * max(1, len(robot))
+
+
+def is_short(pair: Dict[str, Any]) -> bool:
+    return len(str(pair.get("en", "")).split()) <= SHORT_WORDS
 
 
 def split_shots(pairs: Sequence[Dict[str, Any]], shots: int, limit: int, seed: int) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -209,11 +230,17 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
         for m in router.jury(tier):
             res = cache[m.model]
             correct = sum(1 for pid, side in native_side.items() if res["choices"][pid] == side)
+            hit = {pid: res["choices"][pid] == side for pid, side in native_side.items()}
+            short_ids = [p["key"] for p in pairs if is_short(p)]
+            long_ids = [p["key"] for p in pairs if not is_short(p)]
             by_kind: Dict[str, List[int]] = {"native": [], "robot": [], "unknown": []}
             for eid, (kind, _key) in meta.items():
                 by_kind["unknown" if kind.startswith("unknown:") else kind].append(res["scores"][eid])
             members.append({"tier": tier, "family": m.family, "model": m.model, "alias": m.alias,
-                            "pairwise_accuracy": round(correct / len(native_side), 4), "native_mean": _mean(by_kind["native"]),
+                            "pairwise_accuracy": round(correct / len(native_side), 4),
+                            "pairwise_short": round(sum(hit[k] for k in short_ids) / len(short_ids), 4) if short_ids else None,
+                            "pairwise_long": round(sum(hit[k] for k in long_ids) / len(long_ids), 4) if long_ids else None,
+                            "native_mean": _mean(by_kind["native"]),
                             "robot_mean": _mean(by_kind["robot"]), "unknown_mean": _mean(by_kind["unknown"]), "n": len(native_side),
                             "unknown_distribution": {str(s): by_kind["unknown"].count(s) for s in range(1, 6)} if by_kind["unknown"] else {}})
     keys = sorted(meta)
@@ -244,7 +271,9 @@ def _member_lines(rep: Dict[str, Any]) -> List[str]:
     for m in rep["members"]:
         mark = "ok " if m["pairwise_accuracy"] >= rep["gate"]["pairwise_min"] else "LOW"
         out.append(f"  {mark} {m['tier']} {m['model']:<20} pairwise {m['pairwise_accuracy']:.2f}  native {m['native_mean']}  "
-                   f"robot {m['robot_mean']}  unknown {m['unknown_mean']}  n {m['n']}")
+                   f"robot {m['robot_mean']}  unknown {m['unknown_mean']}  n {m['n']}"
+                   + (f"  short {m['pairwise_short']:.2f} long {m['pairwise_long']:.2f}" if m.get("pairwise_short") is not None
+                      and m.get("pairwise_long") is not None else ""))
     out.append(f"  kappa inter-family {rep['inter_family_kappa']}, intra-family {rep['intra_family_kappa']}")
     return out
 
@@ -265,6 +294,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--update-trust-card", action="store_true", help="Store the result in langpack/<locale>/trust_card.json under 'calibration'")
     ap.add_argument("--workers", type=int, default=4, help="Batches in flight per model, models run in parallel when above 1 (default 4, 1 = one call at a time)")
     ap.add_argument("--cache", default=None, help="JSON file that keeps every finished model; a rerun with the same pairs, seed and prompt only calls the missing models")
+    ap.add_argument("--keep-mixed-robots", action="store_true", help="Keep pairs whose literal line left English words untranslated (dropped by default, any reader spots them)")
     ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md of the game, its line_notes.json next to it gives every pair its context")
     add_model_args(ap)
     add_common_args(ap, TOOL)
@@ -286,6 +316,11 @@ def main() -> int:
     manifest = pack_dir / "manifest.json"
     version = load_json_data(manifest).get("langpack_version") if manifest.is_file() else None
     shots, evald = split_shots(pairs, args.shots, args.limit, args.seed)
+    dropped = [] if args.keep_mixed_robots else [p for p in evald if mixed_robot(p)]
+    evald = [p for p in evald if p not in dropped]
+    if not evald:
+        raise L10nError("every evaluated pair has a literal line with untranslated English words, the set measures nothing "
+                        "(a dry run set built by the fake provider looks like this, pass --keep-mixed-robots for it)")
     router = make_router(args, tiers, default_budget_path(Path(args.input)))
     if args.workers < 1:
         raise L10nError("--workers must be 1 or more")
@@ -306,7 +341,8 @@ def main() -> int:
         gate = with_w["gate"]
     else:
         report = evaluate(router, locale, tiers, evald, shots, warmup=not args.no_warmup, **kw)
-        lines = [f"Critic calibration {locale}: {len(evald)} pairs, {len(shots)} held out as few-shots, warm-up {'on' if report['warmup'] else 'off'}"]
+        lines = [f"Critic calibration {locale}: {len(evald)} pairs, {len(shots)} held out as few-shots, warm-up {'on' if report['warmup'] else 'off'}"
+                 + (f", {len(dropped)} pairs with an untranslated literal line left out" if dropped else "")]
         lines += _member_lines(report)
         gate = report["gate"]
     if args.update_trust_card:
@@ -316,7 +352,9 @@ def main() -> int:
         trust = load_json_data(card)
         main_rep = report.get("with_warmup", report)
         trust["calibration"] = {"gate": main_rep["gate"], "secondary": main_rep["secondary"], "pairs": len(evald),
-                                "members": [{k: m[k] for k in ("tier", "model", "pairwise_accuracy", "native_mean", "robot_mean")} for m in main_rep["members"]],
+                                "members": [{k: m.get(k) for k in ("tier", "model", "pairwise_accuracy", "pairwise_short", "pairwise_long", "native_mean", "robot_mean")}
+                                            for m in main_rep["members"]],
+                                "dropped_mixed_robots": len(dropped), "short_pairs": sum(1 for p in evald if is_short(p)),
                                 "inter_family_kappa": main_rep["inter_family_kappa"], "intra_family_kappa": main_rep["intra_family_kappa"],
                                 "langpack_version": version, "source": Path(args.input).name,  # file name only, no local path in a shipped card
                                 "context_map": main_rep.get("context_map"), "context_lines": main_rep.get("context_lines", 0)}
@@ -329,7 +367,8 @@ def main() -> int:
     for n in router.notes:
         lines.append(f"  NOTE: {n}")
     lines.append(f"  Exit code: {exit_code}")
-    payload = {"tool": TOOL, "version": __version__, **report, "notes": router.notes, "exit_code": exit_code}
+    payload = {"tool": TOOL, "version": __version__, **report, "dropped_mixed_robots": [p["key"] for p in dropped], "notes": router.notes,
+               "exit_code": exit_code}
     emit_report("\n".join(lines), payload, args.json, args.output)
     return exit_code
 

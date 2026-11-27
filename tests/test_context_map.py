@@ -411,6 +411,32 @@ class ContextInPromptTests(unittest.TestCase):
             with self.assertRaises(L10nError):
                 bcm.load_context(put(td / "bad" / "CONTEXT_MAP.md", "map"))
 
+    def test_jurors_read_the_english_view_and_the_leak_check_finds_the_answer_key(self):
+        # the first map was written in Turkish by scouts who had read the studio's Turkish, so the jurors saw the studio's words
+        with TempDir() as td:
+            folder = td / "context"
+            m = put(folder / "CONTEXT_MAP.md", "Oyuncu kontrat mektubunu okur.\n")
+            put(folder / "line_notes.json", json.dumps({"K00": {"screen": "kontrat mektubu", "notes": "stüdyo kontrat dedi"}}))
+            ref = write_text(td / "ref.csv", "key,en,tr-TR\nK00,Read the contract letter from the Federation office,Federasyon ofisinden gelen kontrat mektubunu oku\n")
+            leak = ("build_context_map.py", "--check-leak", "--context-map", str(m), "--reference", str(ref), "--locale", "tr-TR", "--json")
+            code, out, err = run_cli(*leak)
+            self.assertEqual(code, 1, err)
+            self.assertIn("kontrat", [w for w, _n, _first in json.loads(out)["words"]])
+            put(folder / "CONTEXT_MAP.jury.md", "The task line says Read the contract letter from the Federation office.\n")
+            put(folder / "line_notes.jury.json", json.dumps({"K00": {"screen": "contract letter", "notes": "jury notes carry no scout notes"}}))
+            pack = bcm.load_context(m, "tr-TR")
+            self.assertEqual(pack.line("K00"), {"screen": "contract letter"})                 # jurors read the English view
+            self.assertEqual(pack.line("K00", writer=True)["screen"], "kontrat mektubu")     # writers keep the user's map
+            self.assertIn("the contract letter from", pack.system("BASE"))
+            self.assertIn("kontrat mektubunu", pack.system("BASE", writer=True))
+            code, out, err = run_cli(*leak)
+            data = json.loads(out)
+            self.assertEqual((data["view"], data["words"]), ("jury", []))
+            self.assertEqual(data["quoted_source_lines"], ["read the contract letter from the federation office"])   # a quoted source line
+            self.assertEqual(code, 1, err)
+            put(folder / "CONTEXT_MAP.jury.md", "The player reads a letter about a contract.\n")
+            self.assertEqual(run_cli(*leak)[0], 0)
+
     def test_calibration_jurors_get_the_map_but_no_answer_key(self):
         import eval_critic as ec
         from providers import Router, load_providers_config
