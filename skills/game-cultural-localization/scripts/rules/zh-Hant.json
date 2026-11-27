@@ -7,35 +7,56 @@
     {
       "id": "ZHHANT-SIMPLIFIED-CHARS",
       "severity": "ERR",
-      "pattern": "[设认标优软网络应该这个对会说时间国与来们没发过学体经动长现实样还进电机气门问题买卖车欢为从后当档里]",
+      "pattern": "[设认标优软网络应该这个对会说时间国与来们没发过学体经动长现实样还进电机气门问题买卖车欢为从后当档]|[這这那哪心手家夜眼嘴屋腦脑夢梦懷怀]里|里(?:面|頭|头|邊|边)(?=[的有是，。、！？!?,.\\s]|$)",
       "flags": "",
-      "message": "Simplified-only character in a zh-Hant string (mechanical OpenCC / wrong table?)",
+      "message": "Simplified-only character in a zh-Hant string (mechanical OpenCC or wrong table?). 里 counts only in its inside sense (這里, 心里, 里面), which zh-Hant writes 裡 or 裏",
+      "note": "Narrowed after the 2026-11-27 run, where the bare character 里 fired on 17 lines with transliterated character names (such as 哈里森). 里 is a valid Traditional character for names, units such as 公里 and the Taiwanese ward (里長), so it left the character class. Only the inside sense is caught, after 這 这 那 哪 and nouns such as 心 手 家 夜 眼, or as 里面 里頭 里邊 at the end of a phrase.",
       "examples": {
         "match": [
           "这个设置",
-          "没问题"
+          "没问题",
+          "我在這里等你",
+          "心里有數",
+          "箱子里面有東西",
+          "手里拿著扳手"
         ],
         "nomatch": [
           "這個設定",
-          "沒問題"
+          "沒問題",
+          "哈里森總統已啟程",
+          "我是克里斯·里昂",
+          "五公里外",
+          "里長辦公室",
+          "瑪里面對敵人",
+          "這裡很安全"
         ]
       }
     },
     {
       "id": "ZHHANT-CN-TERMS-HARD",
       "severity": "ERR",
-      "pattern": "(?:設置|全屏|默認|鼠標|分辨率|空格鍵|軟件|視頻|網絡|服務器|菜單|登錄|存盤|等離子)",
+      "pattern": "(?:設置|全屏|默認|鼠標|分辨率|空格鍵|軟件|視頻|網絡|服務器|菜單|存盤|等離子)|(?:重新|自動|請先|無法|尚未)登錄(?!在案|為|於)|登錄(?:帳號|帳戶|賬號|账号|遊戲|游戏|伺服器|服務器|服务器|密碼|密码|畫面|界面|介面|頁面|页面|失敗|失败|成功|狀態|逾時|超時)|^\\s*登錄\\s*$|請登錄(?=[。！？!?，,\\s]|$)",
       "flags": "",
-      "message": "Mainland term in zh-Hant: use 螢幕 / 全螢幕 / 預設 / 滑鼠 / 解析度 / 空白鍵",
+      "message": "Mainland term in zh-Hant. Use 設定 / 全螢幕 / 預設 / 滑鼠 / 解析度 / 空白鍵, and 登入 to log in. 登錄 in the sense of on record (登錄在案) is Taiwanese and passes",
+      "note": "Narrowed after the 2026-11-27 run, where 登錄在案 (on record, registered) fired. 登錄 now fires only in its login sense, next to an account, game, server, password, screen, failure or success word, after 重新 自動 請先 無法 尚未, as 請登錄 at the end of a clause, or alone as a button label.",
       "examples": {
         "match": [
           "全屏模式",
           "預設改為默認",
-          "分辨率"
+          "分辨率",
+          "登錄帳號",
+          "請重新登錄",
+          "登錄",
+          "登錄失敗，請稍後再試",
+          "請登錄。"
         ],
         "nomatch": [
           "全螢幕模式",
-          "解析度"
+          "解析度",
+          "您的掃描報告也已經登錄在案",
+          "這艘船尚未登錄在案",
+          "資料已登錄為正式紀錄",
+          "登入帳號"
         ]
       }
     },

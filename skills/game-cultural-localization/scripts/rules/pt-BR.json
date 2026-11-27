@@ -148,15 +148,22 @@
     {
       "id": "PTBR-MOVER-PARA",
       "severity": "ERR",
-      "pattern": "\\bMover para\\b",
+      "pattern": "\\bMover\\s+(?:para|pra)\\s+(?:a\\s+)?(?:frente|tr[aá]s|esquerda|direita)\\b",
       "flags": "i",
-      "message": "Manual-speak keybinding 'Mover para a frente': use 'Avançar / Recuar'",
+      "message": "Manual-speak movement keybinding ('Mover para a frente'). Use 'Avançar', 'Recuar', 'Esquerda' or 'Direita'",
+      "note": "Narrowed after the 2026-11-27 run, where 'MOVER PARA O HANGAR' (a button that moves the ship) fired. Only a direction after 'Mover para' marks the keybinding, moving something to a place is normal Brazilian Portuguese. The rule stays ERR and does not skip short UI labels, because the keybinding it was written for is itself a short UI label.",
       "examples": {
         "match": [
-          "Mover para a frente"
+          "Mover para a frente",
+          "Mover para trás",
+          "MOVER PARA A ESQUERDA",
+          "Mover pra frente"
         ],
         "nomatch": [
-          "Avançar"
+          "Avançar",
+          "MOVER PARA O HANGAR",
+          "Mover a nave para o hangar",
+          "Mover para o depósito"
         ]
       }
     },

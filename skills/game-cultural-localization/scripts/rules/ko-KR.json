@@ -175,17 +175,32 @@
     {
       "id": "KO-PLACEHOLDER-PARTICLE",
       "severity": "ERR",
-      "pattern": "[}\\]>]\\s?(?:을|를|이|가|은|는|으로)(?=[\\s,.!?]|$)",
+      "pattern": "(?:\\}|%(?:\\d+\\$)?[sd]|%\\(\\w+\\)[sd])(?:</\\w+>|\\[/\\w+\\])*(?:이랑|이나|으로|을|를|이|가|은|는|과|와|로|나|랑|아|야)(?=[\\s,.!?…:;)\\]\\[\"'”’<~]|$)",
       "flags": "",
-      "message": "Particle attached directly to a placeholder breaks on vowel/consonant endings: use '{0}을(를)' or restructure ('{0}에서')",
+      "message": "Alternating particle glued to a placeholder breaks on vowel or consonant endings. Use '{0}을(를)', an engine particle selector or an invariant particle ('{0}에서')",
+      "note": "Narrowed after the 2026-11-27 run, where all 62 findings were a particle after a closing rich text tag around fixed text ('<u>철</u>을'), which the translator inflects correctly. The rule now needs a real placeholder (braces or printf %s %d), optionally wrapped in closing tags, so '<b>{0}</b>을' still fires. Only particles that alternate with the final consonant count (이/가, 은/는, 을/를, 과/와, 으로/로, 이나/나, 이랑/랑, 아/야). Invariant ones such as 에, 에서, 의, 도, 만, 까지 pass, and so does a counter between placeholder and particle ('{0}개를'). A particle after a space no longer counts, Korean never spaces a particle and a lone 이 or 은 there is another word. Bracket placeholders such as [ItemName] are left out because fixed key hints ('[E]를') look the same, a project can add them in rules/custom.",
       "examples": {
         "match": [
           "{0}을 획득했습니다",
-          "{itemName}가 필요합니다"
+          "{itemName}가 필요합니다",
+          "<b>{0}</b>을 획득했습니다",
+          "<color=#FFD700>{itemName}</color>를 장착하세요",
+          "{0}와 {1}",
+          "{0}로 이동",
+          "%s를 획득했습니다",
+          "{0}이나 {1}"
         ],
         "nomatch": [
           "{0}을(를) 획득했습니다",
-          "{0}에서 창고로"
+          "{0}에서 창고로",
+          "<u>철</u>을 창고에 보관하세요",
+          "<style=emphasis>제트팩</style>을 장착하세요",
+          "<b>격납고</b>가 사용 중입니다",
+          "{binding0} 키로 <u>도구 메뉴</u>를 열고",
+          "{0}개를 획득했습니다",
+          "{0}까지 남았습니다",
+          "{0}의 창고",
+          "[E]를 눌러 상호작용"
         ]
       }
     },

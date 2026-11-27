@@ -235,6 +235,86 @@ class OptionTests(unittest.TestCase):
         self.assertNotIn("[LEADING_SPACE]", out)
 
 
+class NarrowedRuleTests(unittest.TestCase):
+    """Six rules raised ERR on correct lines of the first real 13 language run (2026-11-27). Each real line stays clean, a true positive still fires."""
+
+    def codes(self, locale: str, dst: str, key: str = "k", category: str = "") -> set:
+        meta = {"category": category} if category else {}
+        rules = lqa_linter.load_rules(locale)
+        opt = lqa_linter.LintOptions(locale=locale, check_untranslated=False)
+        return {f.code for f in lqa_linter.lint_rows([Row(key, "", dst, meta)], rules, opt) if f.severity == "ERR"}
+
+    def assertClean(self, locale: str, rule: str, lines) -> None:
+        for line in lines:
+            self.assertNotIn(rule, self.codes(locale, line), f"{locale} {rule} fired on {line!r}")
+
+    def assertFires(self, locale: str, rule: str, lines) -> None:
+        for line in lines:
+            self.assertIn(rule, self.codes(locale, line), f"{locale} {rule} missed {line!r}")
+
+    def test_de_article_placeholder(self):
+        self.assertClean("de-DE", "DE-ARTICLE-PLACEHOLDER", [
+            "Bringt Teile von {0} ins Lager",           # Droid.Status.TransportTask, {0} is a place or machine name
+            "Kämpfe mit {0}", "Ein Geschenk aus {0}", "Flieg nach {0}", "Warte bei {0}",
+            "Nimm die {0} Teile", "Lade den {0}-Bauplan",  # the article belongs to a fixed noun
+        ])
+        self.assertFires("de-DE", "DE-ARTICLE-PLACEHOLDER", ["Geh zum {0}", "Nimm den {itemName} mit.", "Sprich mit der {npcName} am Tor"])
+
+    def test_ptbr_mover_para(self):
+        self.assertClean("pt-BR", "PTBR-MOVER-PARA", ["MOVER PARA O HANGAR", "Mover a nave para o hangar"])  # Machine.Ship.MoveToHangar
+        self.assertFires("pt-BR", "PTBR-MOVER-PARA", ["Mover para a frente", "MOVER PARA TRÁS", "Mover para a esquerda"])
+
+    def test_ptpt_gerund_start(self):
+        self.assertClean("pt-PT", "PTPT-GERUND-START", [
+            "Remendo do casco",                         # Machine.Ship.None, en "Patching", the noun 'patch'
+            "Comando", "Segundo andar", "Mundo aberto", "Fundo do mar", "Quando chegares", "Tremendo!", "Estupendo trabalho",
+            "Dividendo pago", "Adendo ao contrato",
+        ])
+        self.assertFires("pt-PT", "PTPT-GERUND-START", ["Carregando…", "Transferindo itens", "Remendando o casco", "Comandando a frota"])
+        self.assertNotIn("PTPT-GERUND-START", self.codes("pt-PT", "Transferindo itens", category="dialogue"))  # UI rule only
+
+    def test_zhhant_li_in_names(self):
+        self.assertClean("zh-Hant", "ZHHANT-SIMPLIFIED-CHARS", [
+            "我是多里安·克勞，銀河聯邦副總統。",            # Contract.contractDescription.Dorian_Crowe_0
+            "維克多·馬里克總統已啟程展開長期貿易之旅",        # Event.detail.DifferentCaptain1 and 15 more lines
+            "距離基地五公里", "里長辦公室", "瑪里面對敵人", "這裡很安全，心裡有數",
+        ])
+        self.assertFires("zh-Hant", "ZHHANT-SIMPLIFIED-CHARS", ["这个设置", "我在這里等你", "那里沒有人", "心里有數", "箱子里面有東西"])
+
+    def test_zhhant_login_term(self):
+        self.assertClean("zh-Hant", "ZHHANT-CN-TERMS-HARD", [
+            "我們收到您修好的戰機了，您的掃描報告也已經登錄在案。",  # Contract.contractDescription.Federation_Quest_3
+            "這艘船尚未登錄在案", "登入帳號",
+        ])
+        self.assertFires("zh-Hant", "ZHHANT-CN-TERMS-HARD", ["登錄帳號", "請重新登錄", "登錄", "登錄失敗，請稍後再試", "全屏模式"])
+
+    def test_ko_placeholder_particle(self):
+        self.assertClean("ko-KR", "KO-PLACEHOLDER-PARTICLE", [
+            "<u>철</u>을 창고에 보관하세요.",                                 # TutorialGuide.Label.HaveIronInStorage
+            "<u>도구 메뉴</u> {binding0}에서 <u>분해 레이저</u>를 장착해 보세요.",  # TutorialGuide.Label.Disassemble
+            "<style=emphasis>제트팩</style>을 장착하세요.",                     # TutorialNotification.PickupJetpack
+            "<b>격납고</b>가 사용 중입니다.",                                  # Warning.HangarBusy
+            "<style=emphasis>레이저 권총</style>으로 작업장을 지키세요.",          # Warning.DefendWorkshop
+            "{0}에서 창고로", "{0}의 창고", "{0}개를 획득했습니다", "{0}까지", "{0}을(를) 획득했습니다", "[E]를 눌러 상호작용",
+        ])
+        self.assertFires("ko-KR", "KO-PLACEHOLDER-PARTICLE", [
+            "{0}을 획득했습니다", "{itemName}가 필요합니다", "<b>{0}</b>을 획득했습니다", "<color=red>{0}</color>는 사용할 수 없습니다",
+            "{0}와 {1}", "{0}로 이동", "%s를 획득했습니다",
+        ])
+
+    def test_real_ko_rows_through_the_cli(self):
+        with TempDir() as td:
+            f = write_json(td / "ko.json", [
+                {"key": "TutorialGuide.Label.HaveCockpit", "en": "Craft a <u>Cockpit</u>", "ko-KR": "<u>조종석</u>을 직접 만드세요"},
+                {"key": "TutorialPopup.StorageDesc", "en": "The <style=emphasis>Storage</style> is", "ko-KR": "<style=emphasis>창고</style>는 작업장의 보관소예요"},
+                {"key": "Bad", "en": "Got {0}", "ko-KR": "{0}을 획득했습니다"},
+            ])
+            code, out, err = run_cli("lqa_linter.py", "--input", str(f), "--locale", "ko-KR", "--src-field", "en", "--dst-field", "ko-KR", "--json")
+            self.assertEqual(code, 1, err)
+            keys = [x["key"] for x in json.loads(out)["findings"] if x["code"] == "KO-PLACEHOLDER-PARTICLE"]
+            self.assertEqual(keys, ["Bad"])
+
+
 class PerformanceTests(unittest.TestCase):
     def test_50k_rows_under_10s(self):
         rules = lqa_linter.load_rules("de-DE")
