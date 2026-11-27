@@ -375,6 +375,14 @@ def tag_structure_error(tags: Sequence[Tag]) -> Optional[str]:
     return None
 
 
+def parity_problems(src: str, dst: str, ph_style: str = "auto", tag_style: str = "auto") -> List[str]:
+    """Placeholder and rich-text tag problems of a translation against its source line (empty = parity OK)."""
+    if not str(src).strip() or not str(dst).strip():
+        return []
+    return (compare_placeholders(extract_placeholders(src, ph_style), extract_placeholders(dst, ph_style))
+            + compare_tags(extract_tags(src, tag_style), extract_tags(dst, tag_style)))
+
+
 def compare_tags(src_tags: Sequence[Tag], dst_tags: Sequence[Tag]) -> List[str]:
     """Return parity problems between two tag sequences (multiset + structure)."""
     problems: List[str] = []

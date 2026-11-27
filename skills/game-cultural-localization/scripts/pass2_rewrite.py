@@ -8,8 +8,8 @@ For every verdict that needs work (rewrite_light, rewrite, critical, and unresol
      and the context, never the source, and each picks the most natural one. Most picks wins, a tie goes
      to the earlier candidate. When the current line wins it stays, a good line is not rewritten for nothing
   3. the winner is checked with validate_critique (critique schema, placeholder and tag parity with
-     the current line). When it fails the next candidate by votes is tried. When none passes, the old
-     line stays and the line is flagged
+     the English source line, also when the jury named a placeholder problem). When it fails the next
+     candidate by votes is tried. When none passes, the old line stays and the line is flagged
   4. a new winner is scored once more by the three J1 members. Unless they pass it by the agreement rule
      of the jury, the old line stays and the line is flagged for the developer
 
@@ -164,7 +164,8 @@ def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[st
                  "suggested": texts[idx]}
             doc = {"locale": locale, "source_file": source_file, "entries": [e],
                    "summary": {"total": 1, "flagged": 1, "critical": 1 if e["score"] <= 2 else 0}}
-            problems = validate_critique.validate(doc, {key: r["target"]}, ph_style, tag_style, locale)
+            # placeholders and tags against the source line, also when the jury named a placeholder problem
+            problems = validate_critique.validate(doc, {key: r["target"]}, ph_style, tag_style, locale, sources={key: r["source"]})
             if not problems:
                 chosen, entry = idx, e
                 break

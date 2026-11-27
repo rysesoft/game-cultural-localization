@@ -159,7 +159,7 @@ python validate_critique.py --critique critique_<locale>_<batch>.json [--slice b
 
 `--critique` (or the positional) is the critic output file. The tool validates the fixed schema `{locale, source_file, entries[{key, score 1-5, issue_type, reason, suggested}], summary{total, flagged, critical}}`.
 Only entries with a score below 5 are listed. `issue_type` is one of `translationese`, `register`, `tense`, `regional_leak`, `gender_leak`, `ui_verb`, `placeholder_grammar`, `terminology` or `other`, and `critical` counts the entries with a score of 2 or lower. With `--slice` every key must exist in the slice and `suggested` must keep placeholder and tag parity
-with the slice target (an entry typed `placeholder_grammar` may deliberately repair tokens). `--placeholder-style` and `--tag-style` work as for the linter.
+with the slice target (an entry typed `placeholder_grammar` may deliberately repair tokens, the blind critic never sees the source). `--placeholder-style` and `--tag-style` work as for the linter. Pass 2 knows the source line and calls the same check with it, then placeholders and tags are compared with the source line, without the `placeholder_grammar` exception.
 
 ---
 
@@ -560,7 +560,7 @@ For every verdict with status `rewrite_light`, `rewrite`, `critical` or `unresol
 
 1. The `pass2` model (default Opus) writes three different candidates with `prompts/pass2.<locale>.md` (a native prompt for each of the 15 locales, `pass2.generic.md` only as a fallback). It sees the English source, the current line, the context, the jury rationales and suggestions and the closest approved translation memory lines.
 2. The three J1 members see the candidates and the current line among them (seeded order, ids `c1` to `c4`) and the context, never the source, and each picks the most natural one. Most picks wins, a tie goes to the earlier candidate. When the current line wins it stays (`kept_by_pick`), a line the jurors still prefer is not rewritten for nothing.
-3. A new winner goes through `validate_critique` (fixed critique schema, placeholder and tag parity with the current line, not identical to it). When it fails, the next candidate by votes is tried. When none passes, the old line stays and the line is reported.
+3. A new winner goes through `validate_critique` (fixed critique schema, placeholder and tag parity with the English source line, also when the jury named a `placeholder_grammar` problem, not identical to the current line). When it fails, the next candidate by votes is tried. When none passes, the old line stays and the line is reported.
 4. A new winner is scored once more by the three J1 members (`recheck`). Unless they pass it by the jury's agreement rule, the old line stays and the line is reported to the developer, a rewrite nobody confirmed never replaces a line.
 
 | Flag | Meaning |
@@ -628,12 +628,12 @@ The last step of the jury flow. It merges the final batches, applies the decisio
 
 | Template | What changes |
 |---|---|
-| `.asset` | Unity StringTable of the target locale. Only `m_Localized` of the known keys, every other line stays as it was and an unchanged text keeps its original line. Key names come from the collection's Shared Data asset, found next to the table by its `m_SharedData` guid. A key the table has no entry for gets a new entry. SmartFormat and rich text pass through as text. The written file is read back and compared before it is kept |
+| `.asset` | Unity StringTable of the target locale. Only `m_Localized` of the known keys, every other line stays as it was and an unchanged text keeps its original line. Key names come from the collection's Shared Data asset, found next to the table by its `m_SharedData` guid. A key the table has no entry for gets a new entry. SmartFormat and rich text pass through as text. The written file is read back and compared before it is kept, every written line also by a strict YAML reader, since the plugin's own reader takes a broken line too |
 | `.csv`, `.tsv` | the target column (`--dst-field`, default the locale code) of the known keys, other columns, the delimiter, the line ends and a BOM stay |
 | `.json` | the target field of a list of objects, or the value of a `{key: text}` map |
 | `.po` | `msgstr`, or `msgstr[n]` for the plural keys `msgid\|[n]`, the `fuzzy` flag of a filled entry is dropped |
 
-A key name two Unity tables share needs its `Table:Key` label in the final files (the form `build_context_map.py` uses), otherwise the export stops instead of guessing. Only Unity tables with a changed text are written. On the first project a round trip of the studio reference through all 23 Turkish tables left every table byte for byte the same.
+A text whose placeholders or rich text tags differ from its source line (the `en` column of the final files) is held back. It is not written, the game's table keeps the text it has, and the key is listed under `held_back` with the difference. A text without a source line is not checked. A key name two Unity tables share needs its `Table:Key` label in the final files (the form `build_context_map.py` uses), otherwise the export stops instead of guessing. Only Unity tables with a changed text are written. On the first project a round trip of the studio reference through all 23 Turkish tables left every table byte for byte the same.
 
 | Flag | Meaning |
 |---|---|
@@ -646,8 +646,9 @@ A key name two Unity tables share needs its `Table:Key` label in the final files
 | `--out` | output folder, refused inside a Unity, Godot or Unreal project and as the folder of a template |
 | `--dst-field` | target column of the final files and of a CSV or JSON template, default the locale code |
 | `--key-field` | key column, default `key` |
+| `--placeholder-style`, `--tag-style` | syntax for the parity check against the source line, default `auto` or `placeholder_style` and `tag_style` of `--config` |
 
-Exit codes. 0 exported, every changed line decided and every key placed. 1 exported but changed lines without a decision or keys no template holds. 2 usage or input error (a decision other than accept or reject, a key two tables share without its label, an output inside the game project).
+Exit codes. 0 exported, every changed line decided and every key placed. 1 exported but changed lines without a decision, texts held back for their placeholders or tags, or keys no template holds. 2 usage or input error (a decision other than accept or reject, a key two tables share without its label, an output inside the game project).
 
 ## Prompt templates (prompts/)
 
@@ -673,7 +674,7 @@ Not a standalone Python module, it uses the workflow DSL with top-level `await`.
    with args {"locale": "de-DE", "scratch_dir": "loc_work", "batches": ["01", "02"], "plugin_dir": "<plugin path>", "fonts": [], "placeholder_style": "unity", "tag_style": "tmp", "context_map": "loc_work/context/CONTEXT_MAP.md"}
 ```
 
-`context_map` defaults to `<scratch_dir>/context/CONTEXT_MAP.md`. Phase 0 stops at once when the map is missing, nothing is translated or judged before it exists. Pass 1 and Pass 2 read the map, the locale appendix `CONTEXT_MAP.<locale>.md` and the line notes, and choose every word for the place of the line, no term is locked in a list. The blind critic reads the slice (with `archetype`), the map and the neutral fields of the line notes, never the appendix.
+`context_map` defaults to `<scratch_dir>/context/CONTEXT_MAP.md`. Phase 0 stops at once when the map is missing, nothing is translated or judged before it exists. Pass 1 and Pass 2 read the map, the locale appendix `CONTEXT_MAP.<locale>.md` and the line notes, and choose every word for the place of the line, no term is locked in a list. The blind critic reads the slice (with `archetype`), the jurors' English view of the map (`CONTEXT_MAP.jury.md`) and the neutral fields of `line_notes.jury.json`, the user's map and notes only when there is no English view, never the appendix and never a pass1 or final batch. Its blindness rests on its prompt and on its two tools, `view_file` and `write_to_file`. Antigravity offers no per call tool limit, so the critic could still open a file with the source column. In the API flow (`jury.py`) the code keeps the source out of every juror's request.
 
 Phase 0 pre-flight, Phase 1 Pass 1 (`game-culturalizer`, parallel per batch, failed batches retried one by one), Phase 2 `make_blind_slice`, `native-ear-critic`, `validate_critique` and Pass 2, Phase 3 gate (`lqa_linter --fail-on-error`, `ui_expansion_checker --fail-on-high`, `font_glyph_scanner`). The template drives the single critic flow, the multi-family jury runs through `orchestrator_stub.py --dry-run` or `--live`.
 

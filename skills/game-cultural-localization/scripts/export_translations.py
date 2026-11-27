@@ -6,7 +6,9 @@ changes_<locale>_<batch>.json with an empty 'decision' per flagged line. This to
   1. merges the final batches (key -> target text),
   2. applies the decisions of the change reports. accept keeps the new line, reject puts the old line back.
      A changed line without a decision keeps its final text and is reported, nothing ships undecided unseen,
-  3. writes the texts in the format of the game's own tables, never into the game project.
+  3. holds back every text whose placeholders or rich text tags differ from its source line (the en column of
+     the final files). It is not written, the game keeps the text it has, and the key is reported,
+  4. writes the texts in the format of the game's own tables, never into the game project.
 
 Formats, chosen by the template, the table the game already has for the target locale
   .asset     Unity Localization StringTable. Only m_Localized of the known keys changes, every other line stays
@@ -14,7 +16,8 @@ Formats, chosen by the template, the table the game already has for the target l
              m_SharedData guid, or --shared-table). A key the table has no entry for gets a new entry.
              SmartFormat and rich text markers are plain text to this tool and pass through unchanged. Texts are
              written as YAML double quoted scalars with line breaks as \\n, and the written file is read back and
-             compared before it is kept.
+             compared before it is kept, every written line also by a strict YAML reader (the plugin's own reader
+             is lenient and would take a broken line).
   .csv .tsv  the target column (--dst-field, default the locale code) of the matching keys, other columns kept
   .json      a list of objects or {key: text or object}, the target field of the matching keys
   .po        msgstr (msgstr[n] for plural keys 'msgid|[n]') of the matching keys, the fuzzy flag of a filled entry dropped
@@ -33,7 +36,7 @@ Never writes into a game project. --out is refused inside a Unity, Godot or Unre
 files keep the template's file name, so the developer copies them over the originals by hand.
 
 Exit codes: 0 exported, every changed line decided and every key placed, 1 exported but changed lines without
-a decision or keys no template holds, 2 usage or input error.
+a decision, texts held back for their placeholders or tags, or keys no template holds, 2 usage or input error.
 Python 3.9+, standard library only.
 """
 
@@ -52,9 +55,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from l10n_common import (  # noqa: E402
-    EXIT_FINDINGS, EXIT_OK, L10nError, _yaml_scalar, add_common_args, add_input_argument, emit_report, load_json_data,
-    load_table, normalize_locale, parse_po, parse_unity_yaml, read_text_bom, resolve_input, run_main, sniff_delimiter,
-    __version__,
+    EXIT_FINDINGS, EXIT_OK, PLACEHOLDER_STYLES, TAG_STYLES, L10nError, _yaml_scalar, add_common_args, add_input_argument, apply_config,
+    emit_report, load_json_data, load_table, normalize_locale, parity_problems, parse_po, parse_unity_yaml, read_text_bom, resolve_input,
+    run_main, sniff_delimiter, __version__,
 )
 
 TOOL = "export_translations"
@@ -98,8 +101,12 @@ def collect_inputs(inp: Path, locale: str, changes: Sequence[str]) -> Tuple[List
     return finals, reports
 
 
-def load_finals(paths: Sequence[Path], locale: str, dst_field: Optional[str], key_field: str) -> Dict[str, str]:
-    """key -> final text from every final file. One key with two different texts is an input error."""
+def load_finals(paths: Sequence[Path], locale: str, dst_field: Optional[str], key_field: str,
+                sources: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """key -> final text from every final file. One key with two different texts is an input error.
+
+    `sources` collects the English source line of every key whose final file carries one (the en column).
+    """
     out: Dict[str, str] = {}
     for p in paths:
         rows = None
@@ -115,7 +122,25 @@ def load_finals(paths: Sequence[Path], locale: str, dst_field: Optional[str], ke
             if r.key in out and out[r.key] != r.dst:
                 raise L10nError(f"{p}: key '{r.key}' has two different final texts")
             out[r.key] = r.dst
+            src = r.src or str((r.meta or {}).get("en") or "")  # target_only leaves src empty, the row keeps its columns
+            if sources is not None and src.strip():
+                sources[r.key] = src
     return out
+
+
+def hold_back_broken(final: Dict[str, str], sources: Dict[str, str], ph_style: str, tag_style: str) -> Dict[str, List[str]]:
+    """Take every text whose placeholders or rich text tags differ from its source line out of `final` (in place).
+
+    Such a text crashes or garbles the game where the code fills the placeholder. It is not written, the game's
+    table keeps the text it has, and the key is reported. A text without a source line is not checked.
+    """
+    held: Dict[str, List[str]] = {}
+    for key in list(final):
+        problems = parity_problems(sources.get(key, ""), final[key], ph_style, tag_style)
+        if problems:
+            held[key] = problems
+            del final[key]
+    return held
 
 
 def apply_decisions(final: Dict[str, str], reports: Sequence[Path]) -> Dict[str, Any]:
@@ -175,8 +200,70 @@ def yaml_dq(text: str) -> str:
     return '"' + "".join(out) + '"'
 
 
-def unity_rewrite(text: str, id_texts: Dict[str, str]) -> str:
-    """Replace m_Localized of the given key ids, append entries for ids the table lacks. Other lines stay as they were."""
+_DQ_ESCAPES = {"\\": "\\", '"': '"', "/": "/", " ": " ", "0": "\0", "a": "\a", "b": "\b", "t": "\t", "\t": "\t", "n": "\n",
+               "v": "\v", "f": "\f", "r": "\r", "e": "\x1b", "N": "\x85", "_": "\xa0", "L": " ", "P": " "}
+_DQ_HEX = {"x": 2, "u": 4, "U": 8}
+
+
+def strict_dq(value: str) -> str:
+    """Decode one YAML double quoted scalar on one line the way the YAML spec reads it, ValueError when it is not one.
+
+    The plugin's own Unity reader is lenient and reads a broken line too, so it cannot check what the export wrote.
+    """
+    v = value.strip()
+    if len(v) < 2 or v[0] != '"' or v[-1] != '"':
+        raise ValueError("not a double quoted scalar on one line")
+    out: List[str] = []
+    i, end = 1, len(v) - 1
+    while i < end:
+        ch = v[i]
+        if ch == '"':
+            raise ValueError(f"unescaped quote at column {i}")
+        if ch != "\\":
+            out.append(ch)
+            i += 1
+            continue
+        if i + 1 >= end:
+            raise ValueError("escape at the end of the scalar")
+        esc = v[i + 1]
+        if esc in _DQ_HEX:
+            digits = v[i + 2:i + 2 + _DQ_HEX[esc]]
+            if len(digits) != _DQ_HEX[esc] or i + 2 + len(digits) > end or any(c not in "0123456789abcdefABCDEF" for c in digits):
+                raise ValueError(f"bad \\{esc} escape at column {i}")
+            out.append(chr(int(digits, 16)))
+            i += 2 + len(digits)
+            continue
+        if esc not in _DQ_ESCAPES:
+            raise ValueError(f"unknown escape \\{esc} at column {i}")
+        out.append(_DQ_ESCAPES[esc])
+        i += 2
+    return "".join(out)
+
+
+def check_written(text: str, written: Dict[str, str]) -> List[str]:
+    """Key ids whose written m_Localized line does not decode strictly to its text, or is missing."""
+    seen: Dict[str, bool] = {}
+    cur: Optional[str] = None
+    for ln in text.splitlines():
+        m = _ENTRY_ID.match(ln)
+        if m:
+            cur = m.group(2)
+            continue
+        lm = _LOCALIZED.match(ln)
+        if lm and cur in written and cur not in seen:
+            try:
+                seen[cur] = strict_dq(lm.group(2)) == written[cur]
+            except ValueError:
+                seen[cur] = False
+    return [i for i in written if not seen.get(i)]
+
+
+def unity_rewrite(text: str, id_texts: Dict[str, str], written: Optional[Dict[str, str]] = None) -> str:
+    """Replace m_Localized of the given key ids, append entries for ids the table lacks. Other lines stay as they were.
+
+    `written` collects the ids whose line this call wrote anew (with the text), for the strict read back.
+    """
+    written = {} if written is None else written
     nl = "\r\n" if "\r\n" in text else "\n"
     lines = text.split(nl)
     out: List[str] = []
@@ -196,6 +283,7 @@ def unity_rewrite(text: str, id_texts: Dict[str, str]) -> str:
                 out.extend(lines[i:i + 1 + used])
             else:
                 out.append(f"{lm.group(1)}m_Localized: {yaml_dq(id_texts[cur])}")
+                written[cur] = id_texts[cur]
             done.add(cur)
             i += 1 + used
             continue
@@ -210,12 +298,20 @@ def unity_rewrite(text: str, id_texts: Dict[str, str]) -> str:
         base = tm.group(1)
         if tm.group(2):  # an empty table, 'm_TableData: []'
             out[idx] = f"{base}m_TableData:"
-        end = idx + 1
-        while end < len(out) and (out[end].startswith(base + "- ") or (out[end].strip() and len(out[end]) - len(out[end].lstrip(" ")) > len(base))):
-            end += 1
+        # the list ends at the first line that is neither an item nor indented deeper. An empty line inside it is a
+        # paragraph break of a text written over several lines, not the end of the list
+        last, j = idx, idx + 1
+        while j < len(out):
+            if out[j].strip():
+                if not (out[j].startswith(base + "- ") or len(out[j]) - len(out[j].lstrip(" ")) > len(base)):
+                    break
+                last = j
+            j += 1
+        end = last + 1
         block: List[str] = []
         for kid in missing:
             block += [f"{base}- m_Id: {kid}", f"{base}  m_Localized: {yaml_dq(id_texts[kid])}", f"{base}  m_Metadata:", f"{base}    m_Items: []"]
+            written[kid] = id_texts[kid]
         out[end:end] = block
     return nl.join(out)
 
@@ -282,13 +378,15 @@ def export_unity(final: Dict[str, str], templates: Sequence[Path], shared_overri
     for t, id_texts in per_table.items():
         if not id_texts:
             continue
-        new = unity_rewrite(texts[t], id_texts)
+        written: Dict[str, str] = {}
+        new = unity_rewrite(texts[t], id_texts, written)
         placed += len(id_texts)
         if new == texts[t]:  # every text is already in the game, the developer has nothing to copy
             unchanged += 1
             continue
         got = {e["id"]: e["text"] for e in parse_unity_yaml(new)["entries"] if e.get("text") is not None}
         wrong = [i for i, s in id_texts.items() if got.get(i) != s]
+        wrong += [i for i in check_written(new, written) if i not in wrong]  # strict, the lenient reader takes broken YAML too
         if wrong:
             raise L10nError(f"{t.name}: read back differs for key ids {', '.join(wrong[:5])}, nothing written")
         dest = out_dir / t.name
@@ -407,6 +505,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--out", required=True, help="Output folder, for example loc_work/export (never inside the game project)")
     ap.add_argument("--dst-field", default=None, help="Target column of the final files and of a CSV or JSON template (default: the locale code)")
     ap.add_argument("--key-field", default="key", help="Key column (default key)")
+    ap.add_argument("--placeholder-style", choices=PLACEHOLDER_STYLES, default=None,
+                    help="Placeholder syntax for the parity check against the source line (default auto, or placeholder_style of --config)")
+    ap.add_argument("--tag-style", choices=TAG_STYLES, default=None, help="Rich text tag syntax for the same check (default auto, or tag_style of --config)")
     add_common_args(ap, TOOL)
     return ap
 
@@ -415,6 +516,7 @@ def main() -> int:
     ap = build_parser()
     args = ap.parse_args()
     resolve_input(ap, args)
+    apply_config(args, {"placeholder_style": "auto", "tag_style": "auto"})
     locale, _v = normalize_locale(args.locale)
     templates = [Path(t) for t in args.template]
     if args.template_dir:
@@ -441,8 +543,10 @@ def main() -> int:
     if any(out_dir.resolve() == t.resolve().parent for t in templates):
         raise L10nError("--out must not be the folder of a template, the export never overwrites the game's own files")
     finals, reports = collect_inputs(Path(args.input), locale, args.changes)
-    final = load_finals(finals, locale, args.dst_field, args.key_field)
+    sources: Dict[str, str] = {}
+    final = load_finals(finals, locale, args.dst_field, args.key_field, sources)
     decided = apply_decisions(final, reports)
+    held = hold_back_broken(final, sources, args.placeholder_style, args.tag_style)
     out_dir.mkdir(parents=True, exist_ok=True)
     dst_field = args.dst_field or locale
     files: List[str] = []
@@ -470,14 +574,17 @@ def main() -> int:
         placed += res["placed"]
         placed_keys |= set(res["keys"])
     not_placed = sorted(set(final) - placed_keys)
-    findings = bool(decided["undecided"] or not_placed)
+    findings = bool(decided["undecided"] or not_placed or held)
     exit_code = EXIT_FINDINGS if findings else EXIT_OK
-    lines = [f"Export {locale}: {len(final)} final lines from {len(finals)} file(s), {len(reports)} change report(s)",
+    lines = [f"Export {locale}: {len(final) + len(held)} final lines from {len(finals)} file(s), {len(reports)} change report(s)",
              f"  decisions accepted {decided['accepted']}, rejected {decided['rejected']}, changed lines without a decision {len(decided['undecided'])}",
              f"  placed {placed} texts, wrote {len(files)} file(s) with changes to {out_dir}: {', '.join(files) or 'none'}"
              + (f", {unchanged} Unity table(s) already hold every text and were not written" if unchanged else "")]
     if decided["undecided"]:
         lines.append(f"  without a decision (final text kept): {', '.join(decided['undecided'][:10])}")
+    if held:
+        lines.append(f"  held back, placeholders or tags differ from the source line (the game keeps its text): {len(held)}")
+        lines += [f"    {k}: {'. '.join(p)}" for k, p in list(held.items())[:10]]
     if not_placed:
         lines.append(f"  keys no template holds: {len(not_placed)}, first {', '.join(not_placed[:10])}")
     if decided["unknown"]:
@@ -485,7 +592,7 @@ def main() -> int:
     lines.append(f"  Exit code: {exit_code}")
     payload = {"tool": TOOL, "version": __version__, "locale": locale, "files": files, "placed": placed, "unchanged_tables": unchanged,
                "accepted": decided["accepted"], "rejected": decided["rejected"], "undecided": decided["undecided"],
-               "not_placed": not_placed, "unknown_report_keys": decided["unknown"], "exit_code": exit_code}
+               "not_placed": not_placed, "held_back": held, "unknown_report_keys": decided["unknown"], "exit_code": exit_code}
     emit_report("\n".join(lines), payload, args.json, args.output)
     return exit_code
 

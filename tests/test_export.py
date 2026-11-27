@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -79,6 +80,44 @@ class UnityTests(unittest.TestCase):
             out2 = td / "export2"
             code, stdout, _ = run_cli("export_translations.py", str(same), "--locale", "tr-TR", "--template-dir", str(tables), "--out", str(out2), "--json")
             self.assertEqual((code, json.loads(stdout)["files"], json.loads(stdout)["unchanged_tables"]), (0, [], 1))   # nothing to copy
+
+    def test_strict_read_back_catches_a_broken_writer(self):
+        # an outside audit removed the quote escape of the writer, the lenient reader took the broken line and the files were kept
+        tricky = ['Devam et: "test" #1 \'tek\'', "a\\b\\\\c", "satır\nsatır\r\n\tsekme", "zil\x07 sil\x7f", "ğüşİıöç 🚀", "", "{0} <b>x</b>"]
+        for s in tricky:
+            self.assertEqual(ex.strict_dq(ex.yaml_dq(s)), s)
+        for bad in ('"Devam et: "test" #1"', '"a\\qb"', '"\\x4"', '"open', "plain", '"end\\"'):
+            with self.assertRaises(ValueError, msg=bad):
+                ex.strict_dq(bad)
+        with TempDir() as td:
+            tables = unity_game(td)
+            final = write_json(td / "final_batch_01.json", [{"key": "Hud.Title", "tr-TR": 'Devam et: "test" #1'}])
+            out = td / "export"
+            broken = lambda text: '"' + text.replace("\\", "\\\\") + '"'   # forgets to escape the quote
+            with mock.patch.object(ex, "yaml_dq", broken):
+                with self.assertRaises(ex.L10nError) as ctx:
+                    ex.export_unity(ex.load_finals([final], "tr-TR", None, "key"), [tables / "Hud" / "Hud_tr-TR.asset"], None, out)
+            self.assertIn("read back differs", str(ctx.exception))
+            self.assertFalse(out.exists() and any(out.iterdir()))           # nothing written
+
+    def test_a_text_that_lost_a_placeholder_is_held_back(self):
+        # Pass 2 or a hand edit dropped {0}, the game keeps its own text for that key and the export says so
+        with TempDir() as td:
+            tables = unity_game(td)
+            final = write_json(td / "final_batch_01.json", [
+                {"key": "Hud.Title", "en": "Title of {0}", "tr-TR": "Başlık"},                   # {0} lost
+                {"key": "Hud.New", "en": "New <b>line</b>", "tr-TR": "Yeni <b>satır</b>"},         # fine
+                {"key": "Hud.Count", "en": "{0:plural:one item|{} items}", "tr-TR": "{0:plural:tek eşya|{} eşya}"}])
+            out = td / "export"
+            code, stdout, err = run_cli("export_translations.py", str(final), "--locale", "tr-TR", "--template-dir", str(tables),
+                                        "--out", str(out), "--json")
+            self.assertEqual(code, 1, err)
+            data = json.loads(stdout)
+            self.assertEqual(list(data["held_back"]), ["Hud.Title"])
+            self.assertIn("brace placeholders", data["held_back"]["Hud.Title"][0])
+            got = {e["id"]: e["text"] for e in parse_unity_yaml((out / "Hud_tr-TR.asset").read_text(encoding="utf-8"))["entries"]}
+            self.assertEqual((got["1"], got["4"], got["3"]), ("Başlık", "Yeni <b>satır</b>", "{0:plural:tek eşya|{} eşya}"))
+            self.assertIn("    m_Localized: Başlık\n", (out / "Hud_tr-TR.asset").read_text(encoding="utf-8"))   # the game's own line
 
     def test_a_key_name_two_tables_share(self):
         tables = {Path("a.asset"): ("Hud", {"Panel": "1"}), Path("b.asset"): ("Machine", {"Panel": "7"})}

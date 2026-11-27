@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from l10n_common import (  # noqa: E402
     EXIT_FINDINGS, EXIT_OK, PLACEHOLDER_STYLES, TAG_STYLES, L10nError, add_common_args, add_input_argument, resolve_input, compare_placeholders,
     compare_tags, emit_report, extract_placeholders, extract_tags, load_config, load_json_data, load_table,
-    normalize_locale, pick, run_main, __version__,
+    normalize_locale, parity_problems, pick, run_main, __version__,
 )
 
 TOOL = "validate_critique"
@@ -52,8 +52,14 @@ def load_slice_targets(path: Path) -> Dict[str, str]:
     return {r.key: r.dst for r in rows}
 
 
-def validate(data: Any, slice_targets: Optional[Dict[str, str]], ph_style: str, tag_style: str, locale_expected: Optional[str]) -> List[str]:
-    """Return a list of problems (empty = valid)."""
+def validate(data: Any, slice_targets: Optional[Dict[str, str]], ph_style: str, tag_style: str, locale_expected: Optional[str],
+             sources: Optional[Dict[str, str]] = None) -> List[str]:
+    """Return a list of problems (empty = valid).
+
+    The blind critic never sees the source, so its suggestions are checked against the current target, and a
+    placeholder_grammar suggestion may move or repair a token. Pass 2 knows the source line and passes `sources`.
+    A suggestion with a source line is checked against the source for placeholders and tags, without exception.
+    """
     problems: List[str] = []
     if not isinstance(data, dict):
         return ["top level must be a JSON object"]
@@ -110,12 +116,17 @@ def validate(data: Any, slice_targets: Optional[Dict[str, str]], ph_style: str, 
                 problems.append(f"{where}: key not present in the blind slice")
             elif suggested is not None and suggested.strip():
                 original = slice_targets[key]
-                for p in compare_placeholders(extract_placeholders(original, ph_style), extract_placeholders(suggested, ph_style)):
-                    if it == "placeholder_grammar":
-                        continue  # the critic is deliberately repairing a token problem; Pass 2 re-verifies against the source
-                    problems.append(f"{where}: suggested text breaks placeholder parity: {p}")
-                for p in compare_tags(extract_tags(original, tag_style), extract_tags(suggested, tag_style)):
-                    problems.append(f"{where}: suggested text breaks tag parity: {p}")
+                source = (sources or {}).get(key) or ""
+                if source.strip():  # the source line decides, the current target may be the broken one
+                    problems.extend(f"{where}: suggested text breaks parity with the source line: {p}"
+                                    for p in parity_problems(source, suggested, ph_style, tag_style))
+                else:
+                    for p in compare_placeholders(extract_placeholders(original, ph_style), extract_placeholders(suggested, ph_style)):
+                        if it == "placeholder_grammar":
+                            continue  # the blind critic may repair a token problem, Pass 2 checks its rewrite against the source
+                        problems.append(f"{where}: suggested text breaks placeholder parity: {p}")
+                    for p in compare_tags(extract_tags(original, tag_style), extract_tags(suggested, tag_style)):
+                        problems.append(f"{where}: suggested text breaks tag parity: {p}")
                 if suggested.strip() == original.strip():
                     problems.append(f"{where}: suggested text is identical to the current target")
     summary = data["summary"]

@@ -125,6 +125,31 @@ class RewriteTests(unittest.TestCase):
         self.assertIn("did not confirm", ph["problems"][-1])
         self.assertNotIn("PH", [e["key"] for e in res["critique"]["entries"]])
 
+    def test_placeholders_are_checked_against_the_source(self):
+        # an outside audit found that a placeholder_grammar verdict let a rewrite drop {0} into the game,
+        # and a rewrite that restores a placeholder the current line lost was refused for differing from that line
+        sources = {"CR": {"en": "You earned {0} credits from {1}.", "target": "{1} işinden {0} kredi kazandın.", "category": "ui", "register": "ui"},
+                   "FIX": {"en": "Use {0} now", "target": "Şimdi kullan", "category": "ui", "register": "ui"}}
+        verdicts = [verdict("CR", "rewrite", 3, "placeholder_grammar"), verdict("FIX", "rewrite", 3)]
+        sc = {"pass2": [{"contains": "kredi kazandın", "candidates": ["{1} işinden kredi kazandın.", "{1} işinden kredi aldın.", "Kredi kazandın."]},
+                        {"contains": "Şimdi kullan", "candidates": ["{0} şimdi kullan", "Hemen kullan", "Kullan"]}],
+              "picks": [{"contains": "işinden kredi kazandın", "prefer": "işinden kredi kazandın"},
+                        {"contains": "{0} şimdi kullan", "prefer": "{0} şimdi kullan"}]}
+        router = Router(load_providers_config(), dry_run=True, scenario=FakeScenario(sc))
+        res = p2.rewrite_lines(verdicts, sources, "tr-TR", router, pass2_system="P2", pick_system="CRITIC")
+        lines = {l["key"]: l for l in res["lines"]}
+        cr = lines["CR"]
+        self.assertEqual((cr["new"], cr["valid"]), ("{1} işinden {0} kredi kazandın.", False))   # every rewrite lost {0}
+        self.assertTrue(cr["problems"] and all("source line" in p for p in cr["problems"]))
+        self.assertEqual((lines["FIX"]["new"], lines["FIX"]["valid"]), ("{0} şimdi kullan", True))
+        self.assertEqual([e["key"] for e in res["critique"]["entries"]], ["FIX"])
+        # the blind critic keeps its freedom, without a source line a placeholder_grammar suggestion is checked as before
+        doc = {"locale": "tr-TR", "source_file": "x", "summary": {"total": 1, "flagged": 1, "critical": 0},
+               "entries": [{"key": "CR", "score": 3, "issue_type": "placeholder_grammar", "reason": "r", "suggested": "{1} işinden kredi kazandın."}]}
+        self.assertEqual(validate_critique.validate(doc, {"CR": sources["CR"]["target"]}, "auto", "auto", "tr-TR"), [])
+        self.assertTrue(validate_critique.validate(doc, {"CR": sources["CR"]["target"]}, "auto", "auto", "tr-TR",
+                                                   sources={"CR": sources["CR"]["en"]}))
+
     def test_candidate_order_is_seeded(self):
         a = run(seed=1)
         b = run(seed=1)

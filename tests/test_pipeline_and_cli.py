@@ -67,7 +67,11 @@ class WorkflowTemplateTests(unittest.TestCase):
         for part in ("loc_work/context/CONTEXT_MAP.md", "loc_work/context/CONTEXT_MAP.tr-TR.md", "loc_work/context/line_notes.json"):
             self.assertIn(part, pass1)
         critic = by_role["tr-TR Blind Critic 01"]
-        self.assertIn("loc_work/context/CONTEXT_MAP.md", critic)
+        # the critic reads the jurors' English view first, the user's map only when there is none
+        self.assertLess(critic.index("loc_work/context/CONTEXT_MAP.jury.md"), critic.index("loc_work/context/CONTEXT_MAP.md"))
+        self.assertIn("loc_work/context/line_notes.jury.json", critic)
+        self.assertIn("Only when loc_work/context/CONTEXT_MAP.jury.md does not exist", critic)
+        self.assertIn("never a pass1 or final batch", critic)
         self.assertIn("never loc_work/context/CONTEXT_MAP.tr-TR.md", critic)    # the appendix would hand the critic the answer key
         self.assertIn("player_action", critic)
         self.assertIn("CONTEXT_MAP.tr-TR.md", by_role["tr-TR Pass-2 Editor 01"])

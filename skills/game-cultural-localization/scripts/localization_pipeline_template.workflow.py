@@ -40,6 +40,10 @@ CONTEXT_MAP = (args.get("context_map") or f"{SCRATCH}/context/CONTEXT_MAP.md").r
 CONTEXT_DIR = os.path.dirname(CONTEXT_MAP) or "."
 LINE_NOTES = f"{CONTEXT_DIR}/line_notes.json"                 # per key notes of the context scouts
 APPENDIX = f"{CONTEXT_DIR}/CONTEXT_MAP.{LOCALE}.md"            # choices of an existing translation, writers only
+# The critic reads the jurors' English view. The user's map and notes may be written in the target language by
+# scouts who saw an existing translation, and then carry its names (the first tr-TR calibration matched on them).
+JURY_MAP = f"{CONTEXT_DIR}/CONTEXT_MAP.jury.md"
+JURY_NOTES = f"{CONTEXT_DIR}/line_notes.jury.json"
 NEUTRAL_FIELDS = "screen, element, player_action, inserted, limit, speaker, listener and register_hint"
 FONTS = list(args.get("fonts") or [])          # optional: .ttf/.otf/.ttc or TMP .asset paths
 PH_STYLE = args.get("placeholder_style") or "auto"   # unity | unreal | godot | icu | printf | python | auto
@@ -79,10 +83,11 @@ def batch_prompt(step, b):
     if step == "critique":
         return (
             f"You are the blind native-ear critic for {LOCALE}. Read ONLY {SCRATCH}/blind_{LOCALE}_{b}.json "
-            f"(a target-only slice with key, category, speaker, archetype and target), the context map {CONTEXT_MAP}, "
-            f"the fields {NEUTRAL_FIELDS} of these keys in {LINE_NOTES} and {REFS}/{LOCALE}.md. Do NOT open any other "
-            f"file, never {APPENDIX} and never a source table. The map never quotes source lines, so you stay blind to "
-            f"the source wording. Judge every line for the place where the game shows it, and check that it still reads "
+            f"(a target-only slice with key, category, speaker, archetype and target), the jurors' English view of the "
+            f"context map {JURY_MAP}, the fields {NEUTRAL_FIELDS} of these keys in {JURY_NOTES} and {REFS}/{LOCALE}.md. "
+            f"Only when {JURY_MAP} does not exist read {CONTEXT_MAP} and {LINE_NOTES} instead. Do NOT open any other "
+            f"file, never {APPENDIX}, never a pass1 or final batch and never a source table. The map never quotes source "
+            f"lines, so you stay blind to the source wording. Judge every line for the place where the game shows it, and check that it still reads "
             f"right with what the code inserts next to it. Read every target aloud as a native player and score naturalness 1-5. Write "
             f"{SCRATCH}/critique_{LOCALE}_{b}.json using exactly this schema: {{\"locale\", \"source_file\", "
             f"\"entries\": [{{\"key\", \"score\", \"issue_type\", \"reason\", \"suggested\"}}], "
