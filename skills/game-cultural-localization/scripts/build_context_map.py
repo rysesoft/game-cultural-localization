@@ -63,7 +63,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from l10n_common import (  # noqa: E402
-    EXIT_FINDINGS, EXIT_OK, L10nError, add_common_args, emit_report, load_table, parse_unity_yaml, run_main, __version__,
+    EXIT_FINDINGS, EXIT_OK, L10nError, add_common_args, emit_report, is_unity_asset_table, load_table, parse_unity_yaml, run_main,
+    __version__,
 )
 
 TOOL = "build_context_map"
@@ -1637,7 +1638,9 @@ def check_leak(pack: ContextPack, rows: Sequence[Any], quote_min: int = 25) -> D
 
 
 def locale_tables(shared: Path) -> Dict[str, Path]:
-    """Locale code -> StringTable asset of the collection whose Shared Data asset is shared (they sit in one folder)."""
+    """Locale code -> StringTable asset of the collection whose Shared Data asset is shared (they sit in one folder).
+
+    An AssetTable collection (textures and other assets by GUID) gives none, its entries are no text for a scout."""
     meta = shared.with_name(shared.name + ".meta")
     m = re.search(r"guid: (\w+)", read_text(meta)) if meta.is_file() else None
     shared_guid = m.group(1) if m else ""
@@ -1645,10 +1648,11 @@ def locale_tables(shared: Path) -> Dict[str, Path]:
     for f in sorted(shared.parent.glob("*.asset")):
         if f == shared:
             continue
-        head = read_text(f)[:4000]
+        text = read_text(f)
+        head = text[:4000]
         code = re.search(r"m_LocaleId:\n\s+m_Code: (\S+)", head)
         sd = re.search(r"m_SharedData: \{fileID: -?\d+, guid: (\w+)", head)
-        if not code or (shared_guid and sd and sd.group(1) != shared_guid):
+        if not code or (shared_guid and sd and sd.group(1) != shared_guid) or is_unity_asset_table(text):
             continue
         out[code.group(1)] = f
     return out

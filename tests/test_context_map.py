@@ -834,5 +834,28 @@ class ContextFirstRuleTests(unittest.TestCase):
         self.assertNotIn("Lock `glossary.csv`", methodology)
 
 
+class AssetTableScoutTests(unittest.TestCase):
+    """An AssetTable holds asset GUIDs, a scout never gets its entries as text (DecalTextures of the first game)."""
+
+    @staticmethod
+    def _table(script: str, code: str, value: str) -> str:
+        return ("%YAML 1.1\n--- !u!114 &11400000\nMonoBehaviour:\n"
+                f"  m_Script: {{fileID: 11500000, guid: {script}, type: 3}}\n  m_LocaleId:\n    m_Code: {code}\n"
+                "  m_SharedData: {fileID: 11400000, guid: 0123456789abcdef0123456789abcdef, type: 2}\n"
+                f"  m_TableData:\n  - m_Id: 1\n    m_Localized: {value}\n    m_Metadata:\n      m_Items: []\n")
+
+    def test_locale_tables_skips_an_asset_table(self):
+        from l10n_common import UNITY_ASSET_TABLE_SCRIPT
+        with TempDir() as td:
+            (td / "Decals").mkdir()
+            (td / "General").mkdir()
+            write_text(td / "Decals" / "Decals Shared Data.asset", "%YAML 1.1\n")
+            write_text(td / "Decals" / "Decals_fr.asset", self._table(UNITY_ASSET_TABLE_SCRIPT, "fr", "99f909044abd13e43b187a1e55a4e2c5"))
+            write_text(td / "General" / "General Shared Data.asset", "%YAML 1.1\n")
+            write_text(td / "General" / "General_fr.asset", self._table("e9620f8c34305754d8cc9a7e49e852d9", "fr", "Bonjour"))
+            self.assertEqual(bcm.locale_tables(td / "Decals" / "Decals Shared Data.asset"), {})
+            self.assertEqual(list(bcm.locale_tables(td / "General" / "General Shared Data.asset")), ["fr"])
+
+
 if __name__ == "__main__":
     unittest.main()
