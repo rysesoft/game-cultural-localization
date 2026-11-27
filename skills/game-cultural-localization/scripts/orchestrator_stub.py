@@ -257,8 +257,9 @@ def phase2_critique_and_pass2(state: PipelineState, pass1_files: List[Path], pro
 
 def phase3_gate(state: PipelineState, finals: List[Path], fonts: List[Path]) -> Dict[str, Any]:
     rules = lqa_linter.load_rules(state.locale)
-    summary = {"errors": 0, "warnings": 0, "high": 0, "warn": 0, "missing_glyphs": 0, "glyphs_checked": bool(fonts)}
+    summary = {"errors": 0, "warnings": 0, "high": 0, "warn": 0, "missing_glyphs": 0, "full_width_fallbacks": 0, "glyphs_checked": bool(fonts)}
     missing: set = set()
+    wide: set = set()
     for f in finals:
         rows = load_table(f, state.src_field, state.locale, state.key_field)
         findings = lqa_linter.lint_rows(rows, rules, lqa_linter.LintOptions(
@@ -272,18 +273,24 @@ def phase3_gate(state: PipelineState, finals: List[Path], fonts: List[Path]) -> 
         summary["warn"] += sum(1 for r in risks if r.level == "WARN")
         (state.workdir / f"lqa_{state.locale}_{f.stem[-2:]}.json").write_text(json.dumps({"findings": [x.as_dict() for x in findings], "risks": [r.as_dict() for r in risks]}, ensure_ascii=False, indent=2), encoding="utf-8")
         if fonts:
-            cmd = [sys.executable, str(SCRIPTS_DIR / "font_glyph_scanner.py"), "--input", str(f), "--dst-field", state.locale, "--json"]
+            # the --font order is the fallback chain, --locale decides whether the full width check runs
+            cmd = [sys.executable, str(SCRIPTS_DIR / "font_glyph_scanner.py"), "--input", str(f), "--dst-field", state.locale,
+                   "--locale", state.locale, "--json"]
             for font in fonts:
                 cmd += ["--font", str(font)]
             proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
             if proc.returncode == 2:
                 raise L10nError("font scan failed: " + proc.stderr.strip())
-            try:  # the distinct missing characters, not the number of batches with any
-                missing |= {m["codepoint"] for m in json.loads(proc.stdout).get("missing", [])}
+            try:  # the distinct missing and full width characters, not the number of batches with any
+                scan = json.loads(proc.stdout)
+                missing |= {m["codepoint"] for m in scan.get("missing", [])}
+                wide |= {m["codepoint"] for m in scan.get("full_width", [])}
             except (json.JSONDecodeError, AttributeError, KeyError, TypeError):
                 missing.add(f"batch {f.stem}") if proc.returncode == 1 else None
     summary["missing_glyphs"] = len(missing)
+    summary["full_width_fallbacks"] = len(wide)
     summary["passed"] = (summary["errors"] == 0 and summary["high"] == 0 and summary["missing_glyphs"] == 0
+                         and summary["full_width_fallbacks"] == 0
                          and not (state.gate.get("fail_on_warn") and summary["warnings"]))
     if not fonts:
         state.say("Phase 3: no --font given, the glyph scan did not run, the gate says nothing about missing glyphs")
@@ -541,7 +548,8 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
         if tm is not None:
             tm.close()
     if halted:
-        summary: Dict[str, Any] = {"errors": 0, "warnings": 0, "high": 0, "warn": 0, "missing_glyphs": 0, "passed": False, "halted": True}
+        summary: Dict[str, Any] = {"errors": 0, "warnings": 0, "high": 0, "warn": 0, "missing_glyphs": 0, "full_width_fallbacks": 0,
+                                   "passed": False, "halted": True}
         state.say("Phase 3: skipped, the run stopped at the budget cap")
     else:
         summary = phase3_gate(state, finals, fonts or [])
@@ -563,7 +571,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--placeholder-style", default=None, help="unity|unreal|godot|icu|printf|python|auto")
     ap.add_argument("--tag-style", default=None, help="tmp|html|bbcode|auto")
     ap.add_argument("--batch-size", type=int, default=50, help="Rows per batch (default 50)")
-    ap.add_argument("--font", action="append", default=[], help="Font file(s) for the glyph gate (repeatable)")
+    ap.add_argument("--font", action="append", default=[], help="Font file(s) for the glyph gate, repeatable, in fallback order with the primary first")
     ap.add_argument("--dry-run", action="store_true", help="Jury flow with the offline fake provider (no API key, no network)")
     ap.add_argument("--live", action="store_true", help="Jury flow with the real APIs (keys from the environment)")
     ap.add_argument("--provider", help="Legacy single-critic flow: Python path 'module:function' of a complete(system, user) -> str callable")
