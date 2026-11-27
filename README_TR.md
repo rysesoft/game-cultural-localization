@@ -22,10 +22,10 @@ Dördüncü sütun paketin ulaşmak istediği sonuç. Sayfanın geri kalanı ora
 
 | Katman | Ne yapar |
 |---|---|
-| Bağlam | Tek bir satıra dokunulmadan önce Claude Opus üzerinde çalışan bir orkestratör ve Claude Sonnet üzerinde çalışan ajanlar oyunun kodunu, sahnelerini, prefab'larını ve metin tablolarını inceler, belirsiz kalan her şeyi stüdyoya sorar ve bir bağlam haritası yazar. Çevirmen, eleştirmen ve jüri işe bu haritayı okuyarak başlar, çünkü aynı kelime yerine göre değişir (*Play* bir oyun için *Oyna*, müzik için *Çal* olur) |
+| Bağlam (3.0) | Tek bir satıra dokunulmadan önce Claude Opus üzerinde çalışan bir orkestratör ve Claude Sonnet üzerinde çalışan ajanlar oyunun kodunu, sahnelerini, prefab'larını ve metin tablolarını inceler, belirsiz kalan her şeyi stüdyoya sorar ve bir bağlam haritası yazar. Çevirmen, eleştirmen ve jüri işe bu haritayı okuyarak başlar, çünkü aynı kelime yerine göre değişir (*Play* bir oyun için *Oyna*, müzik için *Çal* olur) |
 | Zanaat | Golden Voice Anchors satırları ve beş ses arketipi içeren 15 kültürelleştirme rehberi. Kültürelleştirme ajanı Pass 1 ve Pass 2'yi yazar, anadil kulağı denetçisi İngilizceyi hiç göstermeyen kör bir dilimi puanlar |
 | Kapılar | Saf Python ile yazılmış linter, arayüz taşma denetçisi, font glif tarayıcısı ve eleştiri doğrulayıcısı, çıkış kodları 0, 1 ve 2. Bozuk bir yer tutucu, kesilen bir buton ya da eksik bir glif derlemeye ulaşmaz |
-| Ölçüm (2.2) | Claude, Gemini ve DeepSeek her satırı üç kademede kör olarak değerlendirir, profesyonel bir referans onları kalibre eder ve her değişiklik gerekçe, kanıt, güven oranı ve güven seviyesiyle gelir |
+| Ölçüm (2.2, 3.0) | Claude, Gemini ve DeepSeek her satırı üç kademede kör olarak değerlendirir, profesyonel bir referans onları kalibre eder ve her değişiklik gerekçe, kanıt, güven oranı ve güven seviyesiyle gelir |
 
 ## Çok Aileli Jüri (2.2)
 
@@ -42,7 +42,7 @@ Dördüncü sütun paketin ulaşmak istediği sonuç. Sayfanın geri kalanı ora
 
 **Uzlaşma.** Her kademede her aileden bir model bulunur. Üç puanın hepsi 4 ya da 5 ise ve aralarındaki fark en fazla 1 ise satır geçer. Puanlardan biri 3 ya da altındaysa veya puanlar arasında 2 ya da daha fazla fark varsa satır bir üst kademeye çıkar. 2 ya da altında bir puan satırı doğrudan J3'e gönderir. J3 de anlaşamazsa jüri üyeleri birbirlerinin gerekçelerini model adları gizlenmiş olarak okur ve yeniden oy verir. Çoğunluk satırı karara bağlar, çoğunluk çıkmazsa satır çözülmemiş olarak geliştiriciye gider.
 
-**Önce gündelik kelimeler.** Jüri üyesi bir satıra puan vermeden önce her kelimesi için şunu sorar. Anadili konuşan biri bu kelimeyi gündelik hayatta kullanır mı? Nadir, kitabi ya da sözlükten alınmış bir kelime, doğru olsa bile çevrilmiş bir metnin en belirgin işaretidir. Bu cevabın ağırlığı büyüktür, böyle bir kelime taşıyan satır en fazla 3 alır, yani hiçbir kademeyi geçemez, ve Pass 2 bu kelimeleri değiştirmek üzere alır. Özel adlar, yer tutucular ve oyunun kendi terimleri bu soruya tabi değildir.
+**Önce gündelik kelimeler.** Jüri üyesi bir satıra puan vermeden önce her kelimesi için şunu sorar. Anadili konuşan biri bu kelimeyi gündelik hayatta kullanır mı? Nadir, kitabi ya da sözlükten alınmış bir kelime, doğru olsa bile çevrilmiş bir metnin en belirgin işaretidir. Bu cevabın ağırlığı büyüktür. Bir kademenin üç üyesinden ikisi aynı satırda böyle bir kelime bulursa satır en fazla 3 alır, yani hiçbir kademeyi geçemez, ve Pass 2 bu kelimeleri değiştirmek üzere alır. Tek üyenin bulduğu kelime kanıt olarak kalır, Türkçe sette tek üyenin işareti iyi bir satırı kötü bir satırdan çok daha sık bir üst kademeye gönderdi. Özel adlar, yer tutucular ve oyunun kendi terimleri bu soruya tabi değildir.
 
 **Bütçe sınırları.** Bir çalışmada değerlendirilen satırların %30'undan fazlası J2'ye ya da %10'undan fazlası J3'e gidecekse çalışma durur ve raporu yazar. Sayım 100 satır değerlendirildikten sonra başlar, böylece küçük bir son gruptaki tek kötü satır bir oyunu durdurmaz. Bu noktada sorun tek tek satırlarda değil, Pass 1'de ya da prompttadır.
 

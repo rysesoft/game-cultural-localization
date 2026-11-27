@@ -22,10 +22,10 @@ The fourth column is what the suite aims for. The rest of this page shows how it
 
 | Layer | What it does |
 |---|---|
-| Context | Before any line is touched, an orchestrator on Claude Opus with agents on Claude Sonnet studies the game's code, scenes, prefabs and string tables, asks the studio whatever stays unclear and writes a context map. Translators, critic and jury read it first, because the same word changes with the place (*Play* is *Oyna* for a game and *Çal* for music in Turkish) |
+| Context (3.0) | Before any line is touched, an orchestrator on Claude Opus with agents on Claude Sonnet studies the game's code, scenes, prefabs and string tables, asks the studio whatever stays unclear and writes a context map. Translators, critic and jury read it first, because the same word changes with the place (*Play* is *Oyna* for a game and *Çal* for music in Turkish) |
 | Craft | 15 culturalization playbooks with Golden Voice Anchors and five voice archetypes. A culturalizer agent writes Pass 1 and Pass 2, and a native ear critic scores a blind slice that never shows the English |
 | Gates | Linter, UI overflow checker, font glyph scanner and critique validator in pure Python with exit codes 0, 1 and 2. A broken placeholder, a clipped button or a missing glyph never reaches the build |
-| Measurement (2.2) | Claude, Gemini and DeepSeek judge every line blind in three tiers, a professional reference calibrates them, and every change arrives with a reason, evidence, confidence and a trust level |
+| Measurement (2.2, 3.0) | Claude, Gemini and DeepSeek judge every line blind in three tiers, a professional reference calibrates them, and every change arrives with a reason, evidence, confidence and a trust level |
 
 ## Multi-Family Jury (2.2)
 
@@ -42,7 +42,7 @@ Version 2.2 replaces the single critic with a jury of three model families and m
 
 **Agreement.** Every tier holds one model from each family. A line passes when all three scores are 4 or 5 and differ by at most 1. Any score of 3 or lower, or a spread of 2 or more, moves the line to the next tier. Any score of 2 or lower sends it straight to J3. When J3 still disagrees, the jurors read each other's reasons without model names and vote again. A majority settles the line, otherwise it goes to the developer as unresolved.
 
-**Everyday words first.** Before a juror scores a line it asks of every word whether a native speaker uses it in everyday life. A rare, bookish or dictionary word is the clearest mark of a translated text, even when it is correct. The answer weighs heavily, a line with such a word scores 3 at most, so it never passes a tier, and Pass 2 gets the words to replace. Proper names, placeholders and the game's own terms are not judged this way.
+**Everyday words first.** Before a juror scores a line it asks of every word whether a native speaker uses it in everyday life. A rare, bookish or dictionary word is the clearest mark of a translated text, even when it is correct. The answer weighs heavily. When two of the three jurors of a tier find such a word in the same line, the line scores 3 at most, so it never passes a tier, and Pass 2 gets the words to replace. One juror alone is evidence, measured on the Turkish set a single flag sent a good line up a tier far more often than a bad one. Proper names, placeholders and the game's own terms are not judged this way.
 
 **Budget caps.** When more than 30% of the judged lines of a run would go to J2, or more than 10% to J3, the run stops and writes the report. The count starts after 100 judged lines, so one bad line in a small last batch never stops a game. At that point the problem is in Pass 1 or in the prompt, not in single lines.
 

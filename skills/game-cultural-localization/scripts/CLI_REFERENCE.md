@@ -1,4 +1,4 @@
-# CLI Reference. game-cultural-localization scripts (v2.2.0)
+# CLI Reference. game-cultural-localization scripts (v3.0.0)
 
 All tools live in `skills/game-cultural-localization/scripts/`, need **Python 3.9+ with the standard
 library only**, run on Windows, macOS and Linux, force UTF-8 console output and share one
@@ -459,7 +459,7 @@ python jury.py blind_tr-TR_01.json --locale tr-TR [--source-table pass1_tr-TR_01
 
 Three tiers of three members, one from each family (`J1` Haiku, V4 Flash, Hydrogen, `J2` Sonnet, V4 Pro, Neon, `J3` Opus, V4 Pro, Carbon by default). The members read only the blind slice (key, `register`, `category`, `speaker`, `archetype`, target). A slice that carries a source column (`en`, `source`, `src`) is refused with exit 2. The system prompt is `prompts/critic.<locale>.md` with the pack's seeded warm-up and contrastive few-shots.
 
-Every juror first asks of every word of a line whether it belongs to everyday use of the language, a rare, bookish, archaic, word for word or dictionary choice is not everyday even when it is correct (proper names, placeholders, tags and the game's own terms in the map are not judged this way). The juror lists such words in `odd_words`. The answer weighs heavily, the code caps the score of a line with such a word at 3 (`llm_tasks.EVERYDAY_CAP`), so the line never passes a tier and its reason names the words. Only words the line really holds count, so a made up word never lowers a score. The deliberation round keeps the check, and Pass 2 gets the words of the settling votes as `odd_words` and replaces them.
+Every juror first asks of every word of a line whether it belongs to everyday use of the language, a rare, bookish, archaic, word for word or dictionary choice is not everyday even when it is correct (proper names, placeholders, tags and the game's own terms in the map are not judged this way). The juror lists such words in `odd_words`. The answer weighs heavily. When two of the three jurors of a tier find such a word in the same line, the code caps every score of that tier at 3 (`llm_tasks.everyday_rule`), so the line never passes and an agreeing J3 sends it to Pass 2, and every reason names the words. One juror alone caps nothing, its words stay in its vote as evidence. Measured on 385 tr-TR pairs with J1, a single flag would have sent 29 percent of the studio's own lines up a tier (16 percent without the check) for 2 more points of the literal lines, two flags send 17 percent. Only words the line really holds count, so a made up word never lowers a score. The deliberation round keeps the rule, and Pass 2 gets the words of the settling votes as `odd_words` and replaces them.
 
 | Outcome of one tier | Rule | Next |
 |---|---|---|
