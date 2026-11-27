@@ -75,8 +75,12 @@ class DeliberationTests(unittest.TestCase):
         self.assertEqual(len(res["revotes"]), 3)
         self.assertEqual({v["tier"] for v in res["revotes"]}, {"deliberation"})
         self.assertEqual(len(res["rationales"]), 3)
+        # one juror who still calls the line broken is not overruled, the developer decides (it passed with 5 before)
         res = dl.deliberate_line(ENTRY, J3, EVIDENCE, seats([5, 5, 2]), "tr-TR", "SYS", self.scrub)
-        self.assertEqual((res["score"], res["status"]), (5, "pass"))
+        self.assertEqual((res["score"], res["status"], res["deliberation"]["critical_holdout"]), (2, "unresolved", True))
+        self.assertEqual(len(res["rationales"]), 3)
+        res = dl.deliberate_line(ENTRY, J3, EVIDENCE, seats([5, 5, 3]), "tr-TR", "SYS", self.scrub)
+        self.assertEqual((res["score"], res["status"]), (5, "pass"))             # a mild doubt does not block a majority
 
     def test_unresolved_keeps_three_rationales(self):
         res = dl.deliberate_line(ENTRY, J3, EVIDENCE, seats([5, 3, 2]), "tr-TR", "SYS", self.scrub)

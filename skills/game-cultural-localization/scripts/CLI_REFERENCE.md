@@ -505,7 +505,7 @@ For lines the J3 tier disagrees on (spread of 2 or more). `jury.py` runs it auto
 1. The three J3 members have voted.
 2. Each member sees the other two scores, issue types, reasons and suggestions as juror A and juror B. Model and family names are never shown and are scrubbed from the reason text. The evidence package holds the ban list hits, the three closest approved translation memory lines (target text only) and the back-translation signal (`applied`, `calque_score`, `suspect`). No source text reaches the jurors.
 3. Each member votes once more.
-4. Two equal scores decide (`final_tier` `deliberation`, status from the score). Three different scores leave the line `unresolved`, it reaches the developer with the three rationales.
+4. Two equal scores decide (`final_tier` `deliberation`, status from the score). Three different scores leave the line `unresolved`, it reaches the developer with the three rationales. A juror who still scores the line critical (at or below `critical_max`) next to a majority above it is not overruled either, the line goes to the developer (`critical_holdout`). One critical vote sends a line from J1 straight to J3, so the last tier is never laxer than the first.
 
 | Flag | Meaning |
 |---|---|

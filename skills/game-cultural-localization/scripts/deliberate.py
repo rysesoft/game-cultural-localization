@@ -79,7 +79,7 @@ def decide(scores: Sequence[int]) -> Optional[int]:
 
 
 def deliberate_line(entry: Dict[str, Any], j3_votes: Sequence[Dict[str, Any]], evidence: Dict[str, Any], members: Sequence[Any],
-                    locale: str, system: str, scrub: "re.Pattern[str]") -> Dict[str, Any]:
+                    locale: str, system: str, scrub: "re.Pattern[str]", critical_max: int = 2) -> Dict[str, Any]:
     """Run one re-vote round for a line. Returns {score, status, rationales, revotes, deliberation}."""
     by_member = {int(v["member"]): v for v in j3_votes}
     package = evidence_package(evidence)
@@ -103,6 +103,11 @@ def deliberate_line(entry: Dict[str, Any], j3_votes: Sequence[Dict[str, Any]], e
     info = {"first": first, "revote": scores, "majority": majority}
     if majority is None:
         return {"score": min(scores), "status": "unresolved", "rationales": [v["reason"] for v in revotes], "revotes": revotes, "deliberation": info}
+    if min(scores) <= critical_max < majority:
+        # one juror still calls the line broken after the round, a majority does not overrule that, the developer decides.
+        # A single critical vote sends a line from J1 straight to J3, the last tier must not be laxer than the first.
+        info["critical_holdout"] = True
+        return {"score": min(scores), "status": "unresolved", "rationales": [v["reason"] for v in revotes], "revotes": revotes, "deliberation": info}
     return {"score": majority, "status": status_for(majority), "rationales": [v["reason"] for v in revotes], "revotes": revotes, "deliberation": info}
 
 
@@ -110,9 +115,10 @@ def make_deliberator(router: Any, locale: str, system: str) -> Any:
     """Callable for jury.run_jury(deliberator=...)."""
     members = router.jury("J3")
     scrub = name_scrubber(router.config)
+    critical_max = int(router.config.agreement.get("critical_max", 2))
 
     def run(entry: Dict[str, Any], j3_votes: List[Dict[str, Any]], evidence: Dict[str, Any]) -> Dict[str, Any]:
-        return deliberate_line(entry, j3_votes, evidence, members, locale, system, scrub)
+        return deliberate_line(entry, j3_votes, evidence, members, locale, system, scrub, critical_max)
     return run
 
 
