@@ -7,7 +7,7 @@ exit-code contract.
 | Exit code | Meaning |
 |---|---|
 | `0` | clean (no findings, risks or missing glyphs, critique valid, pipeline passed) |
-| `1` | findings. `ERR` (or `WARN` with `--fail-on-warn`), `HIGH` risks with `--fail-on-high`, missing glyphs, invalid critique, a model tool below its gate |
+| `1` | findings. `ERR` (or `WARN` with `--fail-on-warn`), `HIGH` risks with `--fail-on-high`, missing glyphs, full width fallbacks, invalid critique, a model tool below its gate |
 | `2` | usage or input error. Unknown locale, missing file or column, broken JSON, CSV or font, bad regex, argparse error, missing API key |
 
 Every script takes its main file either as the first positional argument or as `--input FILE` (`validate_critique.py` takes the positional or `--critique FILE`). Both spellings are equivalent and giving both with different values is a usage error.
@@ -109,25 +109,39 @@ python ui_expansion_checker.py --input ui.csv --locale ja-JP --max-width 14 --js
 
 ---
 
-## font_glyph_scanner.py (missing glyph scan)
+## font_glyph_scanner.py (missing glyph and full width fallback scan)
 
 ```
-python font_glyph_scanner.py --input <table|text> --font <font> [--font <font> ...] [options]
+python font_glyph_scanner.py --input <table|text> --font <primary> [--font <fallback> ...] [options]
 ```
+
+The scanner follows the font chain the way TextMesh Pro does. The order of `--font` is the fallback order and the first font is the primary. A TMP FontAsset is searched first, then its own `m_FallbackFontAssetTable` (depth first, every asset once, so a cycle ends), and only then the next `--font`. TMP itself tries the primary asset, its fallback table and then the global fallback list of TMP Settings or a game script, so pass that global list, in the order the game builds it for the locale, as the later `--font` entries. Fallback and source font GUIDs resolve through the `.meta` files of the nearest `Assets` folder above the asset. A static atlas (`m_AtlasPopulationMode` 0) covers its character table only. A dynamic atlas (1 or 2) also covers its source font file (`m_SourceFontFile`, the editor reference or `m_SourceFontFileGUID`).
+
+Findings, exit 1.
+* **Missing.** A character no font of the chain has. When part of the chain cannot be resolved (a dynamic asset whose source font is not found, an asset with fallbacks outside a Unity project, a fallback GUID the project does not have) the misses are WARN and the exit code stays 0 unless `--strict` is given.
+* **Full width fallback.** A character the primary font lacks and the chain serves from a font where its advance is at least 0.9 em, such as `’`, `“` or `…` falling down to a CJK font and leaving a wide gap in French or German text. The advance comes from the `hmtx` table of a font file, or from `m_GlyphTable` (`m_HorizontalAdvance` against `m_FaceInfo.m_PointSize`) of a TMP asset, or from the source font of a dynamic asset. The check runs for every locale except `ja-JP`, `ko-KR`, `zh-CN` and `zh-Hant`, and characters that are wide by nature (East Asian Width W or F, such as ideographs and kana) are never flagged.
+
+Warnings, no effect on the exit code. `static_atlas` (the characters are fixed at build time), `dynamic_single_atlas` (dynamic with Multi Atlas Textures off, a full atlas texture drops new characters), `outside_unity_project`, `unresolved_source_font`, `unreadable_source_font`, `unresolved_fallback` and `unreadable_fallback`.
 
 | Flag | Meaning |
 |---|---|
 | `--input` | JSON, CSV, TSV, PO or Unity `.asset` table, or a plain text file |
 | `--dst-field` | target column (default `dst`) |
-| `--font` | `.ttf`, `.otf`, `.ttc` (every sub-font merged), `.woff` or a TextMeshPro FontAsset `.asset`. Repeatable, coverage is the union. `.woff2` and corrupt fonts end with exit 2 and a clear message |
-| `--strict` | missing glyphs are ERR even when a TMP asset is dynamic (`m_AtlasPopulationMode` 1 or 2) or has fallbacks (otherwise those are WARN, exit 0) |
+| `--font` | `.ttf`, `.otf`, `.ttc` (every sub-font merged), `.woff` or a text serialized TextMeshPro FontAsset `.asset`. Repeatable, the order is the fallback order with the primary first, and a TMP asset brings its own fallback table along. `.woff2` and corrupt fonts end with exit 2 and a clear message |
+| `--locale` | target locale, decides whether the full width check runs. Without it a `--dst-field` that names a locale (such as `zh-CN`) counts. An unknown locale is exit 2 |
+| `--full-width-check` | `auto` (default) checks every locale except the CJK ones, `on` checks any locale, `off` never checks |
+| `--full-width-em` | advance, as a fraction of the em, from which a fallback glyph counts as full width (default 0.9) |
+| `--strict` | missing glyphs are ERR even when part of the chain could not be resolved (otherwise those are WARN, exit 0) |
 | `--also-upper` | also scan the upper-cased text (runtime `.ToUpper()`, `<uppercase>`), which catches Turkish `İ` and German `ẞ` |
 
-Ignored characters are controls, space, NBSP and ideographic space, zero-width and variation selectors, combining marks (NFC), rich-text tags and `{placeholders}`. JSON report `{tool, version, input, fonts[], lenient, unique_chars, summary{missing, severity}, missing[{codepoint, char, name, count, first_key}], exit_code}`.
+Ignored characters are controls, space, NBSP and ideographic space, zero-width and variation selectors, combining marks (NFC), rich-text tags and `{placeholders}`. The text report lists the search order with the number of characters each font serves, the missing characters, the full width fallbacks, the characters every fallback font serves and the warnings.
+
+JSON report `{tool, version, input, fonts[{path, kind, glyphs, dynamic, has_fallbacks, sub_fonts, atlas_glyphs, multi_atlas, source_font, fallback_of, coverage_known, served}], lenient, locale, full_width_checked, unique_chars, summary{missing, severity, full_width, warnings}, missing[{codepoint, char, name, count, first_key}], full_width[{codepoint, char, name, count, first_key, font, advance_em}], chars[{codepoint, char, count, first_key, font}], warnings[{font, code, message}], exit_code}`. `fonts` is the search order, `chars` names the font that serves every character (`null` when missing), and `missing` keeps the shape of earlier versions.
 
 ```
 python font_glyph_scanner.py --input final_ja-JP.json --dst-field ja-JP --font C:\Windows\Fonts\msgothic.ttc
 python font_glyph_scanner.py --input final_de-DE.json --dst-field de-DE --font "Assets/Fonts/Bebas SDF.asset" --also-upper --strict
+python font_glyph_scanner.py --input final_fr.json --dst-field fr --font "Assets/Fonts/Oxanium-Regular SDF.asset" --font "Assets/Fonts/Roboto-Cyrillic SDF.asset" --font "Assets/Fonts/NotoSansSC-Regular SDF.asset" --json fonts_fr.json
 ```
 
 ---
@@ -194,7 +208,7 @@ Legacy flow (`--provider module:function`). Any callable `complete(system: str, 
 | `--providers-config`, `--fake-scenario`, `--budget-log` | model access of the jury flow, the budget log defaults to `<workdir>/budget.jsonl` |
 | `--langpack-dir` | root of the language packs, default the skill's `langpack/` |
 | `--tm` | translation memory (`tm.py` SQLite) for Pass 1 RAG and the jury evidence |
-| `--font` | font files for the glyph scan of the Phase 3 gate, repeatable. Without one the gate says so in its log and summary (`glyphs_checked` false, `PASSED (glyphs not checked)`), and `missing_glyphs` counts the distinct characters no font covers |
+| `--font` | font files for the glyph scan of the Phase 3 gate, repeatable, in fallback order with the primary first (see `font_glyph_scanner.py`). Without one the gate says so in its log and summary (`glyphs_checked` false, `PASSED (glyphs not checked)`). `missing_glyphs` counts the distinct characters no font of the chain covers and `full_width_fallbacks` the distinct characters that fall back to a full width glyph for the locale, and the gate passes only when both are 0 |
 | `--no-resume` | ignore the finished model batches in `<workdir>/model_batches.json` and call every model again. By default every finished batch of Pass 1, the jury, the back-translations and Pass 2 is kept there, and the same command with the same `--workdir` resumes a stopped run at the batch where it stopped without paying for the finished ones again. A changed source line, prompt or model makes a new batch, an old answer is never reused for it |
 | `--context-map` | `CONTEXT_MAP.md` of the game, the output of Phase 0 step 0 (also `context_map` in `l10n.config.json`). Pass 1 and Pass 2 read the map, the locale appendix and the full line notes, the jury and the blind pickers read the map and the neutral line fields only. Without it the run logs that every step works without the game's context |
 | `--draft-field` | input column that already holds a translation, such as the game's machine translation. Pass 1 keeps it as it is and translates only the rows where it is empty, the jury judges the draft and Pass 2 corrects only the lines the jury flags, so the change reports show the real corrections and an unchanged good line stays as the game has it |
