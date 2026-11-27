@@ -49,6 +49,7 @@ import ui_expansion_checker  # noqa: E402
 import validate_critique  # noqa: E402
 
 TOOL = "orchestrator_stub"
+RESUME_FILE = "model_batches.json"  # finished model batches of the jury flow, kept in the workdir
 PLUGIN_DIR = SCRIPTS_DIR.parent.parent.parent
 AGENTS_DIR = PLUGIN_DIR / "agents"
 REFS_DIR = SCRIPTS_DIR.parent / "references"
@@ -164,11 +165,16 @@ class PipelineState:
 def phase0_preflight(state: PipelineState, rows: List[Row], fonts: List[Path]) -> None:
     state.say(f"Phase 0: locale {state.locale}, {len(rows)} source rows")
     bible = state.workdir / f"{state.locale}_BIBLE.md"
+    stub = f"# {state.locale} localization bible\n\n(stub created by orchestrator_stub; fill terminology, registers per archetype A1-A5, ledger)\n"
     if bible.is_file():
-        state.bible = bible.read_text(encoding="utf-8-sig")
-        state.say(f"Phase 0: bible found ({bible.name})")
+        text = bible.read_text(encoding="utf-8-sig")
+        if text == stub:  # an untouched stub carries no decision, and it would change the Pass 1 prompt between runs
+            state.say(f"Phase 0: bible {bible.name} is still the empty stub, fill it to hand the translators the project's decisions")
+        else:
+            state.bible = text
+            state.say(f"Phase 0: bible found ({bible.name})")
     else:
-        bible.write_text(f"# {state.locale} localization bible\n\n(stub created by orchestrator_stub; fill terminology, registers per archetype A1-A5, ledger)\n", encoding="utf-8")
+        bible.write_text(stub, encoding="utf-8")
         state.say(f"Phase 0: bible missing -> stub written to {bible.name}")
     lqa_linter.load_rules(state.locale)  # proves the rule file loads
     if fonts:
@@ -311,7 +317,7 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
                       ph_style: str = "auto", tag_style: str = "auto", batch_size: int = 50, fonts: Optional[List[Path]] = None,
                       langpack_dir: Optional[Path] = None, tm_path: Optional[Path] = None, deliberation: bool = True,
                       budget_caps: bool = True, candidates: int = 3, seed: int = 1234, workers: int = 1,
-                      context_map: Optional[Path] = None) -> Dict[str, Any]:
+                      context_map: Optional[Path] = None, resume: bool = True) -> Dict[str, Any]:
     """Phase 0-3 with the multi-family jury. Returns {'passed', 'flow', 'summary', 'log', 'finals', 'batches', 'halted', ...}.
 
     workers > 1 sends model calls in parallel inside Pass 1, the jury and Pass 2, the result does not change.
@@ -319,6 +325,7 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
     line notes, the jury and the blind pickers read the map and the neutral line fields only.
     """
     from build_context_map import load_context
+    from llm_tasks import BatchMemo
     import deliberate
     import jury
     import pass2_rewrite
@@ -367,6 +374,10 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
     batches: List[Dict[str, Any]] = []
     halted: Optional[Dict[str, Any]] = None
     tally = jury.EscalationTally()  # the budget caps read every line judged in this run, not one batch
+    # every finished batch of every model call is kept in the workdir, the same command resumes a stopped run
+    memo = BatchMemo(workdir / RESUME_FILE) if resume else None
+    if memo is not None and len(memo):
+        state.say(f"Phase 0: resuming, {len(memo)} finished model batches in {RESUME_FILE}")
     try:
         for i in range(0, len(rows), batch_size):
             batch = rows[i:i + batch_size]
@@ -386,7 +397,7 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
                 if ctx is not None and ctx.line(r.key, writer=True):
                     pr["context"] = ctx.line(r.key, writer=True)
                 payload_rows.append(pr)
-            targets = translate_rows(router.for_role("pass1"), payload_rows, locale, task="pass1", system=pass1_system,
+            targets = translate_rows(router.for_role("pass1"), payload_rows, locale, task="pass1", system=pass1_system, memo=memo,
                                      extra={"placeholder_style": ph_style, "tag_style": tag_style}, workers=workers)
             p1 = workdir / f"pass1_batch_{n:02d}.json"
             p1_rows = [{"key": r.key, "category": r.meta.get("category", ""), "speaker": r.meta.get("speaker", ""),
@@ -410,12 +421,12 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
             def rt_fn(lines: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
                 rws = [{"key": e["key"], "en": src_by_key.get(e["key"], ""), "target": e["target"], "register": e["register"]} for e in lines]
                 return roundtrip_evidence(rws, locale, router.for_role("roundtrip"), min_words=int(rt_cfg["min_words"]),
-                                          registers=rt_cfg["registers"], threshold=threshold, workers=workers)
+                                          registers=rt_cfg["registers"], threshold=threshold, workers=workers, memo=memo)
 
             def tm_fn(entry: Dict[str, Any]) -> List[Dict[str, Any]]:
                 return tm.neighbors(locale, src_by_key.get(entry["key"], entry["target"]), category=str(entry.get("category") or ""),
                                     speaker=str(entry.get("speaker") or ""), exclude_key=entry["key"])
-            res = jury.run_jury(jentries, locale, router, system=critic_system, budget_caps=budget_caps, roundtrip_fn=rt_fn, tally=tally,
+            res = jury.run_jury(jentries, locale, router, system=critic_system, budget_caps=budget_caps, roundtrip_fn=rt_fn, tally=tally, memo=memo,
                                 tm_lookup=tm_fn if tm is not None else None,
                                 deliberator=deliberate.make_deliberator(router, locale, critic_system) if deliberation else None,
                                 workers=workers)
@@ -442,7 +453,7 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
             p2_system, pick_system = pass2_rewrite.build_systems(locale, pack_dir, regs, warmup=True, seed=seed)
             rw = pass2_rewrite.rewrite_lines(res["verdicts"], sources, locale, router, pass2_system=p2_system, pick_system=pick_system,
                                              n=candidates, seed=seed, ph_style=ph_style, tag_style=tag_style, source_file=p1.name,
-                                             workers=workers, context=ctx)
+                                             workers=workers, context=ctx, memo=memo)
             rpath = workdir / f"rewrites_{tag}.json"
             rpath.write_text(json.dumps({"locale": locale, "source_file": p1.name, "verdicts": vpath.name, **rw, "notes": router.notes},
                                         ensure_ascii=False, indent=2), encoding="utf-8")
@@ -495,6 +506,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--tm", default=None, help="Translation memory (tm.py SQLite) for Pass 1 RAG and jury evidence")
     ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md of the game (Phase 0 step 0), with line_notes.json and CONTEXT_MAP.<locale>.md next to it")
     ap.add_argument("--no-deliberation", action="store_true", help="Leave J3 disagreements unresolved")
+    ap.add_argument("--no-resume", action="store_true", help=f"Ignore the finished model batches kept in <workdir>/{RESUME_FILE} and call every model again")
     ap.add_argument("--no-budget-caps", action="store_true", help="Do not stop at the J2 or J3 escalation cap")
     ap.add_argument("--candidates", type=int, default=3, help="Pass 2 candidates per flagged line (default 3)")
     ap.add_argument("--seed", type=int, default=1234, help="Seed of warm-up, few-shots and candidate order (default 1234)")
@@ -530,7 +542,8 @@ def main() -> int:
             batch_size=args.batch_size, fonts=[Path(f) for f in args.font], langpack_dir=Path(args.langpack_dir) if args.langpack_dir else None,
             tm_path=Path(args.tm) if args.tm else None, deliberation=not args.no_deliberation, budget_caps=not args.no_budget_caps,
             candidates=args.candidates, seed=args.seed, workers=args.workers,
-            context_map=Path(args.context_map or cfg["context_map"]) if (args.context_map or cfg.get("context_map")) else None)
+            context_map=Path(args.context_map or cfg["context_map"]) if (args.context_map or cfg.get("context_map")) else None,
+            resume=not args.no_resume)
         exit_code = EXIT_OK if result["passed"] else EXIT_FINDINGS
         text = "\n".join([f"Orchestrator run (jury flow, {'dry run' if args.dry_run else 'live'}):"] + ["  " + l for l in result["log"]]
                          + [f"  NOTE: {n}" for n in result["notes"]] + [f"  Exit code: {exit_code}"])

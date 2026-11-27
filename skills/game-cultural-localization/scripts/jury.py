@@ -49,7 +49,7 @@ from l10n_common import (  # noqa: E402
 import lqa_linter  # noqa: E402
 from build_context_map import load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR, infer_register  # noqa: E402
-from llm_tasks import add_model_args, default_budget_path, make_router, score_entries  # noqa: E402
+from llm_tasks import BatchMemo, add_model_args, default_budget_path, make_router, score_entries  # noqa: E402
 from prompt_templates import render_contrastive, render_prompt  # noqa: E402
 from roundtrip_check import load_threshold, roundtrip_evidence  # noqa: E402
 from warmup_loader import REGISTERS, load_warmup, render_warmup  # noqa: E402
@@ -193,7 +193,7 @@ class EscalationTally:
 
 
 def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], locale: str, system: str, batch_size: int,
-                workers: int = 1) -> Dict[str, List[Dict[str, Any]]]:
+                workers: int = 1, memo: Any = None) -> Dict[str, List[Dict[str, Any]]]:
     """Votes of the three members of one tier. With workers > 1 the members run at the same time and each
     sends up to `workers` batches at once. Votes are appended in member order, the result does not change."""
     members = router.jury(tier)
@@ -204,7 +204,7 @@ def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], local
     out: Dict[str, List[Dict[str, Any]]] = {e["key"]: [] for e in entries}
 
     def one(m: Any) -> Dict[str, Dict[str, Any]]:
-        return score_entries(m.provider, view, locale, tier=tier, system=system, batch_size=batch_size, workers=workers)
+        return score_entries(m.provider, view, locale, tier=tier, system=system, batch_size=batch_size, workers=workers, memo=memo)
     if int(workers) > 1 and len(members) > 1:
         with ThreadPoolExecutor(max_workers=len(members)) as ex:
             results = list(ex.map(one, members))
@@ -219,13 +219,15 @@ def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], local
 def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, system: str, batch_size: int = 40,
              budget_caps: bool = True, tm_lookup: Optional[Callable[[Dict[str, Any]], List[Dict[str, Any]]]] = None,
              roundtrip_fn: Optional[Callable[[Sequence[Dict[str, Any]]], Dict[str, Dict[str, Any]]]] = None,
-             deliberator: Optional[Deliberator] = None, workers: int = 1, tally: Optional[EscalationTally] = None) -> Dict[str, Any]:
+             deliberator: Optional[Deliberator] = None, workers: int = 1, tally: Optional[EscalationTally] = None,
+             memo: Any = None) -> Dict[str, Any]:
     """Run J1 to J3 (+ deliberation) and return {'verdicts', 'pending', 'halted', 'stats'}.
 
     The budget caps compare the lines sent to J2 or J3 with every line judged in the run so far (tally, kept by
     the caller across batches, a fresh one for a single slice). A cap stops the run only when this batch sends
     lines to that tier, at least budget_caps.min_judged lines were judged and at least min_escalated lines are
     over the cap, a small sample never stops a run. The tally is updated before the function returns.
+    memo (llm_tasks.BatchMemo) keeps every finished batch of votes, a rerun answers them from the file.
 
     workers > 1 runs the members of a tier and the disputed J3 lines of the deliberation round in parallel.
     """
@@ -265,7 +267,7 @@ def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, sys
         return None
 
     # J1 ------------------------------------------------------------------- #
-    tv = _tier_votes(router, "J1", entries, locale, system, batch_size, workers)
+    tv = _tier_votes(router, "J1", entries, locale, system, batch_size, workers, memo)
     to_j2: List[str] = []
     to_j3: List[str] = []
     for k in order:
@@ -282,7 +284,7 @@ def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, sys
     halted = cap_check("J2", to_j2, float(caps["escalate_j2_ratio"])) or cap_check("J3", to_j3, float(caps["escalate_j3_ratio"]))
     # J2 ------------------------------------------------------------------- #
     if halted is None and to_j2:
-        tv = _tier_votes(router, "J2", [by_key[k] for k in to_j2], locale, system, batch_size, workers)
+        tv = _tier_votes(router, "J2", [by_key[k] for k in to_j2], locale, system, batch_size, workers, memo)
         moved = 0
         for k in to_j2:
             votes[k].extend(tv[k])
@@ -301,7 +303,7 @@ def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, sys
             for k, ev in roundtrip_fn([by_key[k] for k in to_j3]).items():
                 if k in evidence:
                     evidence[k]["roundtrip"] = ev
-        tv = _tier_votes(router, "J3", [by_key[k] for k in to_j3], locale, system, batch_size, workers)
+        tv = _tier_votes(router, "J3", [by_key[k] for k in to_j3], locale, system, batch_size, workers, memo)
         for k in to_j3:
             votes[k].extend(tv[k])
         open_keys = [k for k in to_j3 if not agrees([v["score"] for v in tv[k]], agreement)]
@@ -375,6 +377,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--tm", default=None, help="Translation memory (tm.py SQLite) for the evidence: closest approved lines")
     ap.add_argument("--workers", type=int, default=4, help="Batches in flight per member, the three members of a tier and the disputed lines run in parallel (default 4, 1 = one call at a time)")
     ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md of the game, its line_notes.json next to it gives every line its context")
+    ap.add_argument("--cache", default=None, help="JSON file that keeps every finished batch of votes, the same command resumes where a stopped run ended")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap
@@ -399,6 +402,7 @@ def main() -> int:
         info["context_map"] = ctx.source
         info["context_lines"] = ctx.enrich(entries)
         system = ctx.system(system)
+    memo = BatchMemo(Path(args.cache)) if args.cache else None
     roundtrip_fn = None
     if args.source_table:
         sources = load_source_rows(Path(args.source_table), args.src_field, args.dst_field, args.key_field)
@@ -409,7 +413,7 @@ def main() -> int:
         def roundtrip_fn(lines: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
             rows = [{"key": e["key"], "en": sources.get(e["key"], ""), "target": e["target"], "register": e["register"]} for e in lines]
             return roundtrip_evidence(rows, locale, router.for_role("roundtrip"), min_words=int(rt["min_words"]),
-                                      registers=rt["registers"], threshold=threshold, workers=args.workers)
+                                      registers=rt["registers"], threshold=threshold, workers=args.workers, memo=memo)
     tm = None
     tm_lookup = None
     if args.tm:
@@ -429,7 +433,7 @@ def main() -> int:
         deliberator = make_deliberator(router, locale, system)
     try:
         res = run_jury(entries, locale, router, system=system, batch_size=args.batch_size, budget_caps=not args.no_budget_caps,
-                       roundtrip_fn=roundtrip_fn, deliberator=deliberator, tm_lookup=tm_lookup, workers=args.workers)
+                       roundtrip_fn=roundtrip_fn, deliberator=deliberator, tm_lookup=tm_lookup, workers=args.workers, memo=memo)
     finally:
         if tm is not None:
             tm.close()

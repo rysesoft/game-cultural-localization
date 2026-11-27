@@ -194,6 +194,7 @@ Legacy flow (`--provider module:function`). Any callable `complete(system: str, 
 | `--providers-config`, `--fake-scenario`, `--budget-log` | model access of the jury flow, the budget log defaults to `<workdir>/budget.jsonl` |
 | `--langpack-dir` | root of the language packs, default the skill's `langpack/` |
 | `--tm` | translation memory (`tm.py` SQLite) for Pass 1 RAG and the jury evidence |
+| `--no-resume` | ignore the finished model batches in `<workdir>/model_batches.json` and call every model again. By default every finished batch of Pass 1, the jury, the back-translations and Pass 2 is kept there, and the same command with the same `--workdir` resumes a stopped run at the batch where it stopped without paying for the finished ones again. A changed source line, prompt or model makes a new batch, an old answer is never reused for it |
 | `--context-map` | `CONTEXT_MAP.md` of the game, the output of Phase 0 step 0 (also `context_map` in `l10n.config.json`). Pass 1 and Pass 2 read the map, the locale appendix and the full line notes, the jury and the blind pickers read the map and the neutral line fields only. Without it the run logs that every step works without the game's context |
 | `--no-deliberation` | leave J3 disagreements unresolved |
 | `--no-budget-caps` | never stop at the J2 or J3 cap |
@@ -480,6 +481,7 @@ Evidence per line. `ban_hits` (locale rules of `rules/<locale>.json` on the targ
 | `--tm` | translation memory (`tm.py` SQLite file) for the `tm_neighbors` evidence, queried by the English source when `--source-table` is given, else by the target |
 | `--workers` | batches in flight per member, default 4. The three members of a tier, the back-translations and the disputed J3 lines of the deliberation round run in parallel, the verdicts are the same as with 1 |
 | `--context-map` | `CONTEXT_MAP.md` of the game. The map joins the critic prompt (and the deliberation round), every entry without a `context` gets the neutral fields of its line note from `line_notes.json` next to the map. Jurors never read the locale appendix. The verdict file records the map under `prompt` |
+| `--cache` | JSON file that keeps every finished batch of votes and back-translations, the same command resumes a stopped run where it ended |
 | `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
 
 Vote (B3.3). `{key, tier, member, family, model, score, issue_type, reason, suggested}`. Verdict (B3.4). `{key, final_tier (J1, J2, J3 or deliberation), score, status (pass, rewrite_light, rewrite, critical, unresolved), votes, evidence{ban_hits, tm_neighbors, roundtrip}, rationales}`. The verdict file holds `locale`, `source_file`, `langpack_version`, `prompt`, `stats` (lines per tier, escalation ratios, status counts), `halted`, `verdicts`, `pending` and `notes`.
@@ -562,6 +564,7 @@ For every verdict with status `rewrite_light`, `rewrite`, `critical` or `unresol
 | `--src-field` / `--dst-field` / `--key-field` | columns of `--source-table` |
 | `--candidates` | candidates per line, default 3 (1 to 6) |
 | `--workers` | batches in flight per model, default 4. The three J1 pickers run in parallel, the result is the same as with 1 |
+| `--cache` | JSON file that keeps every finished batch of candidates and blind picks, the same command resumes a stopped run where it ended |
 | `--context-map` | `CONTEXT_MAP.md` of the game. The Pass 2 writer reads the map, the locale appendix `CONTEXT_MAP.<locale>.md` and the full line notes (scout notes included), the blind J1 pickers read the map and the neutral line fields only |
 | `--statuses` | verdict statuses to rewrite, default `rewrite_light,rewrite,critical,unresolved` |
 | `--placeholder-style` / `--tag-style` | token syntax for the parity check |

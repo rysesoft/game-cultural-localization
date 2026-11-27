@@ -84,6 +84,36 @@ class JuryFlowTests(unittest.TestCase):
             self.assertTrue(res["summary"]["halted"])
             self.assertIn("Phase 3: skipped", "\n".join(res["log"]))
 
+    def test_a_stopped_run_resumes_without_paying_twice(self):
+        from unittest import mock
+        import pass2_rewrite
+        with TempDir() as td:
+            src = write_json(td / "src.json", SOURCE)
+            w = td / "w"
+
+            def router():
+                return Router(load_providers_config(), dry_run=True, scenario=FakeScenario(SCENARIO))
+            # the first run stops in Pass 2, Pass 1 and the jury are already paid for
+            with mock.patch.object(pass2_rewrite, "pass2_candidates", side_effect=RuntimeError("provider gone")):
+                with self.assertRaises(RuntimeError):
+                    orch.run_jury_pipeline(src, "tr-TR", w, router(), budget_caps=False, langpack_dir=td / "np")
+            self.assertTrue((w / "model_batches.json").is_file())
+            second = router()
+            res = orch.run_jury_pipeline(src, "tr-TR", w, second, budget_caps=False, langpack_dir=td / "np")
+            self.assertTrue(res["passed"], res["log"])
+            self.assertTrue(any("resuming" in line for line in res["log"]))
+            roles = {r["role"] for r in second.budget.records}
+            self.assertNotIn("pass1", roles)                                   # Pass 1 came from the file
+            self.assertIn("pass2", roles)                                      # only the work that was missing ran
+            final = (w / "final_batch_01.json").read_text(encoding="utf-8")
+            third = router()
+            orch.run_jury_pipeline(src, "tr-TR", w, third, budget_caps=False, langpack_dir=td / "np")
+            self.assertEqual(third.budget.records, [])                         # a finished run costs nothing a second time
+            self.assertEqual((w / "final_batch_01.json").read_text(encoding="utf-8"), final)
+            fresh = router()
+            orch.run_jury_pipeline(src, "tr-TR", w, fresh, budget_caps=False, langpack_dir=td / "np", resume=False)
+            self.assertIn("pass1", {r["role"] for r in fresh.budget.records})   # --no-resume calls every model again
+
     def test_budget_caps_read_the_whole_run(self):
         def run(n_rows, critical):
             rows = [{"key": f"K{i:03d}", "en": f"Open the storage panel number {i}", "category": "ui"} for i in range(n_rows)]

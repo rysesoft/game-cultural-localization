@@ -43,7 +43,7 @@ from l10n_common import (  # noqa: E402
 import validate_critique  # noqa: E402
 from build_context_map import ContextPack, load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR, infer_register  # noqa: E402
-from llm_tasks import ISSUE_TYPES, add_model_args, default_budget_path, make_router, pass2_candidates, pick_candidates  # noqa: E402
+from llm_tasks import ISSUE_TYPES, BatchMemo, add_model_args, default_budget_path, make_router, pass2_candidates, pick_candidates  # noqa: E402
 from prompt_templates import render_contrastive, render_prompt  # noqa: E402
 from text_style import sanitize_prose  # noqa: E402
 from warmup_loader import REGISTERS, load_warmup, render_warmup  # noqa: E402
@@ -90,7 +90,7 @@ def main_issue(verdict: Dict[str, Any]) -> str:
 def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[str, Any]], locale: str, router: Any, *,
                   pass2_system: str, pick_system: str, n: int = 3, seed: int = 1234, ph_style: str = "auto",
                   tag_style: str = "auto", statuses: Sequence[str] = DEFAULT_STATUSES, source_file: str = "",
-                  workers: int = 1, context: Optional[ContextPack] = None) -> Dict[str, Any]:
+                  workers: int = 1, context: Optional[ContextPack] = None, memo: Any = None) -> Dict[str, Any]:
     """Generate, pick blind, validate. Returns {'lines', 'critique'}.
 
     workers > 1 sends up to `workers` batches at once and lets the three J1 pickers run side by side.
@@ -115,7 +115,7 @@ def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[st
                      "tm": [{"target": t.get("dst", ""), "category": t.get("category", "")} for t in (v.get("evidence", {}).get("tm_neighbors") or [])[:3]]})
         if ctx is not None and ctx.line(v["key"], writer=True):
             rows[-1]["context"] = ctx.line(v["key"], writer=True)
-    cands = pass2_candidates(router.for_role("pass2"), rows, locale, n=n, system=pass2_system, workers=workers) if rows else {}
+    cands = pass2_candidates(router.for_role("pass2"), rows, locale, n=n, system=pass2_system, workers=workers, memo=memo) if rows else {}
     rng = random.Random(seed)
     items: List[Dict[str, Any]] = []
     id_maps: Dict[str, Dict[str, int]] = {}
@@ -132,7 +132,7 @@ def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[st
         pickers = router.jury("J1")
 
         def pick(m: Any) -> Dict[str, str]:
-            return pick_candidates(m.provider, items, locale, system=pick_system, workers=workers)
+            return pick_candidates(m.provider, items, locale, system=pick_system, workers=workers, memo=memo)
         if int(workers) > 1 and len(pickers) > 1:
             with ThreadPoolExecutor(max_workers=len(pickers)) as ex:
                 picks_by_member = list(zip(pickers, ex.map(pick, pickers)))
@@ -209,6 +209,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--seed", type=int, default=1234, help="Seed of the candidate order and the warm-up sample (default 1234)")
     ap.add_argument("--workers", type=int, default=4, help="Batches in flight per model, the three J1 pickers run in parallel (default 4, 1 = one call at a time)")
     ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md of the game, with line_notes.json and CONTEXT_MAP.<locale>.md next to it")
+    ap.add_argument("--cache", default=None, help="JSON file that keeps every finished batch of candidates and picks, the same command resumes where a stopped run ended")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap
@@ -238,7 +239,8 @@ def main() -> int:
     res = rewrite_lines(doc["verdicts"], sources, locale, router, pass2_system=pass2_system, pick_system=pick_system, n=args.candidates,
                         seed=args.seed, ph_style=args.placeholder_style, tag_style=args.tag_style, statuses=statuses,
                         source_file=str(doc.get("source_file") or Path(args.source_table).name), workers=args.workers,
-                        context=load_context(Path(args.context_map), locale) if args.context_map else None)
+                        context=load_context(Path(args.context_map), locale) if args.context_map else None,
+                        memo=BatchMemo(Path(args.cache)) if args.cache else None)
     result = {"locale": locale, "source_file": doc.get("source_file"), "verdicts": str(inp), "lines": res["lines"], "critique": res["critique"],
               "notes": router.notes}
     out.parent.mkdir(parents=True, exist_ok=True)

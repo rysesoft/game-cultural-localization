@@ -212,7 +212,7 @@ def _call_keyed(provider: Any, system: str, task: str, base_payload: Dict[str, A
 
 def translate_rows(provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, task: str = "pass1",
                    system: Optional[str] = None, batch_size: int = 30, max_tokens: int = 4096,
-                   extra: Optional[Dict[str, Any]] = None, workers: int = 1) -> Dict[str, str]:
+                   extra: Optional[Dict[str, Any]] = None, workers: int = 1, memo: Optional[BatchMemo] = None) -> Dict[str, str]:
     """Translate rows [{key, source, ...}] with task 'pass1' or 'literal'; return key -> target."""
     if task not in ("pass1", "literal"):
         raise L10nError(f"translate_rows: unknown task '{task}'")
@@ -222,11 +222,12 @@ def translate_rows(provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *
         got = _call_keyed(provider, sys_prompt, task, {"locale": locale, **(extra or {})}, batch, "rows", "rows", "key",
                           lambda it: isinstance(it.get("target"), str), max_tokens)
         return {k: str(v["target"]) for k, v in got.items()}
-    return run_batches(list(chunked(list(rows), batch_size)), one, workers)
+    tag = (task, getattr(provider, "model", "?"), sys_prompt, locale, extra or {}, max_tokens)
+    return run_batches(list(chunked(list(rows), batch_size)), one, workers, memo, tag)
 
 
 def backtranslate_rows(provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
-                       batch_size: int = 30, max_tokens: int = 4096, workers: int = 1) -> Dict[str, str]:
+                       batch_size: int = 30, max_tokens: int = 4096, workers: int = 1, memo: Optional[BatchMemo] = None) -> Dict[str, str]:
     """Back-translate rows [{key, target}] into English; return key -> back translation."""
     sys_prompt = system_for("roundtrip", locale, system)
 
@@ -234,7 +235,8 @@ def backtranslate_rows(provider: Any, rows: Sequence[Dict[str, Any]], locale: st
         got = _call_keyed(provider, sys_prompt, "roundtrip", {"locale": locale}, batch, "rows", "rows", "key",
                           lambda it: isinstance(it.get("back"), str), max_tokens)
         return {k: str(v["back"]) for k, v in got.items()}
-    return run_batches(list(chunked([{"key": r["key"], "target": r["target"]} for r in rows], batch_size)), one, workers)
+    tag = ("roundtrip", getattr(provider, "model", "?"), sys_prompt, locale, max_tokens)
+    return run_batches(list(chunked([{"key": r["key"], "target": r["target"]} for r in rows], batch_size)), one, workers, memo, tag)
 
 
 def normalize_vote(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -300,7 +302,7 @@ def revote(provider: Any, payload: Dict[str, Any], locale: str, *, system: Optio
 
 
 def pass2_candidates(provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, n: int = 3, system: Optional[str] = None,
-                     batch_size: int = 10, max_tokens: int = 4096, workers: int = 1) -> Dict[str, List[str]]:
+                     batch_size: int = 10, max_tokens: int = 4096, workers: int = 1, memo: Optional[BatchMemo] = None) -> Dict[str, List[str]]:
     """Ask the Pass 2 model for n candidates per row [{key, source, target, ...}]; returns key -> distinct non-empty candidates."""
     sys_prompt = system or DEFAULT_SYSTEM["pass1"].format(locale=locale)
 
@@ -311,11 +313,12 @@ def pass2_candidates(provider: Any, rows: Sequence[Dict[str, Any]], locale: str,
     def one(batch: List[Dict[str, Any]]) -> Dict[str, List[str]]:
         got = _call_keyed(provider, sys_prompt, "pass2", {"locale": locale, "n_candidates": n}, batch, "rows", "rows", "key", ok, max_tokens)
         return {k: ordered_unique(str(x) for x in v["candidates"] if isinstance(x, str) and x.strip())[:n] for k, v in got.items()}
-    return run_batches(list(chunked(list(rows), batch_size)), one, workers)
+    tag = ("pass2", getattr(provider, "model", "?"), sys_prompt, locale, n, max_tokens)
+    return run_batches(list(chunked(list(rows), batch_size)), one, workers, memo, tag)
 
 
 def pick_candidates(provider: Any, items: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
-                    batch_size: int = 20, max_tokens: int = 2048, workers: int = 1) -> Dict[str, str]:
+                    batch_size: int = 20, max_tokens: int = 2048, workers: int = 1, memo: Optional[BatchMemo] = None) -> Dict[str, str]:
     """Blind choice among candidates: items [{key, context..., candidates: [{id, text}]}] -> key -> chosen id."""
     sys_prompt = system_for("jury", locale, system)
     ids = {str(it["key"]): {str(c["id"]) for c in it["candidates"]} for it in items}
@@ -324,7 +327,8 @@ def pick_candidates(provider: Any, items: Sequence[Dict[str, Any]], locale: str,
         got = _call_keyed(provider, sys_prompt, "pick", {"locale": locale}, batch, "items", "picks", "key",
                           lambda it: str(it.get("choice")) in ids.get(str(it.get("key")), set()), max_tokens)
         return {k: str(v["choice"]) for k, v in got.items()}
-    return run_batches(list(chunked(list(items), batch_size)), one, workers)
+    tag = ("pick", getattr(provider, "model", "?"), sys_prompt, locale, max_tokens)
+    return run_batches(list(chunked(list(items), batch_size)), one, workers, memo, tag)
 
 
 def word_count(text: str) -> int:

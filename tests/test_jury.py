@@ -209,6 +209,22 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 0, err)
             self.assertIn("pass 1", out)
 
+    def test_cache_resumes_without_calls(self):
+        with TempDir() as td:
+            blind = write_json(td / "blind_tr-TR_01.json", slice_doc())
+            sc = write_json(td / "sc.json", SCENARIO)
+            log = td / "budget.jsonl"
+            args = ("jury.py", str(blind), "--locale", "tr-TR", "--dry-run", "--fake-scenario", str(sc), "--langpack-dir", str(td / "np"),
+                    "--cache", str(td / "votes.json"), "--budget-log", str(log), "--no-budget-caps")
+            run_cli(*args, env_extra=NO_KEYS)
+            first = (td / "verdicts_tr-TR_01.json").read_text(encoding="utf-8")
+            calls = len(log.read_text(encoding="utf-8").splitlines())
+            self.assertGreater(calls, 0)
+            run_cli(*args, env_extra=NO_KEYS)
+            again = {json.loads(l)["role"] for l in log.read_text(encoding="utf-8").splitlines()[calls:]}
+            self.assertFalse(again & {"J1", "J2"})                             # every vote batch came from the cache
+            self.assertEqual((td / "verdicts_tr-TR_01.json").read_text(encoding="utf-8"), first)
+
     def test_exit_2(self):
         with TempDir() as td:
             leak = write_json(td / "leak.json", {"entries": [{"key": "A", "source": "Save", "target": "Kaydet"}]})
