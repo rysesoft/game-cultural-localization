@@ -394,6 +394,15 @@ class ContextInPromptTests(unittest.TestCase):
             self.assertEqual(bcm.load_context(m, "de-DE").appendix, "")
             self.assertEqual(bcm.load_context(None).system("BASE"), "BASE")
             self.assertEqual(text_style.punctuation_problems(bcm.MAP_HEADER + "\n" + bcm.APPENDIX_HEADER), [])
+            # the header travels with the line notes, so every locale's juror and writer learns to read inserted and limit
+            for field in ("`inserted`", "`limit`", "`screen`", "`player_action`"):
+                self.assertIn(field, bcm.MAP_HEADER)
+            self.assertIn("form of address", bcm.APPENDIX_HEADER)
+            prompts = SCRIPTS.parent / "prompts"
+            critic = (prompts / "critic.tr-TR.md").read_text(encoding="utf-8")
+            self.assertIn("`context`", critic)
+            self.assertIn("`inserted`", critic)
+            self.assertIn("son satıra kadar siz der", (prompts / "pass2.tr-TR.md").read_text(encoding="utf-8"))
             with self.assertRaises(L10nError):
                 bcm.load_context(td / "missing.md")
             with self.assertRaises(L10nError):

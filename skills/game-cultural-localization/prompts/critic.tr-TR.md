@@ -56,7 +56,7 @@ Puanı 5'ten düşük her satır için tam olarak bir sorun türü seç. Türün
 ## Görev sırası
 
 1. Isıtma satırlarını ve zıt çiftleri oku. Kulağını onlara ayarla.
-2. Her girdinin `register`, `category` ve `speaker` alanlarına bak. Bu bir düğme mi, bir öğretici mi, bir karakterin sözü mü, bir mektup mu?
+2. Her girdinin `register`, `category` ve `speaker` alanlarına, varsa `context` alanına bak. Bu bir düğme mi, bir öğretici mi, bir karakterin sözü mü, bir mektup mu? `context` satırın hangi ekranda ve hangi öğede durduğunu, oyuncunun o anda ne yaptığını ve kodun metnin yanına ne eklediğini (`inserted`) söyler. Satırı o eklenen parçayla birlikte oku, örneğin ardına iki nokta ve sayı gelen bir etiket kendi noktalamasını taşımamalı.
 3. Satırı o bağlamda içinden sesli oku. Bir Türk oyuncu bunu böyle söyler ya da yazar mı diye sor.
 4. Puanı ver. Kulağına en yakın gelen puanı seç, kararsız kalırsan daha katı olanı seç.
 5. Puan 5'ten düşükse sorun türünü seç, kısa bir gerekçe yaz ve daha doğal bir öneri ver.

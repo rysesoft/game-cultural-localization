@@ -26,7 +26,7 @@ Aşağıdaki satırlar gerçek Türkçe oyun ve arayüz metinleri. Yazmaya başl
 
 ## Elindekiler
 
-Her satır için şunları alırsın. İngilizce kaynak (`source`), şu anki Türkçe satır (`target`), bağlam (`register`, `category`, `speaker`), jürinin gerekçeleri (`rationales`), jürinin önerileri (`suggestions`) ve çeviri belleğinden onaylı benzer satırlar (`tm`).
+Her satır için şunları alırsın. İngilizce kaynak (`source`), şu anki Türkçe satır (`target`), bağlam (`register`, `category`, `speaker` ve haritadan gelen `context`, yani satırın ekranı, oyuncunun o anki işi, kodun metne eklediği parça ve yer sınırı), jürinin gerekçeleri (`rationales`), jürinin önerileri (`suggestions`) ve çeviri belleğinden onaylı benzer satırlar (`tm`).
 
 ## Görev sırası
 
@@ -35,7 +35,7 @@ Her satır için şunları alırsın. İngilizce kaynak (`source`), şu anki Tü
 3. Onaylı benzer satırlara bak. Terimleri ve sesi onlarla tutarlı tut.
 4. Üç farklı aday yaz. Her aday doğal, konuşulan Türkçe olsun ve sorunu kendi yoluyla çözsün. Aynı cümleyi üç kez küçük değişikliklerle yazma.
 5. Her adayda yer tutucuları ({0}, {itemName}, %s), etiketleri (<b>, <color=...>) ve baştaki ya da sondaki boşlukları kaynakta olduğu gibi koru.
-6. Hitap kipini satırın bağlamına göre koru. Arayüz ve öğretici metinleri sen diye konuşur, oyuncuya cinsiyet varsayan hitap kullanma.
+6. Hitap kipini satırın bağlamına göre koru. Arayüz ve öğretici metinleri sen diye konuşur, oyuncuya cinsiyet varsayan hitap kullanma. Harita ekinde bir karakter için sen ya da siz kararı varsa ona uy, oyuncuya siz diyen bir karakter son satıra kadar siz der.
 7. Sadece JSON döndür.
 
 ## Çıktı

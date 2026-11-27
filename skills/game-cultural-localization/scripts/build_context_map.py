@@ -390,10 +390,16 @@ MAP_HEADER = ("# Context map of this game\n\n"
               "translator learns them from the code before translating. It never decides a word for you. The same source word takes "
               "different words in your language depending on where the game shows it, so judge and write every line for its place. "
               "An item may carry a `context` object with the screen and the element that show the line, what the player is doing, "
-              "what the code inserts next to it, the room it has, the speaker and the listener.")
+              "what the code inserts next to it, the room it has, the speaker and the listener. Read it before you judge or write the "
+              "line. `screen` and `element` tell a button from a title, a toast or a letter, `player_action` tells what the player "
+              "wants in that moment. `inserted` names what the code puts next to the text when the game runs, a name, a number, a "
+              "unit or another text. The line must still read right together with it, a label the code follows with a colon and a "
+              "number takes no punctuation of its own, and a sentence the code ends with a name must take that name in the grammar "
+              "of your language. `limit` is the room the line has. `speaker` and `listener` set the voice and the form of address.")
 APPENDIX_HEADER = ("# Decisions of the existing {locale} version\n\n"
                    "The published {locale} version of the game made these choices. Stay consistent with them unless the context of a line "
-                   "says otherwise.")
+                   "says otherwise. Keep the form of address it sets for every character, a character who speaks formally to the player "
+                   "does so to the last line.")
 
 
 @dataclass
