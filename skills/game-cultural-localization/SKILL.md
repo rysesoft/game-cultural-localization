@@ -14,7 +14,7 @@ description: >-
 
 Video game localization fails whenever text is **grammatically correct on paper yet nobody in real life talks like that**. Players immediately spot robotic *translationese*, manual style passive voice, mismatched formality, UI text clipping or missing font glyphs (`□`).
 
-This suite combines **15 native ear language playbooks** with **Golden Voice Anchors**, a **blind native ear critic** (`native-ear-critic`), a **colloquial rewriter** (`game-culturalizer`), a **mixed-family LLM jury** with language packs, and **zero dependency CLI gates**. It is project independent (no title specific cast or lore), engine independent (Unity, Unreal, Godot, ICU, printf and Python style placeholders are all first class), and the agent prompts work as plain system prompts with any LLM API.
+Every run starts with a **context map** of the game (`context-cartographer` on Claude Opus with `context-scout` agents on Claude Sonnet), because no translator or juror can choose the right word for a line without knowing where and why the game shows it. On top of that map the suite combines **15 native ear language playbooks** with **Golden Voice Anchors**, a **blind native ear critic** (`native-ear-critic`), a **colloquial rewriter** (`game-culturalizer`), a **mixed-family LLM jury** with language packs, and **zero dependency CLI gates**. It is project independent (no title specific cast or lore), engine independent (Unity, Unreal, Godot, ICU, printf and Python style placeholders are all first class), and the agent prompts work as plain system prompts with any LLM API.
 
 ---
 
@@ -22,8 +22,12 @@ This suite combines **15 native ear language playbooks** with **Golden Voice Anc
 
 Keep your context window lean. Read the methodology and the ledger guide when you orchestrate a locale, and load **only** the playbook of the active target locale.
 
+### Context Map (always first)
+* [agents/context-cartographer.md](../../agents/context-cartographer.md) orchestrates the context map on Claude Opus (role `context_orchestrator`), splits the game among [agents/context-scout.md](../../agents/context-scout.md) agents on Claude Sonnet (role `context_agent`), asks the user whenever something stays unclear and writes `CONTEXT_MAP.md` for every later step.
+* [build_context_map.py](./scripts/build_context_map.py) `--scan` gives the agents the facts. For every key of a Unity project the prefabs, scenes and data assets that use it, the object's hierarchy path, the class and field, and the code lines that show it, with a flag where the code glues the text to something else.
+
 ### Core Runbooks & Templates
-* [methodology_and_qa.md](./references/methodology_and_qa.md). The canonical 4 phase pipeline (Phase 0 to 3) with per phase inputs, outputs and measurable gate criteria, the jury and deliberation flow, language packs and trust levels, plus glossary, TM, string freeze, regression, in-context LQA, pseudo localization and rollback practices.
+* [methodology_and_qa.md](./references/methodology_and_qa.md). The canonical 4 phase pipeline (Phase 0 to 3) with per phase inputs, outputs and measurable gate criteria, the context map, the jury and deliberation flow, language packs and trust levels, plus TM, string freeze, regression, in-context LQA, pseudo localization and rollback practices.
 * [transcreation_ledger_guide.md](./references/transcreation_ledger_guide.md). Ledger schema (CSV and JSON) for pop culture nods, idioms, spoiler guards, hidden plurality or gender and concatenation seams, with a 15 locale idiom table.
 
 ### Executable CLI Tools & Workflow (`scripts/`)
@@ -89,7 +93,7 @@ Anchors use generic roles and items only (*the Mentor*, *the Rival*, `{itemName}
 2. **Anchor Voices Before Translating.** Calibrate every character against the archetype tagged **Golden Voice Anchors** (A1 to A5) in `references/<locale>.md` so mentors, rivals, rookies, scientists and antagonists never blur into one narrator voice.
 3. **Ban Appliance-Manual & Bureaucratic Language.** Toasts and tutorials talk like modern games (*"That doesn't fit here."*, *"Spot's already taken!"*), never like municipal paperwork (*"This item cannot be placed in this location."*).
 4. **Use Living Spoken Tenses in Personal Messages.** Never use literary past tenses (*Präteritum*, *passé simple*, *passato remoto*) in emails, chat or letters where real speakers use conversational tenses (*Perfekt*, *passé composé*, *passato prossimo*, *pretérito perfecto compuesto*), see playbook section 3.
-5. **Zero Terminology Collisions.** Lock lookalike mechanics in the glossary (`glossary.csv` with `term_en`, one column per locale, `notes`) before Pass 1 (*Contract* vs *Order*, *Stamina* vs *Durability*, *Blueprint* vs *Recipe*), keep tutorial references identical to live UI labels and let the linter enforce the glossary.
+5. **Context Decides Every Word.** Language is flexible. One source word takes different target words depending on where the game uses it (*Play* is *Oyna* for a game and *Çal* for music, *Stamina* can be an energy bar on the HUD or a durability stat on an item), so no term is ever locked in a list. Read the line notes of `CONTEXT_MAP.md` for every key, find where it shows, what the player is doing and what sits next to it, and choose the word for that place. A tutorial that names a button uses the same word as that button, because the map links them.
 6. **Natural Player Gender Neutrality.** When player gender is unspecified, use each language's natural non-gendered constructions from playbook section 4. Never default to male forms and never use immersion-breaking `@/*/(a)` hacks.
 7. **Blind Native-Ear Critique.** Pass 1 output is always reviewed from a **blind slice** generated by `make_blind_slice.py` (no source column exists in the file the critic or the jury reads). The critic returns `critique_<locale>_<batch>.json` in the fixed schema (naturalness `score` 1 to 5 and `issue_type`), validated by `validate_critique.py`. The jury flow scores every line with three model families per tier and settles disagreements by anonymous deliberation. Every entry with `score` below 5 is rewritten in Pass 2.
 8. **Deterministic Tool Gate.** A locale is complete only when `lqa_linter.py --fail-on-error`, `ui_expansion_checker.py --fail-on-high` and (for custom fonts) `font_glyph_scanner.py` all exit `0`. Exit `1` means findings to fix. Exit `2` means the command or input is wrong (unknown locale, malformed file, missing column) and must be corrected, never skipped.
@@ -98,18 +102,18 @@ Anchors use generic roles and items only (*the Mentor*, *the Rival*, `{itemName}
 
 ## 4. Minimal Instructions (one locale, one table)
 
-1. **Phase 0, pre-flight.** Record file checksums, scan code for concatenation seams, run `font_glyph_scanner.py` on the project fonts, lock `glossary.csv`, build `<LOCALE>_BIBLE.md` and the transcreation ledger (schema in the ledger guide). Pseudo-localize once to catch hard-coded strings.
+1. **Phase 0, pre-flight.** First the context map. Run `context-cartographer`, answer its questions, and keep `CONTEXT_MAP.md` with the project. Then record file checksums, scan code for concatenation seams, run `font_glyph_scanner.py` on the project fonts, build `<LOCALE>_BIBLE.md` and the transcreation ledger (schema in the ledger guide). Pseudo-localize once to catch hard-coded strings.
 2. **Phase 1, Pass 1.** Split the clean room source batch (`key`, `en`, optional `category`, `speaker`, `archetype`, `max_chars`) and run `game-culturalizer` with `pass: 1` per batch to get `pass1_<locale>_<batch>.json`.
 3. **Phase 2, blind critique and Pass 2.**
    `python scripts/make_blind_slice.py pass1_<locale>_<batch>.json --locale <locale> --out blind_<locale>_<batch>.json --key-col key --target-col dst --context-cols category,speaker,archetype`
    Then run `native-ear-critic` on the blind file only, check it with `python scripts/validate_critique.py critique_<locale>_<batch>.json --slice blind_<locale>_<batch>.json` and run `game-culturalizer` with `pass: 2` to get `final_<locale>_<batch>.json`.
    With API keys the whole phase also runs as a jury, `python scripts/jury.py blind_<locale>_<batch>.json --locale <locale> --source-table pass1_<locale>_<batch>.json`, followed by `pass2_rewrite.py` and `report_changes.py`.
 4. **Phase 3, automated gate.**
-   `python scripts/lqa_linter.py --input final_<locale>.json --locale <locale> --src-field en --dst-field dst --glossary glossary.csv --glossary-severity ERR --fail-on-error`
+   `python scripts/lqa_linter.py --input final_<locale>.json --locale <locale> --src-field en --dst-field dst --fail-on-error`
    `python scripts/ui_expansion_checker.py --input final_<locale>.json --locale <locale> --src-field en --dst-field dst --fail-on-high`
    `python scripts/font_glyph_scanner.py --input final_<locale>.json --dst-field dst --font <font.ttf|.ttc|TMP.asset>`
    All must exit `0`. Then write back to the engine tables and verify that only the target locale files changed.
 
 `python scripts/orchestrator_stub.py --dry-run --locale <locale> --input <table> --workdir <dir>` runs Phase 0 to 3 with the jury end to end without any API key, `--live` does the same with the real models.
 
-Input and output contracts for both agents, including the critique JSON schema, are defined in `agents/game-culturalizer.md` and `agents/native-ear-critic.md`. The full phase runbook with gate criteria is in `references/methodology_and_qa.md`.
+Input and output contracts of the agents, including the critique JSON schema, are defined in `agents/context-cartographer.md`, `agents/context-scout.md`, `agents/game-culturalizer.md` and `agents/native-ear-critic.md`. The full phase runbook with gate criteria is in `references/methodology_and_qa.md`.

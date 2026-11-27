@@ -20,6 +20,8 @@
     "pass2":     "opus",
     "roundtrip": "v4flash",
     "literal":   "v4flash",
+    "context_orchestrator": "opus",
+    "context_agent":        "sonnet",
     "J1": ["haiku",  "v4flash", "hydrogen"],
     "J2": ["sonnet", "v4pro",   "neon"],
     "J3": ["opus",   "v4pro",   "carbon"]

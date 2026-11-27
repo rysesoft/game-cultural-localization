@@ -22,6 +22,7 @@ Dördüncü sütun paketin ulaşmak istediği sonuç. Sayfanın geri kalanı ora
 
 | Katman | Ne yapar |
 |---|---|
+| Bağlam | Tek bir satıra dokunulmadan önce Claude Opus üzerinde çalışan bir orkestratör ve Claude Sonnet üzerinde çalışan ajanlar oyunun kodunu, sahnelerini, prefab'larını ve metin tablolarını inceler, belirsiz kalan her şeyi stüdyoya sorar ve bir bağlam haritası yazar. Çevirmen, eleştirmen ve jüri işe bu haritayı okuyarak başlar, çünkü aynı kelime yerine göre değişir (*Play* bir oyun için *Oyna*, müzik için *Çal* olur) |
 | Zanaat | Golden Voice Anchors satırları ve beş ses arketipi içeren 15 kültürelleştirme rehberi. Kültürelleştirme ajanı Pass 1 ve Pass 2'yi yazar, anadil kulağı denetçisi İngilizceyi hiç göstermeyen kör bir dilimi puanlar |
 | Kapılar | Saf Python ile yazılmış linter, arayüz taşma denetçisi, font glif tarayıcısı ve eleştiri doğrulayıcısı, çıkış kodları 0, 1 ve 2. Bozuk bir yer tutucu, kesilen bir buton ya da eksik bir glif derlemeye ulaşmaz |
 | Ölçüm (2.2) | Claude, Gemini ve DeepSeek her satırı üç kademede kör olarak değerlendirir, profesyonel bir referans onları kalibre eder ve her değişiklik gerekçe, kanıt, güven oranı ve güven seviyesiyle gelir |
@@ -113,7 +114,7 @@ API anahtarları yalnızca `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` ve `DEEPSEEK_AP
 
 | Faz | Ne olur | Kapı |
 |---|---|---|
-| 0 Ön kontrol | Sağlama toplamları, birleştirme taraması, font glif taraması, `glossary.csv`, `<LOCALE>_BIBLE.md`, transcreation ledger, sahte yerelleştirme | Ek yerleri ve çakışan terimler kayda geçer, eksik glif sıfır |
+| 0 Bağlam haritası ve ön kontrol | `context-cartographer` ve `context-scout` ajanları `CONTEXT_MAP.md` dosyasını yazar ve belirsiz kalanları kullanıcıya sorar. Ardından sağlama toplamları, birleştirme taraması, font glif taraması, `<LOCALE>_BIBLE.md`, transcreation ledger, sahte yerelleştirme | Her anahtar için satır notu, açık soruların cevaplanması, ek yerlerinin kaydı, eksik glif sıfır |
 | 1 Temiz oda Pass 1 | `game-culturalizer` temiz kaynak gruplarını rehbere ve arketiplere göre ayarlanmış olarak çevirir | Her grupta `lqa_linter.py` çıkış kodu 0 |
 | 2 Kör denetim ve Pass 2 | `make_blind_slice.py` kaynağı ayıklar, `native-ear-critic` her satıra 1 ile 5 arası puan verir, `validate_critique.py` şemayı denetler, `game-culturalizer` 5'in altında kalan her satırı yeniden yazar | Satırların %95'i 5 puanda, 2 ve altında satır yok |
 | 3 Otomatik kapı | `lqa_linter.py --fail-on-error`, `ui_expansion_checker.py --fail-on-high`, `font_glyph_scanner.py`, geri yazma, sağlama toplamıyla kapsam denetimi | Hepsi 0 ile çıkar, yalnızca hedef dil dosyaları değişir |
@@ -168,10 +169,10 @@ Skill'in `name` ve `description` alanları oturum başında, gövdesi ise gerekt
 
 ```bash
 python scripts/font_glyph_scanner.py --input strings.en.json --dst-field en --font ./Fonts/UI.ttf --font ./Fonts/Fallback.ttc
-python scripts/lqa_linter.py --input pass1_de-DE_01.json --locale de-DE --src-field en --dst-field dst --glossary glossary.csv --glossary-severity ERR --fail-on-error
+python scripts/lqa_linter.py --input pass1_de-DE_01.json --locale de-DE --src-field en --dst-field dst --fail-on-error
 python scripts/make_blind_slice.py pass1_de-DE_01.json --locale de-DE --out blind_de-DE_01.json --key-col key --target-col dst --context-cols category,speaker,archetype
 python scripts/validate_critique.py critique_de-DE_01.json --slice blind_de-DE_01.json
-python scripts/lqa_linter.py --input final_de-DE.json --locale de-DE --src-field en --dst-field dst --glossary glossary.csv --glossary-severity ERR --json lqa_de-DE.json --fail-on-error
+python scripts/lqa_linter.py --input final_de-DE.json --locale de-DE --src-field en --dst-field dst --json lqa_de-DE.json --fail-on-error
 python scripts/ui_expansion_checker.py --input final_de-DE.json --locale de-DE --src-field en --dst-field dst --json ui_de-DE.json --fail-on-high
 ```
 
@@ -185,7 +186,7 @@ python scripts/ui_expansion_checker.py --input final_de-DE.json --locale de-DE -
 | Etiket stilleri | `tmp` (`<b> <color=> <sprite=> <style=> <link=>`), `html`, `bbcode` (`[b] [color=] [url=]`) |
 | Çalışma ortamı | Python 3.9 ya da üstü, yalnızca standart kütüphane, UTF-8 girdi ve çıktı, BOM'a dayanıklı |
 | Çıkış kodları | 0 temiz, 1 bulgu var (hatalar, `--fail-on-warn` ile uyarılar, `--fail-on-high` ile HIGH riskler), 2 kullanım ya da girdi hatası |
-| Sözlük | `term_en,<locale>[,<locale>...],notes` başlıklı `glossary.csv`, `--glossary` ile zorunlu tutulur |
+| Bağlam | Her projenin `CONTEXT_MAP.md` dosyası her satırın anlamını belirler. İsteğe bağlı isim listesi (`--glossary`, başlık `term_en,<locale>[,<locale>...],notes`) yalnızca özel isimlerin yazılışını denetler |
 | Eleştiri dosyası | `critique_<locale>_<batch>.json`, 1 ile 5 arası doğallık puanı ve sorun türü, yalnızca 5'in altındaki puanlar listelenir |
 
 Girdi satırı örneği (yalnızca `key` ve `en` zorunlu) ve eleştiri kaydı örneği.

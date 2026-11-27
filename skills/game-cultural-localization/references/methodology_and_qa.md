@@ -4,7 +4,7 @@ Use this runbook whenever you localize or overhaul a game locale, whatever the e
 
 | Phase | Name | Main actor | Key output |
 |---|---|---|---|
-| 0 | Pre-flight. Codebase, font and transcreation audit | human and CLI tools | `checksums_before.txt`, `glossary.csv`, `<LOCALE>_BIBLE.md`, `transcreation_ledger.csv`, font report |
+| 0 | Context map first, then pre-flight. Codebase, font and transcreation audit | `context-cartographer` (Claude Opus) with `context-scout` agents (Claude Sonnet), the user's answers, CLI tools | `CONTEXT_MAP.md`, `checksums_before.txt`, `<LOCALE>_BIBLE.md`, `transcreation_ledger.csv`, font report |
 | 1 | Clean room culturalization (Pass 1) | `game-culturalizer` | `pass1_<locale>_<batch>.json` |
 | 2 | Blind native ear critique and Pass 2 colloquial rewrite | `make_blind_slice.py`, then `native-ear-critic` (or the jury), `validate_critique.py`, `game-culturalizer` | `blind_<locale>_<batch>.json`, `critique_<locale>_<batch>.json`, `final_<locale>_<batch>.json` |
 | 3 | Automated LQA, UI overflow and font gate | `lqa_linter.py --fail-on-error`, `ui_expansion_checker.py --fail-on-high`, `font_glyph_scanner.py` | reports (`--json`), exit codes `0`, `checksums_after.txt` |
@@ -16,14 +16,8 @@ All commands below run from the plugin's `skills/game-cultural-localization/` fo
 - **Working field names.** `key`, `en` (source) and `dst` (target) by default. Override them with `--key-field`, `--src-field` and `--dst-field` (or `--key-col` and `--target-col` for the slice tool) when the project table uses other names, for example a locale named column `de-DE`.
 - **Optional context fields.** `category` (`ui_button`, `ui_toast`, `tutorial`, `item`, `lore`, `dialogue` and so on), `speaker`, `archetype` (A1 to A5, see `SKILL.md`), `context`, `max_chars`, `plural` (ICU category).
 - **Engine token syntaxes supported everywhere.** `{0}` and `{name}` (Unity, .NET, Python), `%s`, `%d` and `%1$s` (printf, Godot), ICU `{count, plural, one {...} other {...}}`, Unreal `{Name}` and the Hangul post-position `|hpp(...)`, rich text `<b> <i> <u> <color=...> <size=...> <sprite=...> <style=...> <link=...> <br>` and BBCode `[b] [i] [color=...] [url=...]`. Engine specific notes are marked **(Unity)**, **(Unreal)** and **(Godot)**.
-- **Glossary and termbase.** `glossary.csv`, UTF-8, with the header `term_en,<locale>[,<locale>...],notes`. One row per source term. A non-empty locale cell is a **locked** rendering that `lqa_linter.py --glossary` enforces. The target of a string whose source contains `term_en` must contain the locked rendering, and alternatives may be separated with `|`. An empty cell means the term is not locked for this locale yet. Glossary findings are `[GLOSSARY]` warnings by default, the gates below pass `--glossary-severity ERR` so they block. `notes` holds part of speech, collision pairs and forbidden alternatives (`forbidden: Auftrag`). Example.
-
-  ```csv
-  term_en,de-DE,fr,ja-JP,notes
-  Contract,Vertrag,contrat,契約,"customer job; collision pair with Order — forbidden: Auftrag"
-  Order,Auftrag,commande,注文,"machine queue item; collision pair with Contract"
-  Stamina,Ausdauer,endurance,スタミナ,"player stat; never Haltbarkeit (Durability)"
-  ```
+- **Context map.** `CONTEXT_MAP.md` of the project (see Phase 0 step 1) is the source of meaning for every line. Language is flexible, one source word takes different target words depending on where the game uses it (*Play* is *Oyna* for a game and *Çal* for music), so words are chosen per place from the map and never locked in a term list.
+- **Fixed names (optional).** `lqa_linter.py --glossary names.csv` can check proper names that never change, such as the game's title, characters, factions, stations and brands, in a CSV with the header `term_en,<locale>[,<locale>...],notes`. It is a spelling check for names, not a way to decide words.
 
 - **Naming.** `<LOCALE>_BIBLE.md` (for example `DE-DE_BIBLE.md`), `pass1_<locale>_<batch>.json`, `blind_<locale>_<batch>.json`, `critique_<locale>_<batch>.json`, `final_<locale>_<batch>.json`, `lqa_<locale>.json`. The jury flow adds `verdicts_<locale>_<batch>.json`, `rewrites_<locale>_<batch>.json` and `changes_<locale>_<batch>.json` with its `.md` twin.
 
@@ -31,9 +25,10 @@ All commands below run from the plugin's `skills/game-cultural-localization/` fo
 
 ## Phase 0. Pre-Flight Codebase, Font & Transcreation Audit
 
-**Inputs.** Engine string tables, game code, fonts and atlases, UI prefabs or scenes, the existing glossary if any.
-**Outputs.** `checksums_before.txt`, the concatenation seam list (ledger type `concat`), font report, `glossary.csv`, `<LOCALE>_BIBLE.md`, `transcreation_ledger.csv`, pseudo localization findings.
+**Inputs.** Engine string tables, game code, scenes, prefabs and data assets, fonts and atlases, the user for every open question.
+**Outputs.** `CONTEXT_MAP.md`, `checksums_before.txt`, the concatenation seam list (ledger type `concat`), font report, `<LOCALE>_BIBLE.md`, `transcreation_ledger.csv`, pseudo localization findings.
 
+0. **Context map, always first.** A professional game translator studies the game before the first line, reads the code that shows each string and learns the world, the systems and the screens. `context-cartographer` does that work for every later step and runs on the strongest model (Claude Opus, role `context_orchestrator`). It inventories the engine, the string tables, the game's own code, scenes, prefabs and data assets (`build_context_map.py --scan` lists for every key the files, objects, classes and fields that use it), splits the game into slices (systems, screens, tables, lore) and hands each slice to a `context-scout` agent (Claude Sonnet, role `context_agent`). The scouts report per key where it shows, what the player is doing, what is inserted next to it, the room it has, who speaks to whom and what stayed unclear. The orchestrator merges the reports into `CONTEXT_MAP.md` (the game on one page, world, systems, screens, line notes, decisions, open questions), and **asks the user** every question that changes how a line should read instead of guessing. The map never quotes source lines, so the jury and the critic may read it and stay blind to the source wording. Nothing else in this runbook starts before the map exists, and every later actor reads it first.
 1. **Baseline file checksums.** Record SHA-256 hashes of all localization files so you can prove at the end that only the intended target locale files changed.
    ```bash
    # Windows PowerShell
@@ -46,29 +41,29 @@ All commands below run from the plugin's `skills/game-cultural-localization/` fo
    ```bash
    python scripts/font_glyph_scanner.py --input <sample_or_previous_locale.json> --dst-field dst --font <ui_font.ttf> --font <fallback.ttc> --font <TMP_atlas.asset>
    ```
-4. **UI ground truth verification.** For every short or ambiguous key find where it is bound (**(Unity)** `m_KeyId` in `.prefab` or `.unity`, `LocalizedString` fields, **(Unreal)** `NSLOCTEXT` or string table references in widgets, **(Godot)** `tr()` calls and scene `text` properties) and read the surrounding UI. Is the key a tab, a button, a progress status, a suffix appended after a machine name? Open the sprite for ambiguous asset names before naming them. Align the target to the object actually on screen when the source drifts between two names for one object.
-5. **Lock `glossary.csv` and build `<LOCALE>_BIBLE.md`.** The bible records the locked terminology (collision pairs separated explicitly), every character's register (`du/Sie`, `tu/vous`, `tú/usted`, `tu/Lei`, 반말, 해요체 and 합쇼체, Japanese first person pronouns and sentence enders), the archetype mapping (speaker to A1 to A5), the project's UI register, number, date and currency formats, and platform button conventions.
+4. **UI ground truth verification.** The context map does this for every key. Check it for the short or ambiguous ones. Find where the key is bound (**(Unity)** `m_KeyId` in `.prefab` or `.unity`, `LocalizedString` fields, **(Unreal)** `NSLOCTEXT` or string table references in widgets, **(Godot)** `tr()` calls and scene `text` properties) and read the surrounding UI. Is the key a tab, a button, a progress status, a suffix appended after a machine name? Open the sprite for ambiguous asset names before naming them. Align the target to the object actually on screen when the source drifts between two names for one object.
+5. **Build `<LOCALE>_BIBLE.md`.** The bible records the target-language decisions the map's situations led to (with the place each one applies to, never as a global lock), every character's register (`du/Sie`, `tu/vous`, `tú/usted`, `tu/Lei`, 반말, 해요체 and 합쇼체, Japanese first person pronouns and sentence enders), the archetype mapping (speaker to A1 to A5), the project's UI register, number, date and currency formats, and platform button conventions.
 6. **Start the transcreation ledger** (schema in `transcreation_ledger_guide.md`). Pop culture quotes (verify official local dubs by web search before translating), idioms, spoiler guards, hidden plurality or gender facts, concatenation seams.
 7. **Pseudo-localize once.** Run the source through a pseudo locale (lengthen 30 to 40 %, add diacritics and a few CJK characters, bracket each string) and play the build. Hard coded strings, concatenations, clipped controls and tofu show up before any real translation money is spent.
 8. **Language pack and trust level (jury flow).** `build_language_pack.py` builds `langpack/<locale>/` once per locale, `eval_critic.py` calibrates the jury on its contrastive set. The resulting trust level (measured, estimated or rule based) goes into every change report.
 
-**Gate 0 (all must hold).** Checksums recorded · every concatenation seam has a ledger row · the font scan has 0 missing glyphs for the planned character set (or a documented fallback font) · `glossary.csv` has a non-empty cell for every collision pair term in the target locale · `<LOCALE>_BIBLE.md` names a register for every speaker and for UI · pseudo localization issues are filed.
+**Gate 0 (all must hold).** `CONTEXT_MAP.md` exists and has line notes for every key of the run · every open question that changes how a line reads is answered by the user · checksums recorded · every concatenation seam has a ledger row · the font scan has 0 missing glyphs for the planned character set (or a documented fallback font) · `<LOCALE>_BIBLE.md` names a register for every speaker and for UI · pseudo localization issues are filed.
 
 ---
 
 ## Phase 1. Clean-Room Culturalization, Pass 1 (`game-culturalizer`)
 
-**Inputs.** Clean room source batches `in_<locale>_<batch>.json` (`key`, `en`, optional context fields, **never** legacy machine translated target text), `glossary.csv`, ledger, `<LOCALE>_BIBLE.md`, `references/<locale>.md`.
+**Inputs.** Clean room source batches `in_<locale>_<batch>.json` (`key`, `en`, optional context fields, **never** legacy machine translated target text), `CONTEXT_MAP.md`, ledger, `<LOCALE>_BIBLE.md`, `references/<locale>.md`.
 **Outputs.** `pass1_<locale>_<batch>.json` (same keys, same order, target text in `dst`).
 
 1. Export the table to the working JSON format and split it into batches of roughly 80 to 150 strings grouped by category or speaker (keep one speaker's scene together).
 2. Run `game-culturalizer` with `pass: 1` per batch. Batches are independent and can run in parallel. In the jury flow the `pass1` model also gets a warm-up block from the language pack and, with `--tm`, the three closest approved translation memory lines for every row.
-3. Run the linter on each batch immediately so token or glossary slips are caught before the critic sees them.
+3. Run the linter on each batch immediately so token slips are caught before the critic sees them.
    ```bash
-   python scripts/lqa_linter.py --input pass1_<locale>_<batch>.json --locale <locale> --src-field en --dst-field dst --glossary glossary.csv --glossary-severity ERR --fail-on-error
+   python scripts/lqa_linter.py --input pass1_<locale>_<batch>.json --locale <locale> --src-field en --dst-field dst --fail-on-error
    ```
 
-**Gate 1.** Every batch file has exactly the input keys · linter exit `0` on every batch · no source language text left in `dst` (the `[UNTRANSLATED]` check) · glossary violations 0.
+**Gate 1.** Every batch file has exactly the input keys · linter exit `0` on every batch · no source language text left in `dst` (the `[UNTRANSLATED]` check).
 
 ---
 
@@ -90,7 +85,7 @@ All commands below run from the plugin's `skills/game-cultural-localization/` fo
    python scripts/validate_critique.py critique_<locale>_<batch>.json --slice blind_<locale>_<batch>.json
    ```
    Exit `1` (schema or key mismatch) means the critique is re-run, not patched by hand.
-4. **Pass 2 rewrite.** Run `game-culturalizer` with `pass: 2`, the Pass 1 file and the critique. It rewrites every flagged key (critical first), re-checks each suggestion against the source, glossary, tokens and `max_chars`, resolves `needs_source_check` items against code, prefabs and sprites, and writes `final_<locale>_<batch>.json` plus a summary of adopted, adapted and rejected suggestions.
+4. **Pass 2 rewrite.** Run `game-culturalizer` with `pass: 2`, the Pass 1 file and the critique. It rewrites every flagged key (critical first), re-checks each suggestion against the source, the context map, tokens and `max_chars`, resolves `needs_source_check` items against the map, code, prefabs and sprites, and writes `final_<locale>_<batch>.json` plus a summary of adopted, adapted and rejected suggestions.
 5. **Blind critic context guardrail.** The critic cannot see source, code or sprites, so it can mislabel items, decals, tabs and buttons. Every rename of an item, decal, tab or button suggested by the critic is cross-checked against code, prefabs and sprites before acceptance.
 
 **Gate 2 (measurable).** The blind slice contains no source column (the slice tool guarantees it, spot-check the header) · `validate_critique.py` exit `0` for every batch · 100 % of entries with `score` 2 or lower rewritten, 100 % of `score` 3 or 4 rewritten or explicitly rejected with a reason · a second blind pass on the final batch shows **at least 95 % of lines at score 5 and 0 lines at score 2 or lower** (sample at least 100 lines, or the whole batch if smaller) · `needs_source_check` items all resolved in the summary.
@@ -167,13 +162,13 @@ Known limits, written into every trust card. Native judgement without a professi
 
 ## Phase 3. Automated CLI LQA, UI Overflow & Font Gate
 
-**Inputs.** The merged `final_<locale>.json` (all batches), `glossary.csv`, fonts.
+**Inputs.** The merged `final_<locale>.json` (all batches), fonts.
 **Outputs.** `lqa_<locale>.json`, `ui_<locale>.json`, font report, `checksums_after.txt`, engine tables written back.
 
 ```bash
-# 1. Anti-translationese + regional leak scan, placeholder/tag/whitespace/punctuation parity, glossary enforcement
+# 1. Anti-translationese + regional leak scan, placeholder/tag/whitespace/punctuation parity
 python scripts/lqa_linter.py --input final_<locale>.json --locale <locale> \
-  --src-field en --dst-field dst --glossary glossary.csv --glossary-severity ERR \
+  --src-field en --dst-field dst \
   --forbid-chars ";—–" --forbid-spaced-hyphen --strict-whitespace \
   --json lqa_<locale>.json --fail-on-error
 
@@ -200,9 +195,9 @@ Reports written from the string tables alone can be wrong about runtime context.
 
 ## Ongoing Practices (every phase, every release)
 
-### Glossary and termbase management
-- `glossary.csv` is the single source of truth. The bible explains, the glossary enforces. Add a term the moment two keys could collide. Changes go through a changelog line in `<LOCALE>_BIBLE.md` (date, term, old and new rendering, reason), and every change triggers a linter re-run with `--glossary` on all final files.
-- Part of speech, number and gender, and the forbidden alternatives live in `notes`. The linter only enforces the locked rendering, humans enforce the notes.
+### Context map maintenance
+- `CONTEXT_MAP.md` is the single source of meaning. When the game changes (a new screen, a new system, a renamed mechanic, new lore), `context-cartographer` updates the map before the next run, and the user answers the new questions. Every change gets a dated line under the map's decisions.
+- A word problem found in testing is fixed in the map first (what the line really is, where it shows), then in the translation. Fixing only the translation leaves the next new line to fail the same way.
 
 ### Translation memory (TM)
 - `tm.py` keeps a SQLite translation memory per project (`--mode add --status approved` for the studio reference, `--mode approve` for the developer decisions of every change report). Neighbours are found by character n-gram similarity, same category and speaker first. Pass 1 of a new batch gets the closest approved lines as hints, the jury gets them as evidence.
@@ -212,7 +207,7 @@ Reports written from the string tables alone can be wrong about runtime context.
 - Declare a string freeze date per milestone. After it, source edits require a ticket. Localize deltas only. Diff the new source export against the frozen one (key added, changed or removed), run Phases 1 to 3 on the changed keys and keep unchanged keys untouched so TM and checksums stay valid.
 
 ### Regression
-- Every delta run re-executes the Phase 3 gate on the **whole** locale file, not only on the delta, and a blind critic or jury sample of 50 to 100 unchanged lines guards against drift when the glossary or bible changed.
+- Every delta run re-executes the Phase 3 gate on the **whole** locale file, not only on the delta, and a blind critic or jury sample of 50 to 100 unchanged lines guards against drift when the context map or bible changed.
 
 ### In-context LQA
 - After the automated gate, a native tester plays the build (or reviews screenshots mapped to keys) with a checklist. Clipping, overlap, wrapping (CJK line break rules, Korean word wrap), wrong register in context, placeholders rendering with the wrong article, case or particle, dynamic plurals, platform button glyphs and fallback fonts. Every finding references the `key`, and fixes go through Pass 2 and the Phase 3 gate again.

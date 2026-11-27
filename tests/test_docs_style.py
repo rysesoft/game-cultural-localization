@@ -23,7 +23,7 @@ STYLED_DOCS = (
     TESTS_DIR / "README.md",
     SCRIPTS / "rules" / "custom" / "README.md",
 )
-NEW_TOOLS = ("providers_check.py", "build_language_pack.py", "warmup_loader.py", "build_contrastive_set.py", "roundtrip_check.py",
+NEW_TOOLS = ("providers_check.py", "build_context_map.py", "build_language_pack.py", "warmup_loader.py", "build_contrastive_set.py", "roundtrip_check.py",
              "eval_critic.py", "budget_report.py", "jury.py", "deliberate.py", "tm.py", "pass2_rewrite.py", "report_changes.py")
 CLI_SCRIPTS = ("lqa_linter.py", "ui_expansion_checker.py", "font_glyph_scanner.py", "make_blind_slice.py", "validate_critique.py",
                "orchestrator_stub.py") + NEW_TOOLS

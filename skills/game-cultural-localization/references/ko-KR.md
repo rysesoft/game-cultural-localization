@@ -158,7 +158,7 @@ Never ship `{0}을`, `{0}를`, `{0}이`, `{0}가`, `{0}은`, `{0}는`, `{0}으�
 | Buy / Sell | `구매` / `판매` | `구입` acceptable |
 
 * **Button form.** 명사형 (`저장`, `적용`) or `-기` (`계속하기`, `불러오기`), 2 to 6 syllables, no `~합니다`, no final period.
-* **Term lock (one term = one translation).** E.g. `의뢰` (customer contract) vs `주문` (workstation order). `설계도` vs `레시피`. An item named *industrial sludge* stays `산업용 슬러지` everywhere, never "improved" to `퍼티` in dialogue. Record every lock in the project glossary.
+* **Same thing, same name, decided by the context map.** When the map says two keys name the same in-game object or mechanic, they get the same word, and when it says they are different things, they stay apart. E.g. `의뢰` (customer contract) vs `주문` (workstation order). `설계도` vs `레시피`. An item named *industrial sludge* stays `산업용 슬러지` everywhere, never "improved" to `퍼티` in dialogue. The map records which keys name the same thing, so no term is locked in a list.
 
 ## 8. Typography, Numbers & Formatting
 * **Punctuation is half-width** (`.`, `,`, `!`, `?`, `:`), never `。` or `、`. One space after sentence punctuation. System messages end in a period (locked). `!` is free in character lines.

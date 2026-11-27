@@ -239,6 +239,28 @@ python providers_check.py providers.config.json [--roles J1,J2,J3] [--ping] [--d
 
 Exit codes. 0 config, keys and pings are fine. 1 a model was not found and its fallback answered. 2 config error, a missing API key environment variable, an unknown role, or a model that failed without a fallback.
 
+## build_context_map.py (context map facts, the first step of every run)
+
+```
+python build_context_map.py --scan --project "<unity project>" --out loc_work/context [--keys-from loc_work/reference/tr.csv]
+```
+
+The context map is the mandatory first step (Phase 0 step 0). `context-cartographer` on Claude Opus and its `context-scout` agents on Claude Sonnet write `CONTEXT_MAP.md` and ask the user whatever stays unclear. This tool collects the facts they need. It reads the project only and never writes into it.
+
+For a Unity project it reads the Unity Localization string tables (Shared Data assets) and every reference in prefabs, scenes and ScriptableObjects, by table GUID or table name and by key id or key name (`LocalizedString` fields and `LocalizeStringEvent` components). For every key it records the file, the object with its hierarchy path, the class and the field, and the code lines of that class that show the field. A code line is flagged `concat` when it glues the text to something else (`+`, string interpolation, `string.Format`), those lines belong in the transcreation ledger. Paths longer than the Windows limit are read with the long path prefix. Other engines exit 2 for now, the agents read their code directly.
+
+| Flag | Meaning |
+|---|---|
+| `--scan` | scan the project, the only mode for now |
+| `--project` | the game project folder (a Unity project or its Assets folder) |
+| `--out` | output folder, for example `loc_work/context`, refused inside the game project |
+| `--keys-from` | a string table whose keys must be covered, for example the studio reference, the report lists keys without a usage |
+| `--code-lines` | code lines kept per localized field, default 4 |
+
+Output files. `key_usage.json` (`engine`, `project`, `tables`, `keys` with `table`, `usages` of `{file, object, class, field}` and `code` of `{file, line, text, concat}`, `unresolved_references`) and `scan_summary.md` (coverage, tables, main classes per table, keys without a usage). Paths are relative to the project.
+
+Exit codes. 0 scan written. 1 scan written but keys of `--keys-from` have no usage. 2 usage or input error (not a Unity project, no string table, `--out` inside the project).
+
 ## build_language_pack.py (language asset pack with a five-layer filter)
 
 ```

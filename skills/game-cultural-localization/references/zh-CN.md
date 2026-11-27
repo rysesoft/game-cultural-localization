@@ -124,7 +124,7 @@ Written Chinese distinguishes `他 / 她` (and `它` / `祂`). Spoken Chinese do
 | Buy / Sell | `购买` / `出售` |, |
 
 * **Button form.** 2 to 4 characters, verb or verb+object, no `。`, no `请`.
-* **Term lock (one term = one translation).** E.g. `委托` (customer contract) vs `订单` (workstation order). `配方` vs `蓝图`. An item named *industrial sludge* stays `工业污泥` everywhere, never "improved" to `胶泥` in dialogue. Record every lock in the project glossary.
+* **Same thing, same name, decided by the context map.** When the map says two keys name the same in-game object or mechanic, they get the same word, and when it says they are different things, they stay apart. E.g. `委托` (customer contract) vs `订单` (workstation order). `配方` vs `蓝图`. An item named *industrial sludge* stays `工业污泥` everywhere, never "improved" to `胶泥` in dialogue. The map records which keys name the same thing, so no term is locked in a list.
 
 ### 7.1 zh-CN vs zh-Hant terminology (never cross the line)
 

@@ -127,7 +127,7 @@ Written Chinese distinguishes `他 / 她 / 它 / 祂`, and Taiwanese writing add
 | Buy / Sell | `購買` / `販售` | `賣出` |
 
 * **Button form.** 2 to 4 characters, verb or verb+object, no `。`, no `請`. Traditional glyphs are dense (`鑿`, `鑲`, `纜`), prefer high-legibility characters in labels.
-* **Term lock (one term = one translation).** E.g. `委託` (customer contract) vs `訂單` (workstation order). `配方` vs `藍圖`. An item named *industrial sludge* stays `工業污泥` everywhere, never "improved" to `膠泥`. Record every lock in the project glossary.
+* **Same thing, same name, decided by the context map.** When the map says two keys name the same in-game object or mechanic, they get the same word, and when it says they are different things, they stay apart. E.g. `委託` (customer contract) vs `訂單` (workstation order). `配方` vs `藍圖`. An item named *industrial sludge* stays `工業污泥` everywhere, never "improved" to `膠泥`. The map records which keys name the same thing, so no term is locked in a list.
 
 ### 7.1 Mainland terms that must never appear in a TW build
 

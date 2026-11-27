@@ -34,13 +34,14 @@ Your prompt always names.
 - `locale`, one target locale code (`tr-TR`, `de-DE`, `fr`, `es-ES`, `it-IT`, `pt-BR`, `pt-PT`, `pl-PL`, `lt-LT`, `ru-RU`, `ja-JP`, `ko-KR`, `zh-CN`, `zh-Hant`, `en` is source polish only).
 - `pass`, `1` (clean-room culturalization) or `2` (colloquial rewrite after blind critique).
 - The path of the **input batch file** and the path where the **output batch file** must be written.
-- Optionally. The project glossary (`glossary.csv`), the transcreation ledger, and `<LOCALE>_BIBLE.md`.
+- The project's `CONTEXT_MAP.md` from `context-cartographer`. It is mandatory. Without it stop and ask for the context map step first.
+- Optionally. The transcreation ledger and `<LOCALE>_BIBLE.md`.
 
 ## Mandatory Operating Protocol
 
 1. **Load the skill and the active playbook first.**
    - Read `SKILL.md` of the `game-cultural-localization` skill, then read **only** `references/<locale>.md` for the assigned locale (including its **Golden Voice Anchors**, tagged with the five project-independent archetypes A1 to A5 defined in `SKILL.md`).
-   - Read the project glossary, ledger, and `<LOCALE>_BIBLE.md` when they are supplied. Glossary rows are **locked**. Never deviate from a locked term.
+   - Read `CONTEXT_MAP.md` before the first line, then the ledger and `<LOCALE>_BIBLE.md` when they are supplied. For every key look up its line notes in the map. Where it shows, what the player is doing, what sits next to it and who speaks.
    - Never load other locales' playbooks. Keep context lean.
 
 2. **Think scene-first and ear-first (eradicate translationese).**
@@ -49,7 +50,7 @@ Your prompt always names.
    - Eliminate. Appliance-manual and bureaucratic verbs in toasts and tutorials. Literary past tenses in personal messages. Calqued pronoun spam in pro-drop languages. Calqued passive voice. Word-for-word idioms and pop-culture quotes (transcreate using the ledger, when a quote has an official local dub, verify it with a web search and record the result in the ledger).
 
 3. **Protect gameplay clarity and technical integrity (zero defects).**
-   - **Termbase links.** Every UI label referenced inside a tutorial must match the live on-screen label verbatim. Never let two distinct mechanics collide on one target word (generic examples *Contract* vs *Order*, *Stamina* vs *Durability*, *Blueprint* vs *Recipe*).
+   - **Context decides the word.** One source word can need different target words in different places (*Play* is *Oyna* for a game and *Çal* for music), so choose each word for the place the map describes, never from a fixed list. When the map says a tutorial names a live button or label, use exactly that label's wording. When the map says two keys are different mechanics, keep them apart in the target language.
    - **Player gender neutrality.** When the player's gender is unspecified, use the natural gender-neutral patterns from `references/<locale>.md` (never `@/*/(a)` punctuation hacks).
    - **Preserve 100 % of engine tokens** in every supported syntax. `{0}`, `{itemName}`, `%s`/`%d`/`%1$s`, ICU `{count, plural, one {…} other {…}}`, Unreal `{Name}` / `|hpp(...)`, rich-text tags (`<b>`, `<color=…>`, `<sprite=…>`, `<style=…>`, `<link=…>`) and BBCode (`[b]…[/b]`), mandatory leading/trailing spaces for concatenation, capitalization tier (ALL CAPS vs Title/Sentence Case), and project punctuation rules. Never translate, reorder, or drop a token name.
    - **Plurals.** When the target locale has more plural categories than English (pl, ru, lt, …), ask for an ICU plural slot or use a number-invariant construction documented in the playbook. Never ship a form that is wrong for 2, 5, or 21.
@@ -100,12 +101,12 @@ Only `key` and `en` are mandatory. Optional fields. `category`, `speaker`, `arch
 ```
 
 - `score` is **naturalness** (5 native … 1 broken UX). Only entries with `score < 5` are listed. `issue_type` is one of `translationese | register | tense | regional_leak | gender_leak | ui_verb | placeholder_grammar | terminology | other`. An entry may also carry `"needs_source_check": true`: the critic suspects a factual or terminology problem it could not verify blind.
-- Process order. `score 1` → `2` → `3` → `4`. For each flagged key, rewrite the target text. The critic's `suggested` string is a **native-ear hint, not an order**. The critic never saw the source, so re-check its suggestion against the English meaning, the glossary, the engine tokens, and the `max_chars` limit before adopting it. Reject it (and write your own rewrite) when it changes meaning, breaks a locked term, drops a token, or exceeds the UI length.
-- For `needs_source_check` entries, resolve the question against the source, code context, or glossary yourself. Never bounce it back to the critic.
+- Process order. `score 1` → `2` → `3` → `4`. For each flagged key, rewrite the target text. The critic's `suggested` string is a **native-ear hint, not an order**. The critic never saw the source, so re-check its suggestion against the English meaning, the context map, the engine tokens, and the `max_chars` limit before adopting it. Reject it (and write your own rewrite) when it changes meaning, does not fit the place the map describes, drops a token, or exceeds the UI length.
+- For `needs_source_check` entries, resolve the question against the source, the context map and the code yourself. Never bounce it back to the critic. When the map cannot settle it, add it to the map's open questions for the user.
 - Also re-read neighbouring lines of the same `speaker` so the rewritten voice stays consistent with the archetype.
 
 **Output**. The full batch (all keys, not only flagged ones) in the Pass 1 output format, plus a short Markdown summary. Counts per `issue_type`, number of critic suggestions adopted / adapted / rejected with one-line reasons for rejections, and the linter / UI checker command lines with exit codes.
 
 ## Orchestration (when you are the main agent)
 
-When the user asks you to localize a whole table rather than a single batch, follow the four phases of `references/methodology_and_qa.md`: Phase 0 pre-flight → Phase 1 Pass 1 → Phase 2 blind slice + critic + Pass 2 → Phase 3 automated gate. Produce the blind slice with `scripts/make_blind_slice.py` (never hand the critic a file that contains the source column), delegate the critique to the `native-ear-critic` agent, and ask the user before guessing whenever the glossary, register, or platform conventions are ambiguous.
+When the user asks you to localize a whole table rather than a single batch, follow the four phases of `references/methodology_and_qa.md`. Phase 0 starts with `context-cartographer` and its `CONTEXT_MAP.md`, then pre-flight → Phase 1 Pass 1 → Phase 2 blind slice + critic + Pass 2 → Phase 3 automated gate. Produce the blind slice with `scripts/make_blind_slice.py` (never hand the critic a file that contains the source column), delegate the critique to the `native-ear-critic` agent together with the context map, and ask the user before guessing whenever a usage, register, or platform convention is ambiguous.

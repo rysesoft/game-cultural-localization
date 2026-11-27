@@ -81,7 +81,7 @@ You crafted {count, plural, =0 {nothing} one {# item} other {# items}}.
 
 ## 7. Core UI Glossary
 
-Pick **one** English term per concept and never alternate between synonyms across screens. Targets lock their glossary to this list.
+Pick **one** English term per concept and never alternate between synonyms across screens. This is source polish for English only. Target languages choose their words per place from the project's context map, never by locking a list.
 
 | Concept | Canonical source | Avoid | Note |
 |---|---|---|---|

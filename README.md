@@ -22,6 +22,7 @@ The fourth column is what the suite aims for. The rest of this page shows how it
 
 | Layer | What it does |
 |---|---|
+| Context | Before any line is touched, an orchestrator on Claude Opus with agents on Claude Sonnet studies the game's code, scenes, prefabs and string tables, asks the studio whatever stays unclear and writes a context map. Translators, critic and jury read it first, because the same word changes with the place (*Play* is *Oyna* for a game and *Çal* for music in Turkish) |
 | Craft | 15 culturalization playbooks with Golden Voice Anchors and five voice archetypes. A culturalizer agent writes Pass 1 and Pass 2, and a native ear critic scores a blind slice that never shows the English |
 | Gates | Linter, UI overflow checker, font glyph scanner and critique validator in pure Python with exit codes 0, 1 and 2. A broken placeholder, a clipped button or a missing glyph never reaches the build |
 | Measurement (2.2) | Claude, Gemini and DeepSeek judge every line blind in three tiers, a professional reference calibrates them, and every change arrives with a reason, evidence, confidence and a trust level |
@@ -113,7 +114,7 @@ API keys come only from `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` and `DEEPSEEK_API_
 
 | Phase | What happens | Gate |
 |---|---|---|
-| 0 Preflight | Checksums, concatenation scan, font glyph scan, `glossary.csv`, `<LOCALE>_BIBLE.md`, transcreation ledger, pseudo localization | Seams and collision terms recorded, 0 missing glyphs |
+| 0 Context map and preflight | `context-cartographer` and its `context-scout` agents write `CONTEXT_MAP.md` and ask the user what stays unclear, then checksums, concatenation scan, font glyph scan, `<LOCALE>_BIBLE.md`, transcreation ledger, pseudo localization | Line notes for every key, open questions answered, seams recorded, 0 missing glyphs |
 | 1 Clean room Pass 1 | `game-culturalizer` translates clean source batches calibrated on the playbook and archetypes | `lqa_linter.py` exit 0 per batch |
 | 2 Blind critique and Pass 2 | `make_blind_slice.py` strips the source, `native-ear-critic` scores every line 1 to 5, `validate_critique.py` checks the schema, `game-culturalizer` rewrites every score below 5 | 95% of lines at 5, 0 lines at 2 or below |
 | 3 Automated gate | `lqa_linter.py --fail-on-error`, `ui_expansion_checker.py --fail-on-high`, `font_glyph_scanner.py`, write back, checksum scope check | All exit 0, only target locale files changed |
@@ -168,10 +169,10 @@ Run from `skills/game-cultural-localization/`. Every flag is documented in [CLI_
 
 ```bash
 python scripts/font_glyph_scanner.py --input strings.en.json --dst-field en --font ./Fonts/UI.ttf --font ./Fonts/Fallback.ttc
-python scripts/lqa_linter.py --input pass1_de-DE_01.json --locale de-DE --src-field en --dst-field dst --glossary glossary.csv --glossary-severity ERR --fail-on-error
+python scripts/lqa_linter.py --input pass1_de-DE_01.json --locale de-DE --src-field en --dst-field dst --fail-on-error
 python scripts/make_blind_slice.py pass1_de-DE_01.json --locale de-DE --out blind_de-DE_01.json --key-col key --target-col dst --context-cols category,speaker,archetype
 python scripts/validate_critique.py critique_de-DE_01.json --slice blind_de-DE_01.json
-python scripts/lqa_linter.py --input final_de-DE.json --locale de-DE --src-field en --dst-field dst --glossary glossary.csv --glossary-severity ERR --json lqa_de-DE.json --fail-on-error
+python scripts/lqa_linter.py --input final_de-DE.json --locale de-DE --src-field en --dst-field dst --json lqa_de-DE.json --fail-on-error
 python scripts/ui_expansion_checker.py --input final_de-DE.json --locale de-DE --src-field en --dst-field dst --json ui_de-DE.json --fail-on-high
 ```
 
@@ -185,7 +186,7 @@ python scripts/ui_expansion_checker.py --input final_de-DE.json --locale de-DE -
 | Tag styles | `tmp` (`<b> <color=> <sprite=> <style=> <link=>`), `html`, `bbcode` (`[b] [color=] [url=]`) |
 | Runtime | Python 3.9 or newer, standard library only, UTF-8 in and out, BOM tolerant |
 | Exit codes | 0 clean, 1 findings (errors, or warnings with `--fail-on-warn`, HIGH with `--fail-on-high`), 2 usage or input error |
-| Glossary | `glossary.csv` with header `term_en,<locale>[,<locale>...],notes`, enforced by `--glossary` |
+| Context | `CONTEXT_MAP.md` per project decides the meaning of every line. An optional names list (`--glossary`, header `term_en,<locale>[,<locale>...],notes`) only checks the spelling of proper names |
 | Critique file | `critique_<locale>_<batch>.json`, naturalness score 1 to 5 plus an issue type, only scores below 5 listed |
 
 Input row example (only `key` and `en` are required) and critique entry example.

@@ -148,7 +148,7 @@ Market standard for PC and console. Lock one column per project in `JA-JP_BIBLE.
 
 * **Button form.** 体言止め or dictionary form, 2 to 6 full-width characters, no `。`, no です・ます, no `！`.
 * **Console button mapping.** Never hard-code `○で決定 / ×でキャンセル` in text, the confirm button differs by platform and generation. Use the platform's glyph tags.
-* **Term lock (one term = one translation).** E.g. `依頼` (customer contract) vs `注文` (workstation order). `設計図` (blueprint) vs `レシピ` (recipe). An item named *industrial sludge* stays `工業スラッジ` everywhere, never "improved" to `パテ` (putty) in dialogue. Record every lock in the project glossary.
+* **Same thing, same name, decided by the context map.** When the map says two keys name the same in-game object or mechanic, they get the same word, and when it says they are different things, they stay apart. E.g. `依頼` (customer contract) vs `注文` (workstation order). `設計図` (blueprint) vs `レシピ` (recipe). An item named *industrial sludge* stays `工業スラッジ` everywhere, never "improved" to `パテ` (putty) in dialogue. The map records which keys name the same thing, so no term is locked in a list.
 
 ## 8. Typography, Numbers & Formatting
 

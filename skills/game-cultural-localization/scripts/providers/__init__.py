@@ -32,7 +32,7 @@ from .google import GoogleProvider
 __all__ = [
     "BudgetLog", "ChatResult", "DEFAULT_CONFIG_PATH", "FakeProvider", "FakeScenario", "FromLegacy", "JURY_TIERS", "LegacyAdapter",
     "Member", "MissingKeyError", "ModelNotFoundError", "ModelSpec", "Provider", "ProviderError", "ProvidersConfig", "RateLimiter",
-    "RoleProvider", "Router", "SINGLE_ROLES", "as_legacy", "envelope", "estimate_tokens", "extract_json", "get_provider",
+    "CONTEXT_ROLES", "RoleProvider", "Router", "SINGLE_ROLES", "as_legacy", "envelope", "estimate_tokens", "extract_json", "get_provider",
     "load_providers_config", "split_envelope",
 ]
 
@@ -44,6 +44,8 @@ PROVIDER_CLASSES: Dict[str, Any] = {
     "fake": FakeProvider,
 }
 SINGLE_ROLES = ("pass1", "pass2", "roundtrip", "literal")
+# context map, the mandatory first step: one orchestrator (strongest model) and its field agents
+CONTEXT_ROLES = ("context_orchestrator", "context_agent")
 JURY_TIERS = ("J1", "J2", "J3")
 _TOP_KEYS = ("providers", "models", "roles", "agreement", "budget_caps", "roundtrip")
 _DEFAULTS = {
@@ -176,6 +178,9 @@ def load_providers_config(path: Optional[Path] = None) -> ProvidersConfig:
             raise L10nError(f"{path}: roles.{role} must name one model alias")
         if roles[role] not in data["models"]:
             raise L10nError(f"{path}: roles.{role} '{roles[role]}' is not a model alias")
+    for role in CONTEXT_ROLES:  # optional in a custom config, set in the bundled one
+        if role in roles and (not isinstance(roles[role], str) or roles[role] not in data["models"]):
+            raise L10nError(f"{path}: roles.{role} must name one model alias")
     for tier in JURY_TIERS:
         members = roles.get(tier)
         if not isinstance(members, list) or len(members) != 3 or not all(isinstance(a, str) for a in members):
@@ -190,8 +195,8 @@ def load_providers_config(path: Optional[Path] = None) -> ProvidersConfig:
                                 "every tier needs one anthropic, one google and one deepseek member")
             families[fam] = a
     for k in roles:
-        if k not in SINGLE_ROLES and k not in JURY_TIERS:
-            raise L10nError(f"{path}: unknown role '{k}'; known: {', '.join(SINGLE_ROLES + JURY_TIERS)}")
+        if k not in SINGLE_ROLES and k not in CONTEXT_ROLES and k not in JURY_TIERS:
+            raise L10nError(f"{path}: unknown role '{k}'; known: {', '.join(SINGLE_ROLES + CONTEXT_ROLES + JURY_TIERS)}")
     ag = {**_DEFAULTS["agreement"], **(data.get("agreement") or {})}
     for k in ("pass_min", "max_spread", "critical_max"):
         if not isinstance(ag.get(k), int) or isinstance(ag.get(k), bool) or not 0 <= ag[k] <= 5:
