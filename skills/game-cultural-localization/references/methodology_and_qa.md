@@ -124,7 +124,7 @@ Agreement is judged on the three scores of one tier.
 
 At J3 an agreeing tier settles the line with its lowest score. A disagreeing J3 starts the deliberation round.
 
-**Budget caps.** When more than 30 % of a batch would go to J2, or more than 10 % to J3, the run stops before calling that tier and writes the report. The problem is then in Pass 1 or in the prompt, not in single lines. Fix the cause and run the batch again.
+**Budget caps.** When more than 30 % of the lines judged so far in the run would go to J2, or more than 10 % to J3, the run stops before calling that tier and writes the report with the lines that tripped it. The caps read the whole run, not one batch, and wait for a fair sample (at least 100 judged lines and at least 10 lines over the cap, `min_judged` and `min_escalated` of `budget_caps`), so one bad line in a short batch never stops a game. The problem is then in Pass 1 or in the prompt, not in single lines. Fix the cause and run the batch again.
 
 ### Deliberation
 

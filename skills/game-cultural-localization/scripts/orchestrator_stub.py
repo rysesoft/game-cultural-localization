@@ -366,6 +366,7 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
     finals: List[Path] = []
     batches: List[Dict[str, Any]] = []
     halted: Optional[Dict[str, Any]] = None
+    tally = jury.EscalationTally()  # the budget caps read every line judged in this run, not one batch
     try:
         for i in range(0, len(rows), batch_size):
             batch = rows[i:i + batch_size]
@@ -414,7 +415,7 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
             def tm_fn(entry: Dict[str, Any]) -> List[Dict[str, Any]]:
                 return tm.neighbors(locale, src_by_key.get(entry["key"], entry["target"]), category=str(entry.get("category") or ""),
                                     speaker=str(entry.get("speaker") or ""), exclude_key=entry["key"])
-            res = jury.run_jury(jentries, locale, router, system=critic_system, budget_caps=budget_caps, roundtrip_fn=rt_fn,
+            res = jury.run_jury(jentries, locale, router, system=critic_system, budget_caps=budget_caps, roundtrip_fn=rt_fn, tally=tally,
                                 tm_lookup=tm_fn if tm is not None else None,
                                 deliberator=deliberate.make_deliberator(router, locale, critic_system) if deliberation else None,
                                 workers=workers)

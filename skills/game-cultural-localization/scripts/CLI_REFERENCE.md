@@ -459,7 +459,7 @@ Three tiers of three members, one from each family (`J1` Haiku, V4 Flash, Hydrog
 | J3 agreement | spread of at most 1 | settled with the minimum, 3 gives `rewrite`, 2 or 1 give `critical` |
 | J3 disagreement | spread of 2 or more | deliberation round (`deliberate.py`), without it `unresolved` with three rationales |
 
-Budget caps from `budget_caps` of the providers config. When more than 30 % of the batch would go to J2, or more than 10 % to J3, the run stops before calling that tier, writes the report with the settled lines and lists the rest under `pending`. The problem is then in Pass 1 or the prompt.
+Budget caps from `budget_caps` of the providers config. When more than 30 % of the lines judged so far in the run would go to J2, or more than 10 % to J3, the run stops before calling that tier, writes the report with the settled lines, lists the rest under `pending` and names the lines of the batch that tripped the cap (`halted.keys`). The problem is then in Pass 1 or the prompt. The caps read the whole run (`orchestrator_stub.py` carries the count across batches, a single slice counts alone) and stop only with at least `min_judged` (100) judged lines and `min_escalated` (10) lines over the cap, and only when the batch sends lines to that tier. The verdict stats carry both the batch ratio (`to_J3_ratio`) and the run ratio (`run_to_J3_ratio`).
 
 Evidence per line. `ban_hits` (locale rules of `rules/<locale>.json` on the target), `tm_neighbors` (when a translation memory is attached) and, for lines that reach J3, `roundtrip` (back-translation calque score, needs `--source-table`, which only the harness reads).
 

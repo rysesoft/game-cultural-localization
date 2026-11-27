@@ -75,6 +75,7 @@ class JuryFlowTests(unittest.TestCase):
         with TempDir() as td:
             src = write_json(td / "src.json", SOURCE)
             router = Router(load_providers_config(), dry_run=True, scenario=FakeScenario(SCENARIO))
+            router.config.budget_caps.update(min_judged=0, min_escalated=0)   # test the stop itself on a tiny run
             res = orch.run_jury_pipeline(src, "tr-TR", td / "w", router, langpack_dir=td / "np")
             self.assertFalse(res["passed"])
             self.assertEqual(res["halted"]["stage"], "J2")             # 1 of 3 lines to J2 is above 30 %
@@ -82,6 +83,31 @@ class JuryFlowTests(unittest.TestCase):
             self.assertTrue((td / "w" / "changes_tr-TR_01.md").is_file())
             self.assertTrue(res["summary"]["halted"])
             self.assertIn("Phase 3: skipped", "\n".join(res["log"]))
+
+    def test_budget_caps_read_the_whole_run(self):
+        def run(n_rows, critical):
+            rows = [{"key": f"K{i:03d}", "en": f"Open the storage panel number {i}", "category": "ui"} for i in range(n_rows)]
+            sc = {"scores": [{"key": k, "tier": t, "score": 2, "issue_type": "ui_verb", "reason": "broken"} for k in critical for t in ("J1", "J3")]}
+            with TempDir() as td:
+                src = write_json(td / "src.json", rows)
+                res = orch.run_jury_pipeline(src, "tr-TR", td / "w", Router(load_providers_config(), dry_run=True, scenario=FakeScenario(sc)),
+                                             batch_size=50, langpack_dir=td / "np")
+                finals = sorted(p.name for p in (td / "w").glob("final_batch_*.json"))
+            return res, finals
+        # one critical line in a last batch of 3 lines stopped a run of 53 lines before, it is 2 % of the run
+        res, finals = run(53, ["K052"])
+        self.assertIsNone(res["halted"])
+        self.assertEqual(finals, ["final_batch_01.json", "final_batch_02.json"])
+        self.assertNotIn("Phase 3: skipped", "\n".join(res["log"]))
+        # six critical lines in a first batch of 50 stopped a whole game before, 50 lines are too few to judge
+        res, _ = run(150, [f"K{i:03d}" for i in range(6)])
+        self.assertIsNone(res["halted"])
+        # 20 critical lines in the third batch, 20 of 150 judged lines is 13 %, the run stops there and names them
+        res, finals = run(200, [f"K{i:03d}" for i in range(100, 120)])
+        self.assertEqual((res["halted"]["batch"], res["halted"]["stage"], res["halted"]["judged"]), (3, "J3", 150))
+        self.assertEqual(len(res["halted"]["keys"]), 20)
+        self.assertEqual(finals, ["final_batch_01.json", "final_batch_02.json"])
+        self.assertIn("Phase 3: skipped", "\n".join(res["log"]))
 
     def test_unresolved_line_fails_the_run(self):
         sc = {"scores": [{"key": "DLG_1", "tier": "J1", "score": 3}, {"key": "DLG_1", "tier": "J2", "score": 3},

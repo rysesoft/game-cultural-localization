@@ -27,6 +27,6 @@
     "J3": ["opus",   "v4pro",   "carbon"]
   },
   "agreement": {"pass_min": 4, "max_spread": 1, "critical_max": 2},
-  "budget_caps": {"escalate_j2_ratio": 0.30, "escalate_j3_ratio": 0.10},
+  "budget_caps": {"escalate_j2_ratio": 0.30, "escalate_j3_ratio": 0.10, "min_judged": 100, "min_escalated": 10},
   "roundtrip": {"min_words": 6, "registers": ["dialogue_casual", "dialogue_formal"]}
 }

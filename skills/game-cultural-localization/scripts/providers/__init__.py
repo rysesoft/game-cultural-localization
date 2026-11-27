@@ -50,7 +50,7 @@ JURY_TIERS = ("J1", "J2", "J3")
 _TOP_KEYS = ("providers", "models", "roles", "agreement", "budget_caps", "roundtrip")
 _DEFAULTS = {
     "agreement": {"pass_min": 4, "max_spread": 1, "critical_max": 2},
-    "budget_caps": {"escalate_j2_ratio": 0.30, "escalate_j3_ratio": 0.10},
+    "budget_caps": {"escalate_j2_ratio": 0.30, "escalate_j3_ratio": 0.10, "min_judged": 100, "min_escalated": 10},
     "roundtrip": {"min_words": 6, "registers": ["dialogue_casual", "dialogue_formal"]},
 }
 
@@ -210,6 +210,10 @@ def load_providers_config(path: Optional[Path] = None) -> ProvidersConfig:
         v = caps.get(k)
         if not isinstance(v, (int, float)) or isinstance(v, bool) or not 0 <= v <= 1:
             raise L10nError(f"{path}: budget_caps.{k} must be a ratio between 0 and 1")
+    for k in ("min_judged", "min_escalated"):
+        v = caps.get(k)
+        if not isinstance(v, int) or isinstance(v, bool) or v < 0:
+            raise L10nError(f"{path}: budget_caps.{k} must be a whole number >= 0")
     rt = {**_DEFAULTS["roundtrip"], **(data.get("roundtrip") or {})}
     if not isinstance(rt.get("min_words"), int) or rt["min_words"] < 0:
         raise L10nError(f"{path}: roundtrip.min_words must be a non-negative integer")

@@ -36,6 +36,7 @@ import json
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -178,6 +179,19 @@ def build_system_prompt(locale: str, entries: Sequence[Dict[str, Any]], pack_dir
 Deliberator = Callable[[Dict[str, Any], List[Dict[str, Any]], Dict[str, Any]], Optional[Dict[str, Any]]]
 
 
+@dataclass
+class EscalationTally:
+    """Lines the jury judged so far in a run and how many of them went on to J2 and J3.
+
+    The budget caps read the whole run, not one batch. Measured per batch, one critical line in a short last
+    batch of 3 lines was 33 % and stopped a run of 53 lines where it was 2 %, and 6 critical lines in one batch
+    of 50 stopped a whole game before its other batches started.
+    """
+    lines: int = 0
+    to_j2: int = 0
+    to_j3: int = 0
+
+
 def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], locale: str, system: str, batch_size: int,
                 workers: int = 1) -> Dict[str, List[Dict[str, Any]]]:
     """Votes of the three members of one tier. With workers > 1 the members run at the same time and each
@@ -205,8 +219,13 @@ def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], local
 def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, system: str, batch_size: int = 40,
              budget_caps: bool = True, tm_lookup: Optional[Callable[[Dict[str, Any]], List[Dict[str, Any]]]] = None,
              roundtrip_fn: Optional[Callable[[Sequence[Dict[str, Any]]], Dict[str, Dict[str, Any]]]] = None,
-             deliberator: Optional[Deliberator] = None, workers: int = 1) -> Dict[str, Any]:
+             deliberator: Optional[Deliberator] = None, workers: int = 1, tally: Optional[EscalationTally] = None) -> Dict[str, Any]:
     """Run J1 to J3 (+ deliberation) and return {'verdicts', 'pending', 'halted', 'stats'}.
+
+    The budget caps compare the lines sent to J2 or J3 with every line judged in the run so far (tally, kept by
+    the caller across batches, a fresh one for a single slice). A cap stops the run only when this batch sends
+    lines to that tier, at least budget_caps.min_judged lines were judged and at least min_escalated lines are
+    over the cap, a small sample never stops a run. The tally is updated before the function returns.
 
     workers > 1 runs the members of a tier and the disputed J3 lines of the deliberation round in parallel.
     """
@@ -228,12 +247,21 @@ def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, sys
         settled[key] = {"key": key, "final_tier": tier, "score": score, "status": status, "votes": votes[key],
                         "evidence": evidence[key], "rationales": list(rationales), **(extra or {})}
 
+    tally = tally if tally is not None else EscalationTally()
+    min_judged = int(caps.get("min_judged", 0))
+    min_escalated = int(caps.get("min_escalated", 0))
+
     def cap_check(stage: str, keys: Sequence[str], limit: float) -> Optional[Dict[str, Any]]:
-        ratio = round(len(keys) / total, 4) if total else 0.0
-        stats[f"to_{stage}_ratio"] = ratio
-        if budget_caps and ratio > limit:
-            return {"stage": stage, "ratio": ratio, "cap": limit, "lines": len(keys),
-                    "reason": f"{len(keys)} of {total} lines would go to {stage} ({ratio:.0%} > {limit:.0%}), check Pass 1 or the prompt"}
+        stats[f"to_{stage}_ratio"] = round(len(keys) / total, 4) if total else 0.0
+        count = (tally.to_j2 if stage == "J2" else tally.to_j3) + len(keys)
+        judged = tally.lines + total
+        ratio = round(count / judged, 4) if judged else 0.0
+        stats[f"run_to_{stage}_ratio"] = ratio
+        if budget_caps and keys and ratio > limit and judged >= min_judged and count >= min_escalated:
+            return {"stage": stage, "ratio": ratio, "cap": limit, "lines": count, "judged": judged, "keys": list(keys),
+                    "reason": f"{count} of {judged} lines judged in this run would go to {stage} ({ratio:.0%} > {limit:.0%}), "
+                              f"check Pass 1 or the prompt. Lines of this batch that would go there: {', '.join(list(keys)[:10])}"
+                              + (f" and {len(keys) - 10} more" if len(keys) > 10 else "")}
         return None
 
     # J1 ------------------------------------------------------------------- #
@@ -302,6 +330,9 @@ def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, sys
                 settle(k, "deliberation", int(result["score"]), str(result["status"]), result.get("rationales", []),
                        {"deliberation": result["deliberation"]} if "deliberation" in result else None)
         stats["J3"] = {"lines": len(to_j3), "agreed": len(to_j3) - disputed, "disputed": disputed}
+    tally.lines += total
+    tally.to_j2 += int(stats["J1"]["to_J2"])
+    tally.to_j3 += len(to_j3)
     pending = [k for k in order if k not in settled]
     verdicts = [settled[k] for k in order if k in settled]
     stats["status"] = {s: sum(1 for v in verdicts if v["status"] == s) for s in STATUSES}

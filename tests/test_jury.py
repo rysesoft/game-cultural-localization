@@ -46,8 +46,11 @@ def slice_doc(extra_fillers: int = 16) -> Dict[str, Any]:
     return {"locale": "tr-TR", "source_file": "pass1_tr-TR_01.json", "blind": True, "entries": entries}
 
 
-def run(scenario: Dict[str, Any], doc: Dict[str, Any], caps: bool = True, **kw: Any) -> Dict[str, Any]:
+def run(scenario: Dict[str, Any], doc: Dict[str, Any], caps: bool = True, sample: Any = (0, 0), **kw: Any) -> Dict[str, Any]:
+    """sample = (min_judged, min_escalated) of the budget caps, None keeps the bundled config."""
     router = Router(load_providers_config(), dry_run=True, scenario=FakeScenario(scenario))
+    if sample is not None:
+        router.config.budget_caps.update(min_judged=sample[0], min_escalated=sample[1])
     with TempDir() as td:
         entries, _ = jury.load_blind_slice(write_json(td / "blind_tr-TR_01.json", doc))
     res = jury.run_jury(entries, "tr-TR", router, system="SYS", budget_caps=caps, **kw)
@@ -149,6 +152,26 @@ class RunTests(unittest.TestCase):
         res = run(sc, slice_doc(extra_fillers=4), caps=False)
         self.assertIsNone(res["halted"])
         self.assertEqual(res["pending"], [])
+
+    def test_a_small_sample_never_stops_the_run(self):
+        # the bundled config stops only after 100 judged lines with at least 10 over the cap
+        res = run(SCENARIO, slice_doc(extra_fillers=4), sample=None)   # 10 lines, 20 % to J3
+        self.assertIsNone(res["halted"])
+        self.assertEqual(res["pending"], [])
+        self.assertEqual(res["stats"]["run_to_J3_ratio"], 0.2)
+
+    def test_caps_read_the_whole_run(self):
+        # two of ten lines go to J3. Alone that is 20 %, after 90 clean lines judged before it is 2 %
+        tally = jury.EscalationTally(lines=90)
+        res = run(SCENARIO, slice_doc(extra_fillers=4), tally=tally)
+        self.assertIsNone(res["halted"])
+        self.assertEqual((res["stats"]["to_J3_ratio"], res["stats"]["run_to_J3_ratio"]), (0.2, 0.02))
+        self.assertEqual((tally.lines, tally.to_j3), (100, 2))
+        res = run(SCENARIO, slice_doc(extra_fillers=4), tally=jury.EscalationTally(lines=10, to_j3=2))
+        self.assertEqual(res["halted"]["stage"], "J3")                    # 2 earlier plus CRIT, 3 of 20 lines, 15 %
+        self.assertEqual((res["halted"]["lines"], res["halted"]["judged"]), (3, 20))
+        self.assertEqual(res["halted"]["keys"], ["CRIT"])                 # the line of this batch that tripped it
+        self.assertIn("CRIT", res["halted"]["reason"])
 
     def test_slice_validation(self):
         with TempDir() as td:
