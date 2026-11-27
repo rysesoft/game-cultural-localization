@@ -185,6 +185,12 @@ python scripts/font_glyph_scanner.py --input final_<locale>.json --dst-field dst
 
 Use `--forbid-chars`, `--forbid-spaced-hyphen` and `--strict-whitespace` only when the project's bible declares those rules (CJK playbooks forbid dashes, concatenation seams require exact leading and trailing spaces). Add `--fail-on-warn` for release candidates. Set `--placeholder-style` and `--tag-style` explicitly (**(Unreal)** `unreal`, **(Godot)** `godot` and `bbcode`, ICU bundles `icu`) when auto detection is ambiguous. Add `--strict` to the font scan when no runtime fallback font exists. Project wide defaults can live in `l10n.config.json` (`--config`).
 
+**Write back.** `export_translations.py` applies the developer's decisions of the change reports (accept keeps the new line, reject puts the old line back, a changed line without a decision is reported) and writes the final texts in the game's own table format to a folder outside the game project. Unity StringTables change only in the text of the known keys, every other line stays as it was and a missing entry is added. CSV, TSV, JSON and PO tables change only in the target of the known keys. Only tables with a changed text are written, the developer copies them over the originals and re-imports.
+
+```bash
+python scripts/export_translations.py <workdir> --locale <locale> --template-dir <game>/Assets/Localisation/Tables --out loc_work/export
+```
+
 **Exit codes of all three tools.** `0` clean · `1` findings (errors, or warnings with `--fail-on-warn`, or HIGH with `--fail-on-high`) · `2` usage or input error (unknown locale, malformed file, missing column, unreadable font). Exit `2` is never a pass.
 
 **Gate 3.** All three commands exit `0` · 100 % of HIGH overflow risks resolved (shorter string, approved `max_chars` change, or a UI change filed with the key) · 0 missing glyphs, or a documented fallback font that covers them · engine tables written back and re-imported without warnings · `checksums_after.txt` differs from `checksums_before.txt` **only** in the target locale files · **(Unity)** Smart String flags (`IsSmart`) unchanged for every entry that uses `{...}` formatting · **(Unreal)** `.po` re-gathered with 0 fuzzy entries · **(Godot)** CSV re-imported with the same column count.

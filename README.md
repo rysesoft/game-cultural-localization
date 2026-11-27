@@ -38,7 +38,7 @@ Version 2.2 replaces the single critic with a jury of three model families and m
 | Calibration | `eval_critic.py` checks that every juror prefers the native line in at least 85% of the pairs |
 | Jury | `jury.py` runs three tiers of Claude, Gemini and DeepSeek on a blind slice. Clear lines settle early, critical lines go straight to the strongest tier, disagreements go through anonymous deliberation |
 | Rewrite | `pass2_rewrite.py` writes three candidates, the cheapest tier picks one blind, `validate_critique` checks it |
-| Report | `report_changes.py` lists every change with old and new text, reason, evidence, confidence and votes. The developer accepts or rejects, `tm.py` remembers the decision |
+| Report | `report_changes.py` lists every change with old and new text, reason, evidence, confidence and votes. The developer accepts or rejects, `tm.py` remembers the decision and `export_translations.py` writes the result into the game's own tables |
 
 **Agreement.** Every tier holds one model from each family. A line passes when all three scores are 4 or 5 and differ by at most 1. Any score of 3 or lower, or a spread of 2 or more, moves the line to the next tier. Any score of 2 or lower sends it straight to J3. When J3 still disagrees, the jurors read each other's reasons without model names and vote again. A majority settles the line, otherwise it goes to the developer as unresolved.
 

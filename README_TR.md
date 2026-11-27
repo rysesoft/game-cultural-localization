@@ -38,7 +38,7 @@ Dördüncü sütun paketin ulaşmak istediği sonuç. Sayfanın geri kalanı ora
 | Kalibrasyon | `eval_critic.py` her jüri üyesinin çiftlerin en az %85'inde doğal satırı seçtiğini kontrol eder |
 | Jüri | `jury.py` kör dilim üzerinde Claude, Gemini ve DeepSeek'ten oluşan üç kademeyi çalıştırır. Net satırlar erkenden karara bağlanır, kritik satırlar doğrudan en güçlü kademeye gider, anlaşmazlıklar anonim müzakereden geçer |
 | Yeniden yazım | `pass2_rewrite.py` üç aday yazar, en ucuz kademe birini kör olarak seçer, `validate_critique` seçileni denetler |
-| Rapor | `report_changes.py` her değişikliği eski ve yeni metin, gerekçe, kanıt, güven oranı ve oylarla listeler. Geliştirici kabul eder ya da reddeder, `tm.py` kararı hatırlar |
+| Rapor | `report_changes.py` her değişikliği eski ve yeni metin, gerekçe, kanıt, güven oranı ve oylarla listeler. Geliştirici kabul eder ya da reddeder, `tm.py` kararı hatırlar, `export_translations.py` sonucu oyunun kendi tablolarına yazar |
 
 **Uzlaşma.** Her kademede her aileden bir model bulunur. Üç puanın hepsi 4 ya da 5 ise ve aralarındaki fark en fazla 1 ise satır geçer. Puanlardan biri 3 ya da altındaysa veya puanlar arasında 2 ya da daha fazla fark varsa satır bir üst kademeye çıkar. 2 ya da altında bir puan satırı doğrudan J3'e gönderir. J3 de anlaşamazsa jüri üyeleri birbirlerinin gerekçelerini model adları gizlenmiş olarak okur ve yeniden oy verir. Çoğunluk satırı karara bağlar, çoğunluk çıkmazsa satır çözülmemiş olarak geliştiriciye gider.
 

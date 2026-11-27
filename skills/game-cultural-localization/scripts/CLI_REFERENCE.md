@@ -607,6 +607,37 @@ The Markdown follows the house punctuation style. Model text is rewritten to tha
 
 Exit codes. 0 report written. 1 report written and some lines are unresolved or kept their old text. 2 usage or input error.
 
+## export_translations.py (decisions applied, texts written in the game's format)
+
+```
+python export_translations.py <workdir or final_batch_NN.json> --locale tr-TR (--template FILE ... | --template-dir DIR) --out loc_work/export [--changes changes_tr-TR_01.json ...]
+```
+
+The last step of the jury flow. It merges the final batches, applies the decisions of the change reports of `report_changes.py` (`accept` keeps the new line, `reject` puts the old line back, a changed line without a decision keeps its final text and is listed) and writes the texts into the format of the game's own tables. A folder as INPUT means every `final_batch_*.json` in it and, without `--changes`, every `changes_<locale>_*.json` in it.
+
+| Template | What changes |
+|---|---|
+| `.asset` | Unity StringTable of the target locale. Only `m_Localized` of the known keys, every other line stays as it was and an unchanged text keeps its original line. Key names come from the collection's Shared Data asset, found next to the table by its `m_SharedData` guid. A key the table has no entry for gets a new entry. SmartFormat and rich text pass through as text. The written file is read back and compared before it is kept |
+| `.csv`, `.tsv` | the target column (`--dst-field`, default the locale code) of the known keys, other columns, the delimiter, the line ends and a BOM stay |
+| `.json` | the target field of a list of objects, or the value of a `{key: text}` map |
+| `.po` | `msgstr`, or `msgstr[n]` for the plural keys `msgid\|[n]`, the `fuzzy` flag of a filled entry is dropped |
+
+A key name two Unity tables share needs its `Table:Key` label in the final files (the form `build_context_map.py` uses), otherwise the export stops instead of guessing. Only Unity tables with a changed text are written. On the first project a round trip of the studio reference through all 23 Turkish tables left every table byte for byte the same.
+
+| Flag | Meaning |
+|---|---|
+| `--input` (or positional) | a final file, or the orchestrator's workdir |
+| `--locale` | target locale |
+| `--changes` | change report with filled decisions, repeatable, default the reports in the INPUT folder |
+| `--template` | the game's table of the target locale, repeatable |
+| `--template-dir` | folder of Unity StringTable assets, every table of `--locale` in it (found by `m_LocaleId`) is a template |
+| `--shared-table` | Shared Data asset of a single Unity template when it is not next to the table |
+| `--out` | output folder, refused inside a Unity, Godot or Unreal project and as the folder of a template |
+| `--dst-field` | target column of the final files and of a CSV or JSON template, default the locale code |
+| `--key-field` | key column, default `key` |
+
+Exit codes. 0 exported, every changed line decided and every key placed. 1 exported but changed lines without a decision or keys no template holds. 2 usage or input error (a decision other than accept or reject, a key two tables share without its label, an output inside the game project).
+
 ## Prompt templates (prompts/)
 
 | File | Use |
