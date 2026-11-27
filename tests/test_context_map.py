@@ -252,6 +252,27 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(text_style.punctuation_problems(md), [])
 
 
+    def test_a_key_name_two_tables_share_keeps_both(self):
+        # the first project had one key name in two tables, keyed by name alone one of them was lost
+        second = "9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e"
+        with TempDir() as td:
+            proj = make_project(td)
+            put(proj / "Assets" / "Localisation" / "Tables" / "Machine" / "Machine Shared Data.asset",
+                SHARED.replace("HudTable", "MachineTable").replace(TABLE_GUID, second).replace("m_Id: 10", "m_Id: 20"))
+            put(proj / "Assets" / "ScriptableObjects" / "Machines" / "Arm.asset", ITEM_SO.replace("m_Name: Can", "m_Name: Arm")
+                .replace("m_TableCollectionName: HudTable", f"m_TableCollectionName: GUID:{second}").replace("m_KeyId: 0", "m_KeyId: 200")
+                .replace("m_Key: Item.Name.Can", "m_Key:"))
+            scan = bcm.scan_unity(proj)
+        keys = scan["keys"]
+        self.assertIn("HudTable:Hud.Deadline", keys)
+        self.assertEqual(keys["MachineTable:Hud.Deadline"]["usages"][0]["object"], "Arm")
+        self.assertEqual(keys["HudTable:Hud.Deadline"]["usages"][0]["field"], "deadlineTextLoc")
+        self.assertEqual(keys["HudTable:Hud.Deadline"]["name"], "Hud.Deadline")
+        self.assertNotIn("Hud.Deadline", keys)
+        self.assertEqual(len(keys), 8)
+        self.assertEqual(bcm.summary(scan, ["Hud.Deadline", "MachineTable:Hud.Deadline"])["wanted_missing"], [])
+
+
 class SliceTests(unittest.TestCase):
     """Scout inputs come from the project's own string tables, never from an ad hoc export."""
 

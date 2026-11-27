@@ -193,7 +193,8 @@ def object_paths(docs: Dict[str, Tuple[str, str]]) -> Dict[str, str]:
 
 
 def _override_usages(d: str, path: Path, root: Path, keys: Dict[str, Dict[str, Any]], by_name: Dict[str, str],
-                     by_id: Dict[Tuple[str, str], str], guids_of_id: Dict[str, List[str]], prefabs: Dict[str, Path]) -> int:
+                     by_id: Dict[Tuple[str, str], str], by_key: Dict[Tuple[str, str], str], guids_of_id: Dict[str, List[str]],
+                     prefabs: Dict[str, Path]) -> int:
     """Usages a prefab instance sets through m_Modifications. Returns the number of overrides that resolve to no key."""
     groups: Dict[Tuple[str, str, str], Dict[str, str]] = defaultdict(dict)
     for tfid, tguid, ppath, val in _MOD.findall(d):
@@ -210,8 +211,8 @@ def _override_usages(d: str, path: Path, root: Path, keys: Dict[str, Dict[str, A
             if not guid and len(guids_of_id.get(kid, [])) == 1:  # the table stays in the base prefab, the id is unique
                 guid = guids_of_id[kid][0]
             key = by_id.get((guid, kid), "")
-        elif g.get("key") in keys:
-            key = g["key"]
+        elif g.get("key"):
+            key = by_key.get((guid, g["key"]), g["key"] if g["key"] in keys else "")
         if not key:
             unresolved += 1 if (kid or g.get("key")) else 0
             continue
@@ -240,6 +241,14 @@ def scan_unity(project: Path, code_lines: int = CODE_LINES_PER_FIELD, tables_out
     names, by_name, by_id, table_keys = load_tables(files, shared_paths)
     if not names:
         raise L10nError(f"{root}: no Unity Localization string table (Shared Data asset) found")
+    # a key name two tables share is labelled Table:Key, as the reference exports of studios do, so neither is lost
+    name_count = Counter(k for ks in table_keys.values() for k in ks)
+
+    def label(guid: str, k: str) -> str:
+        return f"{names[guid]}:{k}" if name_count[k] > 1 else k
+
+    by_id = {gk: label(gk[0], k) for gk, k in by_id.items()}
+    by_key = {(g, k): label(g, k) for g, ks in table_keys.items() for k in ks}
     scripts = script_classes(root)
     prefabs = _guid_map(root, "*.prefab.meta")
     guids_of_id: Dict[str, List[str]] = defaultdict(list)
@@ -251,7 +260,9 @@ def scan_unity(project: Path, code_lines: int = CODE_LINES_PER_FIELD, tables_out
     keys: Dict[str, Dict[str, Any]] = {}
     for guid, ks in table_keys.items():
         for k in ks:
-            keys[k] = {"table": names[guid], "usages": [], "code": []}
+            keys[label(guid, k)] = {"table": names[guid], "usages": [], "code": []}
+            if name_count[k] > 1:
+                keys[label(guid, k)]["name"] = k
     unresolved = 0
     missing_tables: Counter = Counter()
     seen_fields: Dict[Tuple[str, str], Path] = {}
@@ -262,7 +273,7 @@ def scan_unity(project: Path, code_lines: int = CODE_LINES_PER_FIELD, tables_out
         paths = object_paths(docs)
         for _fid, (_cls, d) in docs.items():
             if _cls == "1001" and "m_TableEntryReference" in d:  # prefab instance with overridden localized strings
-                unresolved += _override_usages(d, path, root, keys, by_name, by_id, guids_of_id, prefabs)
+                unresolved += _override_usages(d, path, root, keys, by_name, by_id, by_key, guids_of_id, prefabs)
             if "m_TableReference" not in d or _cls == "1001":
                 continue
             sm = re.search(r"m_Script: \{fileID: \d+, guid: (\w+)", d)
@@ -275,7 +286,9 @@ def scan_unity(project: Path, code_lines: int = CODE_LINES_PER_FIELD, tables_out
             for m in _REF.finditer(d):
                 table_ref, kid, kname = m.group(2).strip(), m.group(3), m.group(4).strip()
                 guid = table_ref[5:] if table_ref.startswith("GUID:") else by_name.get(table_ref, "")
-                key = by_id.get((guid, kid)) if kid not in ("0", "") else (kname if kname in keys else "")
+                key = by_id.get((guid, kid)) if kid not in ("0", "") else by_key.get((guid, kname), "")
+                if not key and not table_ref and kname in keys:  # no table set, the name is unique
+                    key = kname
                 if not key:
                     if table_ref and guid not in names:  # a table the project no longer has, usually an old system
                         missing_tables[table_ref] += 1
@@ -330,7 +343,11 @@ def summary(scan: Dict[str, Any], wanted: Optional[Sequence[str]] = None) -> Dic
            "dangling_references": scan.get("unresolved_references", 0),
            "missing_table_references": scan.get("missing_table_references", {})}
     if wanted is not None:
-        missing = [k for k in wanted if not keys.get(k, {}).get("usages")]
+        shared_names: Dict[str, List[str]] = defaultdict(list)  # a plain name two tables share stands for each of its labels
+        for k, info in keys.items():
+            if info.get("name"):
+                shared_names[info["name"]].append(k)
+        missing = [k for k in wanted if not keys.get(k, {}).get("usages") and not any(keys[x]["usages"] for x in shared_names.get(k, []))]
         out["wanted"] = len(wanted)
         out["wanted_missing"] = missing
     return out
@@ -441,7 +458,7 @@ def build_slices(scan: Dict[str, Any], tables: Dict[str, Dict[str, Any]], spec: 
         row: Dict[str, Any] = {"key": key, "table": t}
         for loc in locales:
             row[loc] = texts[(t, loc)].get(key, "")
-        meta = ref_meta.get(key, {})
+        meta = ref_meta.get(key) or ref_meta.get(info.get("name", ""), {})
         row["category"] = str(meta.get("category") or "")
         row["speaker"] = str(meta.get("speaker") or "")
         row["usages"] = info["usages"]
