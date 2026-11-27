@@ -6,10 +6,10 @@
     {
       "id": "reference",
       "name": "Studio reference translation",
-      "license": "proprietary (studio owned)",
+      "license": "MIT",
       "license_class": "bundle",
       "version": "6d77b1061b3b",
-      "attribution": "",
+      "attribution": "Rysesoft, released under the MIT license of this repository",
       "homepage": "",
       "files": [
         {

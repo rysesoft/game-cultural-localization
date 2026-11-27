@@ -696,7 +696,8 @@ def write_pack(pack: Path, locale: str, kept: List[Dict[str, Any]], records: Lis
 def build_pack(manifest_path: Path, locale: str, langpack_dir: Path, cache_dir: Path, *, offline: bool = False, refresh: bool = False,
                references: Sequence[Path] = (), src_field: str = "en", dst_field: Optional[str] = None, router: Optional[Router] = None,
                mt_check: bool = False, jury_screen: bool = False, min_words: int = 6, registers: Sequence[str] = (),
-               pass_min: int = 4, seed: int = DEFAULT_SEED, sample_size: int = DEFAULT_SAMPLE, lock_hashes: bool = False) -> Dict[str, Any]:
+               pass_min: int = 4, seed: int = DEFAULT_SEED, sample_size: int = DEFAULT_SAMPLE, lock_hashes: bool = False,
+               reference_license: str = "proprietary (studio owned)", reference_attribution: str = "") -> Dict[str, Any]:
     """Run layers 1 to 5 and write langpack_dir/<locale>/. Returns {'manifest', 'load_failures', 'pack_dir'}."""
     manifest = load_manifest(manifest_path)
     ref_rows: List[Dict[str, Any]] = []
@@ -704,8 +705,8 @@ def build_pack(manifest_path: Path, locale: str, langpack_dir: Path, cache_dir: 
     for ref in references:
         rows = load_reference(Path(ref), locale, src_field, dst_field)
         ref_rows.extend(rows)
-        ref_records.append({"id": REFERENCE_ID, "name": "Studio reference translation", "license": "proprietary (studio owned)",
-                            "license_class": "bundle", "version": sha256(Path(ref).read_bytes())[:12], "attribution": "",
+        ref_records.append({"id": REFERENCE_ID, "name": "Studio reference translation", "license": reference_license,
+                            "license_class": "bundle", "version": sha256(Path(ref).read_bytes())[:12], "attribution": reference_attribution,
                             "homepage": "", "files": [{"file": Path(ref).name, "sha256": sha256(Path(ref).read_bytes()), "pinned": True, "rows": len(rows)}],
                             "rows": len(rows), "hashes_pinned": True})
     cands, l1, records, changed = collect_sources(manifest, manifest_path, locale, cache_dir, offline, refresh, lock_hashes)
@@ -745,6 +746,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--refresh", action="store_true", help="Download again even when a cached copy exists")
     ap.add_argument("--lock-hashes", action="store_true", help="Write the sha256 of every downloaded file into the manifest where it is null")
     ap.add_argument("--reference", action="append", default=[], help="Studio EN + target table (key, en, <locale>, category, speaker), repeatable")
+    ap.add_argument("--reference-license", default="proprietary (studio owned)", help="License of the studio's lines in the shipped pack, for example MIT (default: proprietary (studio owned))")
+    ap.add_argument("--reference-attribution", default="", help="Credit line of the studio's lines, for example the studio name")
     ap.add_argument("--src-field", default="en", help="Source column of --reference (default en)")
     ap.add_argument("--dst-field", default=None, help="Target column of --reference (default: the locale code, then dst, target)")
     ap.add_argument("--mt-check", action="store_true", help="Layer 3 back-translation check (calls the roundtrip model)")
@@ -780,7 +783,8 @@ def main() -> int:
     res = build_pack(Path(args.input), locale, langpack_dir, cache_dir, offline=args.offline, refresh=args.refresh,
                      references=[Path(r) for r in args.reference], src_field=args.src_field, dst_field=args.dst_field, router=router,
                      mt_check=args.mt_check, jury_screen=args.jury_screen, min_words=min_words, registers=pcfg.roundtrip["registers"],
-                     pass_min=int(pcfg.agreement["pass_min"]), seed=args.seed, sample_size=args.sample_size, lock_hashes=args.lock_hashes)
+                     pass_min=int(pcfg.agreement["pass_min"]), seed=args.seed, sample_size=args.sample_size, lock_hashes=args.lock_hashes,
+                     reference_license=args.reference_license, reference_attribution=args.reference_attribution)
     m = res["manifest"]
     f = m["filters"]
     empty = m["counts"]["bundle"] + m["counts"]["local"] == 0

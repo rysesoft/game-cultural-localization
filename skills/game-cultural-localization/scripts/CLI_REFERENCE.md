@@ -289,6 +289,7 @@ Builds `langpack/<locale>/` from the corpora listed in `langpack/sources.manifes
 | `--refresh` | download again even when a cached copy exists |
 | `--lock-hashes` | write the sha256 of every file into the manifest where it is still `null` |
 | `--reference` | the studio's EN and target table (`key`, `en`, `<locale>`, `category`, `speaker`), repeatable. Exempt from the length ratio and the ban list of layer 2 and from layers 3 to 5 |
+| `--reference-license` / `--reference-attribution` | license and credit line of the studio's lines in `manifest.json` and `LICENSES.md`, default `proprietary (studio owned)` and none. The `tr-TR` pack ships the Rysesoft lines under MIT |
 | `--src-field` / `--dst-field` | columns of `--reference` (defaults `en` and the locale code, then `dst`, `target`) |
 | `--mt-check` | run the back-translation check of layer 3 with the `roundtrip` model |
 | `--jury-screen` | run the J1 pre-screen of layer 5 with the three J1 models |

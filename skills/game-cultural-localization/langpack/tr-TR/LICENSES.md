@@ -5,7 +5,7 @@ Local class sources are used on this machine only, their lines stay in local/ an
 
 ## Bundled sources
 
-- Studio reference translation, version 6d77b1061b3b, license proprietary (studio owned).
+- Studio reference translation, version 6d77b1061b3b, license MIT. Rysesoft, released under the MIT license of this repository. The same studio lines are the native side of contrastive.json.
 - Godot Engine editor translations, version 4.3-stable, license MIT. Godot Engine contributors and translators, MIT license, https://godotengine.org/license
 - Pixelorama translations, version v1.0.5, license MIT. Orama Interactive and the Pixelorama translators, MIT license, https://github.com/Orama-Interactive/Pixelorama
 
