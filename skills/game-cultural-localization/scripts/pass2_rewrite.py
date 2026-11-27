@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from l10n_common import (  # noqa: E402
     EXIT_FINDINGS, EXIT_OK, PLACEHOLDER_STYLES, TAG_STYLES, L10nError, add_common_args, add_input_argument, emit_report,
-    load_json_data, load_table, normalize_locale, resolve_input, run_main, __version__,
+    apply_config, load_json_data, load_table, normalize_locale, resolve_input, run_main, __version__,
 )
 import validate_critique  # noqa: E402
 from build_context_map import ContextPack, load_context  # noqa: E402
@@ -197,13 +197,13 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--locale", required=True, help="Target locale")
     ap.add_argument("--out", default=None, help="Rewrite file (default: rewrites_<locale>_<batch>.json next to the verdicts)")
     ap.add_argument("--critique-out", default=None, help="Also write the selected lines as a critique file (fixed critique schema)")
-    ap.add_argument("--src-field", default="en", help="Source column of --source-table (default en)")
-    ap.add_argument("--dst-field", default=None, help="Target column of --source-table (default: dst, the locale code, target)")
-    ap.add_argument("--key-field", default="key", help="Key column of --source-table (default key)")
+    ap.add_argument("--src-field", default=None, help="Source column of --source-table (default en, or src_field of --config)")
+    ap.add_argument("--dst-field", default=None, help="Target column of --source-table (default: dst_field of --config, else dst, the locale code, target)")
+    ap.add_argument("--key-field", default=None, help="Key column of --source-table (default key, or key_field of --config)")
     ap.add_argument("--candidates", type=int, default=3, help="Candidates per line (default 3)")
     ap.add_argument("--statuses", default=",".join(DEFAULT_STATUSES), help=f"Verdict statuses to rewrite (default {','.join(DEFAULT_STATUSES)})")
-    ap.add_argument("--placeholder-style", choices=PLACEHOLDER_STYLES, default="auto", help="Placeholder syntax for the parity check (default auto)")
-    ap.add_argument("--tag-style", choices=TAG_STYLES, default="auto", help="Rich-text tag syntax for the parity check (default auto)")
+    ap.add_argument("--placeholder-style", choices=PLACEHOLDER_STYLES, default=None, help="Placeholder syntax for the parity check (default auto, or placeholder_style of --config)")
+    ap.add_argument("--tag-style", choices=TAG_STYLES, default=None, help="Rich-text tag syntax for the parity check (default auto, or tag_style of --config)")
     ap.add_argument("--langpack-dir", default=None, help="Root of the language packs, for warm-up and few-shots (default: the skill's langpack/)")
     ap.add_argument("--no-warmup", action="store_true", help="Leave the warm-up block out of the prompts")
     ap.add_argument("--seed", type=int, default=1234, help="Seed of the candidate order and the warm-up sample (default 1234)")
@@ -219,6 +219,8 @@ def main() -> int:
     ap = build_parser()
     args = ap.parse_args()
     resolve_input(ap, args)
+    apply_config(args, {"context_map": None, "src_field": "en", "dst_field": None, "key_field": "key",
+                        "placeholder_style": "auto", "tag_style": "auto"})
     locale, _v = normalize_locale(args.locale)
     if not 1 <= args.candidates <= 6:
         raise L10nError("--candidates must be between 1 and 6")

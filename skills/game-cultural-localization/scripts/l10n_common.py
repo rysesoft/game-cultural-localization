@@ -882,6 +882,18 @@ def load_config(path: Optional[Path]) -> Dict[str, Any]:
     return data
 
 
+def apply_config(args: Any, defaults: Dict[str, Any]) -> Dict[str, Any]:
+    """Fill every option of defaults that the command line left unset from --config, else from the default.
+
+    The argparse defaults of these options must be None, so an explicit flag always wins over the config.
+    Returns the loaded config. Before, several model tools accepted --config and never read it.
+    """
+    cfg = load_config(Path(args.config)) if getattr(args, "config", None) else {}
+    for key, default in defaults.items():
+        setattr(args, key, pick(getattr(args, key, None), cfg, key, default))
+    return cfg
+
+
 def pick(cli_value: Any, config: Dict[str, Any], key: str, default: Any) -> Any:
     """Resolve an option: explicit CLI value > config file > default."""
     if cli_value is not None:

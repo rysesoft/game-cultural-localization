@@ -436,6 +436,13 @@ class ContextInPromptTests(unittest.TestCase):
             prompt = json.loads(out.read_text(encoding="utf-8"))["prompt"]
             self.assertEqual((prompt["context_map"], prompt["context_lines"]), ("CONTEXT_MAP.md", 1))
             self.assertEqual(run_cli(*common, "--context-map", str(td / "nope.md"), env_extra=NO_KEYS)[0], 2)
+            # --config was accepted and never read, the map in l10n.config.json is used now, an explicit flag still wins
+            cfg = write_text(td / "l10n.config.json", json.dumps({"context_map": "context/CONTEXT_MAP.md"}))
+            self.assertEqual(run_cli(*common, "--config", str(cfg), env_extra=NO_KEYS)[0], 0)
+            self.assertEqual(json.loads(out.read_text(encoding="utf-8"))["prompt"]["context_map"], "CONTEXT_MAP.md")
+            bad = write_text(td / "bad.config.json", json.dumps({"context_map": "nowhere/CONTEXT_MAP.md"}))
+            self.assertEqual(run_cli(*common, "--config", str(bad), env_extra=NO_KEYS)[0], 2)
+            self.assertEqual(run_cli(*common, "--config", str(bad), "--context-map", str(m), env_extra=NO_KEYS)[0], 0)
 
     def test_orchestrator_writers_and_jurors(self):
         import jury

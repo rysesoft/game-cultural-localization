@@ -157,6 +157,7 @@ class PipelineState:
         self.ph_style, self.tag_style = ph_style, tag_style
         self.log: List[str] = []
         self.bible = ""
+        self.gate: Dict[str, Any] = {}  # forbid_chars, forbid_spaced_hyphen, strict_whitespace, fail_on_warn of l10n.config.json
 
     def say(self, msg: str) -> None:
         self.log.append(msg)
@@ -259,7 +260,10 @@ def phase3_gate(state: PipelineState, finals: List[Path], fonts: List[Path]) -> 
     summary = {"errors": 0, "warnings": 0, "high": 0, "warn": 0, "missing_glyphs": 0}
     for f in finals:
         rows = load_table(f, state.src_field, state.locale, state.key_field)
-        findings = lqa_linter.lint_rows(rows, rules, lqa_linter.LintOptions(locale=state.locale, placeholder_style=state.ph_style, tag_style=state.tag_style))
+        findings = lqa_linter.lint_rows(rows, rules, lqa_linter.LintOptions(
+            locale=state.locale, placeholder_style=state.ph_style, tag_style=state.tag_style,
+            forbid_chars=str(state.gate.get("forbid_chars", "")), forbid_spaced_hyphen=bool(state.gate.get("forbid_spaced_hyphen", False)),
+            strict_whitespace=bool(state.gate.get("strict_whitespace", False))))
         risks = ui_expansion_checker.check_rows(rows, ui_expansion_checker.CheckOptions(locale=state.locale, factor=ui_expansion_checker.EXPANSION_FACTORS[state.locale], tag_style=state.tag_style))
         summary["errors"] += sum(1 for x in findings if x.severity == "ERR")
         summary["warnings"] += sum(1 for x in findings if x.severity == "WARN")
@@ -274,13 +278,15 @@ def phase3_gate(state: PipelineState, finals: List[Path], fonts: List[Path]) -> 
             if proc.returncode == 2:
                 raise L10nError("font scan failed: " + proc.stderr.strip())
             summary["missing_glyphs"] += 1 if proc.returncode == 1 else 0
-    summary["passed"] = summary["errors"] == 0 and summary["high"] == 0 and summary["missing_glyphs"] == 0
+    summary["passed"] = (summary["errors"] == 0 and summary["high"] == 0 and summary["missing_glyphs"] == 0
+                         and not (state.gate.get("fail_on_warn") and summary["warnings"]))
     state.say(f"Phase 3: gate {'PASSED' if summary['passed'] else 'FAILED'} {summary}")
     return summary
 
 
 def run_pipeline(input_path: Path, locale: str, workdir: Path, provider: Provider, *, src_field: str = "en", dst_field: str = "dst",
-                 key_field: str = "key", ph_style: str = "auto", tag_style: str = "auto", batch_size: int = 50, fonts: Optional[List[Path]] = None) -> Dict[str, Any]:
+                 key_field: str = "key", ph_style: str = "auto", tag_style: str = "auto", batch_size: int = 50, fonts: Optional[List[Path]] = None,
+                 gate: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Run Phase 0-3 and return a result dict ({'passed': bool, 'log': [...], 'summary': {...}})."""
     workdir.mkdir(parents=True, exist_ok=True)
     # Source-only input: the src_field column is loaded as 'dst' (target_only) and moved to Row.src.
@@ -288,6 +294,7 @@ def run_pipeline(input_path: Path, locale: str, workdir: Path, provider: Provide
     if not rows:
         raise L10nError(f"{input_path}: no rows to localize")
     state = PipelineState(locale, workdir, src_field, dst_field, key_field, ph_style, tag_style)
+    state.gate = dict(gate or {})
     phase0_preflight(state, rows, fonts or [])
     p1 = phase1_pass1(state, rows, provider, batch_size)
     finals = phase2_critique_and_pass2(state, p1, provider)
@@ -305,9 +312,20 @@ def _register(row: Row) -> str:
     return reg if reg else infer_register(str(row.meta.get("category") or ""), row.src, "game")
 
 
+def _batch_budget(router: Any, start: int) -> Optional[Dict[str, Any]]:
+    """Budget summary of the model calls since record `start` of the router's budget log, the calls of one batch."""
+    import budget_report
+    recs = router.budget.records[start:]
+    if not recs:
+        return None
+    tot = budget_report.aggregate(recs, [], budget_report.price_table(router.config))[0]
+    return {k: tot[k] for k in ("calls", "errors", "input_tokens", "output_tokens", "latency_ms", "cost_usd", "priced", "unpriced_models")}
+
+
 def _write_report(report_changes: Any, verdict_doc: Dict[str, Any], locale: str, n: int, tag: str, workdir: Path,
-                  rewrites: Optional[Dict[str, Any]], sources: Dict[str, Dict[str, str]], pack_dir: Path) -> Dict[str, Any]:
-    rep = report_changes.build_report(verdict_doc, locale, f"{n:02d}", rewrites=rewrites, sources=sources, pack_dir=pack_dir, budget=None)
+                  rewrites: Optional[Dict[str, Any]], sources: Dict[str, Dict[str, str]], pack_dir: Path,
+                  budget: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    rep = report_changes.build_report(verdict_doc, locale, f"{n:02d}", rewrites=rewrites, sources=sources, pack_dir=pack_dir, budget=budget)
     (workdir / f"changes_{tag}.json").write_text(json.dumps(rep, ensure_ascii=False, indent=2), encoding="utf-8")
     (workdir / f"changes_{tag}.md").write_text(report_changes.render_markdown(rep), encoding="utf-8")
     return rep
@@ -317,7 +335,7 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
                       ph_style: str = "auto", tag_style: str = "auto", batch_size: int = 50, fonts: Optional[List[Path]] = None,
                       langpack_dir: Optional[Path] = None, tm_path: Optional[Path] = None, deliberation: bool = True,
                       budget_caps: bool = True, candidates: int = 3, seed: int = 1234, workers: int = 1,
-                      context_map: Optional[Path] = None, resume: bool = True) -> Dict[str, Any]:
+                      context_map: Optional[Path] = None, resume: bool = True, gate: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Phase 0-3 with the multi-family jury. Returns {'passed', 'flow', 'summary', 'log', 'finals', 'batches', 'halted', ...}.
 
     workers > 1 sends model calls in parallel inside Pass 1, the jury and Pass 2, the result does not change.
@@ -340,6 +358,7 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
     if not rows:
         raise L10nError(f"{input_path}: no rows to localize")
     state = PipelineState(locale, workdir, src_field, src_field, key_field, ph_style, tag_style)
+    state.gate = dict(gate or {})
     phase0_preflight(state, rows, fonts or [])
     packs = Path(langpack_dir) if langpack_dir else LANGPACK_DIR
     pack_dir = packs / locale
@@ -383,6 +402,7 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
             batch = rows[i:i + batch_size]
             n = i // batch_size + 1
             tag = f"{locale}_{n:02d}"
+            rec_start = len(router.budget.records)  # the change report of this batch gets the cost of its own calls
             # Phase 1 ------------------------------------------------------- #
             payload_rows = []
             for r in batch:
@@ -444,7 +464,7 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
                 halted = {"batch": n, **res["halted"]}
                 state.say(f"Phase 2: batch {n:02d} STOPPED by the budget cap at {res['halted']['stage']}. {res['halted']['reason']}")
                 _write_report(report_changes, verdict_doc, locale, n, tag, workdir, None,
-                              {r.key: {"en": r.src, "target": targets[r.key]} for r in batch}, pack_dir)
+                              {r.key: {"en": r.src, "target": targets[r.key]} for r in batch}, pack_dir, _batch_budget(router, rec_start))
                 batch_info["report"] = f"changes_{tag}.md"
                 batches.append(batch_info)
                 break
@@ -465,7 +485,8 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
             finals.append(final)
             kept = sum(1 for l in rw["lines"] if not l["valid"])
             state.say(f"Phase 2: batch {n:02d} Pass 2 rewrote {len(applied)} rows, {kept} kept the old text -> {final.name}")
-            rep = _write_report(report_changes, verdict_doc, locale, n, tag, workdir, {"lines": rw["lines"]}, {}, pack_dir)
+            rep = _write_report(report_changes, verdict_doc, locale, n, tag, workdir, {"lines": rw["lines"]}, {}, pack_dir,
+                                _batch_budget(router, rec_start))
             state.say(f"Phase 2: batch {n:02d} change report changes_{tag}.md ({rep['changed']} changes, {len(rep['unresolved'])} unresolved)")
             batch_info.update({"rewrites": rpath.name, "final": final.name, "report": f"changes_{tag}.md", "unresolved": len(rep["unresolved"])})
             batches.append(batch_info)
@@ -531,6 +552,8 @@ def main() -> int:
     tag_style = pick(args.tag_style, cfg, "tag_style", "auto")
     if args.workers < 1:
         raise L10nError("--workers must be 1 or more")
+    # the Phase 3 gate applies the project's punctuation rules of l10n.config.json, as the methodology's gate commands do
+    gate = {k: cfg[k] for k in ("forbid_chars", "forbid_spaced_hyphen", "strict_whitespace", "fail_on_warn") if k in cfg}
     if args.dry_run or args.live:
         from llm_tasks import make_router
         workdir = Path(args.workdir)
@@ -543,7 +566,7 @@ def main() -> int:
             tm_path=Path(args.tm) if args.tm else None, deliberation=not args.no_deliberation, budget_caps=not args.no_budget_caps,
             candidates=args.candidates, seed=args.seed, workers=args.workers,
             context_map=Path(args.context_map or cfg["context_map"]) if (args.context_map or cfg.get("context_map")) else None,
-            resume=not args.no_resume)
+            resume=not args.no_resume, gate=gate)
         exit_code = EXIT_OK if result["passed"] else EXIT_FINDINGS
         text = "\n".join([f"Orchestrator run (jury flow, {'dry run' if args.dry_run else 'live'}):"] + ["  " + l for l in result["log"]]
                          + [f"  NOTE: {n}" for n in result["notes"]] + [f"  Exit code: {exit_code}"])
@@ -565,6 +588,7 @@ def main() -> int:
     result = run_pipeline(
         Path(args.input), locale, Path(args.workdir), provider, src_field=src_field, dst_field=src_field,
         key_field=key_field, ph_style=ph_style, tag_style=tag_style, batch_size=args.batch_size, fonts=[Path(f) for f in args.font],
+        gate=gate,
     )
     result["flow"] = "legacy"
     exit_code = EXIT_OK if result["passed"] else EXIT_FINDINGS

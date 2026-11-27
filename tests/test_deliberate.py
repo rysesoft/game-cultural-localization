@@ -159,6 +159,35 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual(doc["stats"]["status"]["unresolved"], 0)
             self.assertEqual(doc["stats"]["deliberation"], {"deliberated": 1, "resolved": 1, "unresolved": 0})
 
+    def test_context_map_on_its_own_and_from_the_config(self):
+        # run alone, deliberate.py read no context map before, and like jury.py it never read --config
+        import os
+        from unittest import mock
+        seen: Dict[str, Any] = {}
+
+        def spy(doc, entries, router, locale, system):
+            seen["system"], seen["entries"] = system, entries
+            return {"deliberated": 0, "resolved": 0, "unresolved": 0}
+        with TempDir() as td:
+            blind = write_json(td / "blind.json", self._doc())
+            verdicts = write_json(td / "v.json", {"verdicts": []})
+            ctx = td / "context"
+            ctx.mkdir()
+            (ctx / "CONTEXT_MAP.md").write_text("MAP-TEXT", encoding="utf-8")
+            (ctx / "CONTEXT_MAP.tr-TR.md").write_text("APPENDIX", encoding="utf-8")
+            (ctx / "line_notes.json").write_text(json.dumps({"DIS": {"screen": "letter", "notes": "SCOUT"}}), encoding="utf-8")
+            cfg = write_json(td / "l10n.config.json", {"context_map": "context/CONTEXT_MAP.md"})
+            argv = ["deliberate.py", str(verdicts), "--slice", str(blind), "--locale", "tr-TR", "--dry-run", "--config", str(cfg),
+                    "--langpack-dir", str(td / "np")]
+            import contextlib
+            import io
+            with mock.patch.object(dl, "deliberate_verdicts", spy), mock.patch.object(_sys, "argv", argv), mock.patch.dict(os.environ, NO_KEYS), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                dl.main()
+        self.assertIn("MAP-TEXT", seen["system"])
+        self.assertNotIn("APPENDIX", seen["system"])                      # jurors never read the locale appendix
+        self.assertEqual([e["context"] for e in seen["entries"] if e["key"] == "DIS"], [{"screen": "letter"}])
+
     def test_exit_2(self):
         with TempDir() as td:
             blind = write_json(td / "b.json", self._doc())

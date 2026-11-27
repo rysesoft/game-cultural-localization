@@ -84,6 +84,25 @@ class JuryFlowTests(unittest.TestCase):
             self.assertTrue(res["summary"]["halted"])
             self.assertIn("Phase 3: skipped", "\n".join(res["log"]))
 
+    def test_reports_carry_the_batch_cost_and_the_gate_reads_the_config(self):
+        with TempDir() as td:
+            src = write_json(td / "src.json", SOURCE)
+            orch.run_jury_pipeline(src, "tr-TR", td / "w", Router(load_providers_config(), dry_run=True, scenario=FakeScenario(SCENARIO)),
+                                   budget_caps=False, langpack_dir=td / "np")
+            budget = json.loads((td / "w" / "changes_tr-TR_01.json").read_text(encoding="utf-8"))["header"]["budget"]
+            self.assertGreater(budget["calls"], 0)                                # the orchestrator's reports had no cost before
+            semi = write_json(td / "semi.json", [{"key": "A", "en": "Save; then quit", "category": "ui"}])
+
+            def gate_run(name, gate):
+                return orch.run_jury_pipeline(semi, "tr-TR", td / name, Router(load_providers_config(), dry_run=True), budget_caps=False,
+                                              langpack_dir=td / "np", gate=gate)["summary"]["passed"]
+            self.assertTrue(gate_run("g1", None))
+            self.assertFalse(gate_run("g2", {"forbid_chars": ";"}))             # the project's rule from l10n.config.json
+            cfg = write_json(td / "l10n.config.json", {"forbid_chars": ";"})
+            code, _, err = run_cli("orchestrator_stub.py", "--dry-run", "--locale", "tr-TR", "--input", str(semi), "--workdir", str(td / "g3"),
+                                   "--config", str(cfg), "--no-budget-caps", "--langpack-dir", str(td / "np"), env_extra=NO_KEYS)
+            self.assertEqual(code, 1, err)
+
     def test_a_stopped_run_resumes_without_paying_twice(self):
         from unittest import mock
         import pass2_rewrite

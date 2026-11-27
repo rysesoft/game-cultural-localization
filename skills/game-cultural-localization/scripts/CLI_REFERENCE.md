@@ -508,6 +508,7 @@ For lines the J3 tier disagrees on (spread of 2 or more). `jury.py` runs it auto
 | `--locale` | target locale |
 | `--out` | write the updated verdicts here, default update the input file |
 | `--langpack-dir` / `--no-warmup` / `--seed` | critic prompt warm-up as for `jury.py` |
+| `--context-map` | `CONTEXT_MAP.md` of the game, as for `jury.py`. The jurors re-vote with the map and the neutral line notes, never the locale appendix. Without it a deliberation run on its own, for example to finish a stopped jury run by hand, saw no map |
 | `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
 
 Every deliberated verdict gets three extra votes with `tier` `deliberation` and a `deliberation` block `{first, revote, majority}`.
@@ -682,7 +683,7 @@ Phase 0 pre-flight, Phase 1 Pass 1 (`game-culturalizer`, parallel per batch, fai
 }
 ```
 
-Unknown keys or wrong types abort with exit 2. Relative `rules_dir`, `glossary` and `context_map` paths resolve from the config file's folder.
+Unknown keys or wrong types abort with exit 2. Relative `rules_dir`, `glossary` and `context_map` paths resolve from the config file's folder. The model tools read the keys that concern them, `eval_critic.py` and `deliberate.py` the `context_map`, `jury.py` also the field names of its source table, `pass2_rewrite.py` also `placeholder_style` and `tag_style`, `orchestrator_stub.py` all of them plus the gate rules `forbid_chars`, `forbid_spaced_hyphen`, `strict_whitespace` and `fail_on_warn` for its Phase 3 gate. An explicit flag always wins over the config.
 
 ---
 

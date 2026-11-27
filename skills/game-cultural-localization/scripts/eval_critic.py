@@ -37,8 +37,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from l10n_common import (  # noqa: E402
-    EXIT_FINDINGS, EXIT_OK, L10nError, add_common_args, add_input_argument, emit_report, load_json_data, normalize_locale,
-    resolve_input, run_main, __version__,
+    EXIT_FINDINGS, EXIT_OK, L10nError, add_common_args, add_input_argument, apply_config, emit_report, load_json_data,
+    normalize_locale, resolve_input, run_main, __version__,
 )
 from build_context_map import ContextPack, load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR  # noqa: E402
@@ -275,6 +275,7 @@ def main() -> int:
     ap = build_parser()
     args = ap.parse_args()
     resolve_input(ap, args)
+    apply_config(args, {"context_map": None})
     locale, _v = normalize_locale(args.locale)
     tiers = [t.strip() for t in args.tiers.split(",") if t.strip()]
     for t in tiers:

@@ -33,9 +33,10 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from l10n_common import (  # noqa: E402
-    EXIT_FINDINGS, EXIT_OK, L10nError, add_common_args, add_input_argument, emit_report, load_json_data, normalize_locale,
-    resolve_input, run_main, __version__,
+    EXIT_FINDINGS, EXIT_OK, L10nError, add_common_args, add_input_argument, apply_config, emit_report, load_json_data,
+    normalize_locale, resolve_input, run_main, __version__,
 )
+from build_context_map import load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR  # noqa: E402
 from jury import build_system_prompt, juror_view, load_blind_slice, status_for  # noqa: E402
 from llm_tasks import add_model_args, default_budget_path, make_router, revote  # noqa: E402
@@ -151,6 +152,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--langpack-dir", default=None, help="Root of the language packs, for the critic prompt warm-up (default: the skill's langpack/)")
     ap.add_argument("--no-warmup", action="store_true", help="Leave the warm-up block out of the critic prompt")
     ap.add_argument("--seed", type=int, default=1234, help="Seed of the warm-up and few-shot sample (default 1234)")
+    ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md of the game (or context_map of --config), the jurors re-vote with the map and the neutral line notes")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap
@@ -160,6 +162,7 @@ def main() -> int:
     ap = build_parser()
     args = ap.parse_args()
     resolve_input(ap, args)
+    apply_config(args, {"context_map": None})
     locale, _v = normalize_locale(args.locale)
     inp = Path(args.input)
     doc = load_json_data(inp)
@@ -170,6 +173,10 @@ def main() -> int:
     router = make_router(args, ["J3"], default_budget_path(out))
     pack_dir = (Path(args.langpack_dir) if args.langpack_dir else LANGPACK_DIR) / locale
     system, _info = build_system_prompt(locale, entries, pack_dir, warmup=not args.no_warmup, warmup_count=40, shots=6, seed=args.seed)
+    if args.context_map:  # as in jury.py, the map and the neutral line fields, never the locale appendix
+        ctx = load_context(Path(args.context_map), locale)
+        ctx.enrich(entries)
+        system = ctx.system(system)
     counts = deliberate_verdicts(doc, entries, router, locale, system)
     doc["notes"] = list(doc.get("notes", [])) + [n for n in router.notes if n not in doc.get("notes", [])]
     out.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

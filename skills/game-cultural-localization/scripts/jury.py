@@ -44,7 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from l10n_common import (  # noqa: E402
     EXIT_FINDINGS, EXIT_OK, L10nError, Row, add_common_args, add_input_argument, emit_report, load_json_data, load_table,
-    normalize_locale, resolve_input, run_main, __version__,
+    apply_config, normalize_locale, resolve_input, run_main, __version__,
 )
 import lqa_linter  # noqa: E402
 from build_context_map import load_context  # noqa: E402
@@ -363,9 +363,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--locale", required=True, help="Target locale")
     ap.add_argument("--out", default=None, help="Verdict file (default: verdicts_<locale>_<batch>.json next to the slice)")
     ap.add_argument("--source-table", default=None, help="Harness-side table with the English source, enables the back-translation evidence for J3 lines")
-    ap.add_argument("--src-field", default="en", help="Source column of --source-table (default en)")
-    ap.add_argument("--dst-field", default=None, help="Target column of --source-table (default: dst, then target)")
-    ap.add_argument("--key-field", default="key", help="Key column of --source-table (default key)")
+    ap.add_argument("--src-field", default=None, help="Source column of --source-table (default en, or src_field of --config)")
+    ap.add_argument("--dst-field", default=None, help="Target column of --source-table (default: dst_field of --config, else dst, then target)")
+    ap.add_argument("--key-field", default=None, help="Key column of --source-table (default key, or key_field of --config)")
     ap.add_argument("--langpack-dir", default=None, help="Root of the language packs, for warm-up and contrastive few-shots (default: the skill's langpack/)")
     ap.add_argument("--no-warmup", action="store_true", help="Leave the warm-up block out of the critic prompt")
     ap.add_argument("--warmup-count", type=int, default=40, help="Warm-up lines in the prompt (default 40)")
@@ -387,6 +387,7 @@ def main() -> int:
     ap = build_parser()
     args = ap.parse_args()
     resolve_input(ap, args)
+    apply_config(args, {"context_map": None, "src_field": "en", "dst_field": None, "key_field": "key"})
     locale, _v = normalize_locale(args.locale)
     inp = Path(args.input)
     entries, source_file = load_blind_slice(inp)
