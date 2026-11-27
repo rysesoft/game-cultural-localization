@@ -60,6 +60,7 @@ class ChatResult(NamedTuple):
     latency_ms: int
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+    batch_id: str = ""          # the batch job that answered the call (batch mode only)
 
 
 class Provider(Protocol):
@@ -234,6 +235,61 @@ def urllib_transport(url: str, headers: Dict[str, str], body: bytes, timeout: fl
             exc.close()
         hdrs = {k.lower(): v for k, v in exc.headers.items()} if exc.headers else {}
         return int(exc.code), raw, hdrs
+
+
+# get(url, headers, timeout) -> (status, response body, lower-cased headers), for the polls and results of a batch job
+GetTransport = Callable[[str, Dict[str, str], float], Tuple[int, bytes, Dict[str, str]]]
+
+
+def urllib_get(url: str, headers: Dict[str, str], timeout: float) -> Tuple[int, bytes, Dict[str, str]]:
+    """GET with urllib.request; HTTP error statuses are returned, network failures raise OSError."""
+    if os.environ.get(OFFLINE_ENV, "") == "1":
+        raise ProviderError(f"network access is disabled ({OFFLINE_ENV}=1); use --dry-run")
+    req = urllib.request.Request(url, headers={k: v for k, v in headers.items() if k.lower() != "content-type"}, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (https endpoints from config)
+            return int(resp.status), resp.read(), {k.lower(): v for k, v in resp.headers.items()}
+    except urllib.error.HTTPError as exc:
+        raw = b""
+        try:
+            raw = exc.read()
+        except Exception:
+            pass
+        finally:
+            exc.close()
+        hdrs = {k.lower(): v for k, v in exc.headers.items()} if exc.headers else {}
+        return int(exc.code), raw, hdrs
+
+
+def http_get(url: str, headers: Dict[str, str], *, get: GetTransport, sleep: Callable[[float], None] = time.sleep,
+             timeout: float = DEFAULT_TIMEOUT_S, max_attempts: int = MAX_ATTEMPTS, label: str = "provider",
+             secrets: Sequence[str] = ()) -> str:
+    """GET a body as text with the retry rules of post_json (429, 5xx and network errors, exponential backoff)."""
+    last = "no attempt made"
+    for attempt in range(max_attempts):
+        try:
+            status, raw, hdrs = get(url, headers, timeout)
+        except ProviderError:
+            raise
+        except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError) as exc:
+            last = f"network error: {redact(str(exc), secrets)}"
+            if attempt < max_attempts - 1:
+                sleep(backoff_delay(attempt))
+            continue
+        text = raw.decode("utf-8", "replace")
+        if 200 <= status < 300:
+            return text
+        snippet = redact(text[:300].replace("\n", " "), secrets)
+        if status == 429 or 500 <= status < 600:
+            last = f"HTTP {status}: {snippet}"
+            if attempt < max_attempts - 1:
+                sleep(rate_limit_delay(attempt, hdrs.get("retry-after"), text) if status == 429
+                      else backoff_delay(attempt, hdrs.get("retry-after")))
+            continue
+        if status in (401, 403):
+            raise ProviderError(f"{label}: authentication failed (HTTP {status}); check the API key environment variable")
+        raise ProviderError(f"{label}: HTTP {status}: {snippet}")
+    raise ProviderError(f"{label}: giving up after {max_attempts} attempts ({last})")
 
 
 _KEY_QS_RE = re.compile(r"([?&]key=)[^&\s]+")

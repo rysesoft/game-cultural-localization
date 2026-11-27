@@ -194,7 +194,7 @@ class EscalationTally:
     to_j3: int = 0
 
 
-def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], locale: str, system: str, batch_size: int,
+def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], locale: str, system: str, batch_size: Optional[int],
                 workers: int = 1, memo: Any = None) -> Dict[str, List[Dict[str, Any]]]:
     """Votes of the three members of one tier. With workers > 1 the members run at the same time and each
     sends up to `workers` batches at once. Votes are appended in member order, the result does not change."""
@@ -220,7 +220,7 @@ def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], local
     return out
 
 
-def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, system: str, batch_size: int = 40,
+def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, system: str, batch_size: Optional[int] = None,
              budget_caps: bool = True, tm_lookup: Optional[Callable[[Dict[str, Any]], List[Dict[str, Any]]]] = None,
              roundtrip_fn: Optional[Callable[[Sequence[Dict[str, Any]]], Dict[str, Dict[str, Any]]]] = None,
              deliberator: Optional[Deliberator] = None, workers: int = 1, tally: Optional[EscalationTally] = None,
@@ -311,8 +311,10 @@ def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, sys
         for k in to_j3:
             votes[k].extend(tv[k])
         open_keys = [k for k in to_j3 if not agrees([v["score"] for v in tv[k]], agreement)]
-        # every disputed line deliberates on its own, so the lines can run side by side
-        if deliberator is not None and open_keys:
+        # a deliberator with many() re-votes all disputed lines in a few calls per member, a plain callable line by line
+        if deliberator is not None and open_keys and hasattr(deliberator, "many"):
+            outcomes = deliberator.many([(by_key[k], tv[k], evidence[k]) for k in open_keys], workers=workers, memo=memo)
+        elif deliberator is not None and open_keys:
             if int(workers) > 1 and len(open_keys) > 1:
                 with ThreadPoolExecutor(max_workers=int(workers)) as ex:
                     outcomes = dict(zip(open_keys, ex.map(lambda key: deliberator(by_key[key], tv[key], evidence[key]), open_keys)))
@@ -375,7 +377,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--warmup-count", type=int, default=40, help="Warm-up lines in the prompt (default 40)")
     ap.add_argument("--shots", type=int, default=6, help="Contrastive few-shot pairs from the pack (default 6)")
     ap.add_argument("--seed", type=int, default=1234, help="Seed of the warm-up and few-shot sample (default 1234)")
-    ap.add_argument("--batch-size", type=int, default=40, help="Lines per model call (default 40)")
+    ap.add_argument("--batch-size", type=int, default=None, help="Lines per model call (default 100, with a character budget so long letters never pile up in one call)")
     ap.add_argument("--no-budget-caps", action="store_true", help="Do not stop when the J2 or J3 escalation ratio is above the cap")
     ap.add_argument("--no-deliberation", action="store_true", help="Leave J3 disagreements unresolved instead of running the deliberation round")
     ap.add_argument("--tm", default=None, help="Translation memory (tm.py SQLite) for the evidence: closest approved lines")

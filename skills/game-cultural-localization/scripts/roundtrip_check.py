@@ -72,7 +72,7 @@ def eligible(target: str, register: str, min_words: int, registers: Sequence[str
 
 
 def roundtrip_evidence(rows: Sequence[Dict[str, Any]], locale: str, provider: Any, *, min_words: int, registers: Sequence[str],
-                       threshold: float, batch_size: int = 30, workers: int = 1, memo: Any = None) -> Dict[str, Dict[str, Any]]:
+                       threshold: float, batch_size: Optional[int] = None, workers: int = 1, memo: Any = None) -> Dict[str, Dict[str, Any]]:
     """rows [{key, en, target, register}] -> key -> {applied, calque_score, back, suspect} (model calls only for eligible rows)."""
     out: Dict[str, Dict[str, Any]] = {}
     todo: List[Tuple[str, Dict[str, Any]]] = []
@@ -106,7 +106,7 @@ def best_threshold(native: Sequence[float], robot: Sequence[float]) -> Tuple[flo
 
 
 def calibrate(contrastive: Dict[str, Any], locale: str, provider: Any, *, min_words: int, registers: Sequence[str],
-              batch_size: int = 30) -> Dict[str, Any]:
+              batch_size: Optional[int] = None) -> Dict[str, Any]:
     """Score native and robot lines of a contrastive set and derive the threshold."""
     pairs = contrastive.get("pairs")
     if not isinstance(pairs, list):
@@ -171,7 +171,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--min-words", type=int, default=None, help="Apply to lines with more words than this (default: providers config, 6)")
     ap.add_argument("--langpack-dir", default=None, help="Root of the language packs (default: the skill's langpack/)")
     ap.add_argument("--out", default=None, help="Calibrate mode output (default: langpack/<locale>/roundtrip_threshold.json)")
-    ap.add_argument("--batch-size", type=int, default=30, help="Lines per model call (default 30)")
+    ap.add_argument("--batch-size", type=int, default=None, help="Lines per model call (default 100, with a character budget so long letters never pile up in one call)")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap

@@ -27,8 +27,9 @@ import json
 import re
 import sys
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -39,7 +40,7 @@ from l10n_common import (  # noqa: E402
 from build_context_map import load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR  # noqa: E402
 from jury import build_system_prompt, juror_view, load_blind_slice, status_for  # noqa: E402
-from llm_tasks import add_model_args, default_budget_path, everyday_rule, make_router, revote  # noqa: E402
+from llm_tasks import add_model_args, default_budget_path, everyday_rule, make_router, revote, revote_many  # noqa: E402
 
 TOOL = "deliberate"
 LABELS = ("A", "B")
@@ -78,25 +79,23 @@ def decide(scores: Sequence[int]) -> Optional[int]:
     return score if count >= 2 else None
 
 
-def deliberate_line(entry: Dict[str, Any], j3_votes: Sequence[Dict[str, Any]], evidence: Dict[str, Any], members: Sequence[Any],
-                    locale: str, system: str, scrub: "re.Pattern[str]", critical_max: int = 2) -> Dict[str, Any]:
-    """Run one re-vote round for a line. Returns {score, status, rationales, revotes, deliberation}."""
-    by_member = {int(v["member"]): v for v in j3_votes}
-    package = evidence_package(evidence)
+def revote_payload(entry: Dict[str, Any], by_member: Dict[int, Dict[str, Any]], member_index: int, package: Dict[str, Any],
+                   scrub: "re.Pattern[str]") -> Dict[str, Any]:
+    """What one member sees in the re-vote of a line, its own first vote and the two others without names."""
+    own = by_member.get(member_index)
+    if own is None:
+        raise L10nError(f"deliberation for '{entry['key']}': no first J3 vote of member {member_index}")
     view = juror_view(entry)
-    revotes: List[Dict[str, Any]] = []
-    for m in members:
-        own = by_member.get(m.index)
-        if own is None:
-            raise L10nError(f"deliberation for '{entry['key']}': no first J3 vote of member {m.index}")
-        others = [by_member[i] for i in sorted(by_member) if i != m.index]
-        payload = {"key": entry["key"], "target": view["target"], "context": {k: v for k, v in view.items() if k not in ("key", "target")},
-                   "own": {k: own[k] for k in ("score", "issue_type", "reason", "suggested")},
-                   "others": [{"juror": LABELS[i], "score": o["score"], "issue_type": o["issue_type"], "reason": anonymize(o["reason"], scrub),
-                               "suggested": o.get("suggested", "")} for i, o in enumerate(others)],
-                   "evidence": package}
-        v = revote(m.provider, payload, locale, system=system)
-        revotes.append({"key": entry["key"], "tier": "deliberation", "member": m.index, "family": m.family, "model": m.provider.model, **v})
+    others = [by_member[i] for i in sorted(by_member) if i != member_index]
+    return {"key": entry["key"], "target": view["target"], "context": {k: v for k, v in view.items() if k not in ("key", "target")},
+            "own": {k: own[k] for k in ("score", "issue_type", "reason", "suggested")},
+            "others": [{"juror": LABELS[i], "score": o["score"], "issue_type": o["issue_type"], "reason": anonymize(o["reason"], scrub),
+                        "suggested": o.get("suggested", "")} for i, o in enumerate(others)],
+            "evidence": package}
+
+
+def decide_line(by_member: Dict[int, Dict[str, Any]], revotes: List[Dict[str, Any]], critical_max: int = 2) -> Dict[str, Any]:
+    """The outcome of a re-vote round for one line. Returns {score, status, rationales, revotes, deliberation}."""
     everyday_rule(revotes)  # the everyday word check keeps its weight in the re-vote
     scores = [v["score"] for v in revotes]
     majority = decide(scores)
@@ -112,14 +111,60 @@ def deliberate_line(entry: Dict[str, Any], j3_votes: Sequence[Dict[str, Any]], e
     return {"score": majority, "status": status_for(majority), "rationales": [v["reason"] for v in revotes], "revotes": revotes, "deliberation": info}
 
 
+def deliberate_line(entry: Dict[str, Any], j3_votes: Sequence[Dict[str, Any]], evidence: Dict[str, Any], members: Sequence[Any],
+                    locale: str, system: str, scrub: "re.Pattern[str]", critical_max: int = 2) -> Dict[str, Any]:
+    """Run one re-vote round for a line, one call per member. Returns {score, status, rationales, revotes, deliberation}."""
+    by_member = {int(v["member"]): v for v in j3_votes}
+    package = evidence_package(evidence)
+    revotes: List[Dict[str, Any]] = []
+    for m in members:
+        v = revote(m.provider, revote_payload(entry, by_member, m.index, package, scrub), locale, system=system)
+        revotes.append({"key": entry["key"], "tier": "deliberation", "member": m.index, "family": m.family, "model": m.provider.model, **v})
+    return decide_line(by_member, revotes, critical_max)
+
+
+def deliberate_lines(items: Sequence[Tuple[Dict[str, Any], Sequence[Dict[str, Any]], Dict[str, Any]]], members: Sequence[Any],
+                     locale: str, system: str, scrub: "re.Pattern[str]", critical_max: int = 2, workers: int = 1,
+                     memo: Any = None) -> Dict[str, Dict[str, Any]]:
+    """The re-vote round of many disputed lines at once. items are (entry, first J3 votes, evidence).
+
+    Each member re-votes every line in a few calls (revote_many) instead of one call per line, the members run side by
+    side when workers > 1. The outcome of every line is the same as deliberate_line gives. Returns key -> outcome.
+    """
+    if not items:
+        return {}
+    firsts = {e["key"]: {int(v["member"]): v for v in votes} for e, votes, _ev in items}
+    payloads = {m.index: [revote_payload(e, firsts[e["key"]], m.index, evidence_package(ev), scrub) for e, _v, ev in items] for m in members}
+
+    def member_votes(m: Any) -> Dict[str, Dict[str, Any]]:
+        return revote_many(m.provider, payloads[m.index], locale, system=system, workers=workers, memo=memo)
+    if int(workers) > 1 and len(members) > 1:
+        with ThreadPoolExecutor(max_workers=len(members)) as ex:
+            got = dict(zip([m.index for m in members], ex.map(member_votes, members)))
+    else:
+        got = {m.index: member_votes(m) for m in members}
+    out: Dict[str, Dict[str, Any]] = {}
+    for e, _votes, _ev in items:
+        k = e["key"]
+        revotes = [{"key": k, "tier": "deliberation", "member": m.index, "family": m.family, "model": m.provider.model, **got[m.index][k]}
+                   for m in members]
+        out[k] = decide_line(firsts[k], revotes, critical_max)
+    return out
+
+
 def make_deliberator(router: Any, locale: str, system: str) -> Any:
-    """Callable for jury.run_jury(deliberator=...)."""
+    """Callable for jury.run_jury(deliberator=...), one line per call. Its `many(items, workers, memo)` re-votes many lines at once."""
     members = router.jury("J3")
     scrub = name_scrubber(router.config)
     critical_max = int(router.config.agreement.get("critical_max", 2))
 
     def run(entry: Dict[str, Any], j3_votes: List[Dict[str, Any]], evidence: Dict[str, Any]) -> Dict[str, Any]:
         return deliberate_line(entry, j3_votes, evidence, members, locale, system, scrub, critical_max)
+
+    def many(items: Sequence[Tuple[Dict[str, Any], Sequence[Dict[str, Any]], Dict[str, Any]]], workers: int = 1,
+             memo: Any = None) -> Dict[str, Dict[str, Any]]:
+        return deliberate_lines(items, members, locale, system, scrub, critical_max, workers, memo)
+    run.many = many  # type: ignore[attr-defined]
     return run
 
 
@@ -128,13 +173,13 @@ def deliberate_verdicts(doc: Dict[str, Any], entries: Iterable[Dict[str, Any]], 
     by_key = {e["key"]: e for e in entries}
     run = make_deliberator(router, locale, system)
     counts = {"deliberated": 0, "resolved": 0, "unresolved": 0}
-    for v in doc.get("verdicts", []):
-        if v.get("status") != "unresolved" or v.get("final_tier") != "J3":
-            continue
+    todo = [v for v in doc.get("verdicts", []) if v.get("status") == "unresolved" and v.get("final_tier") == "J3"]
+    for v in todo:
         if v["key"] not in by_key:
             raise L10nError(f"verdict '{v['key']}' is not in the blind slice")
-        j3 = [x for x in v.get("votes", []) if x.get("tier") == "J3"]
-        res = run(by_key[v["key"]], j3, v.get("evidence", {}))
+    outcomes = run.many([(by_key[v["key"]], [x for x in v.get("votes", []) if x.get("tier") == "J3"], v.get("evidence", {})) for v in todo])
+    for v in todo:
+        res = outcomes[v["key"]]
         v["votes"] = list(v.get("votes", [])) + res["revotes"]
         v.update({"final_tier": "deliberation", "score": res["score"], "status": res["status"], "rationales": res["rationales"],
                   "deliberation": res["deliberation"]})

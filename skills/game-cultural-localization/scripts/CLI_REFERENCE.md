@@ -191,7 +191,7 @@ Legacy flow (`--provider module:function`). Any callable `complete(system: str, 
 | `--dry-run` | jury flow with the fake provider, no key and no network |
 | `--live` | jury flow with the real APIs |
 | `--provider module:function` | legacy single critic flow |
-| `--providers-config`, `--fake-scenario`, `--budget-log` | model access of the jury flow, the budget log defaults to `<workdir>/budget.jsonl` |
+| `--providers-config`, `--fake-scenario`, `--budget-log`, `--batch` | model access of the jury flow, the budget log defaults to `<workdir>/budget.jsonl`, `--batch` sends the Anthropic and Google calls through their batch APIs at half the price |
 | `--langpack-dir` | root of the language packs, default the skill's `langpack/` |
 | `--tm` | translation memory (`tm.py` SQLite) for Pass 1 RAG and the jury evidence |
 | `--font` | font files for the glyph scan of the Phase 3 gate, repeatable. Without one the gate says so in its log and summary (`glyphs_checked` false, `PASSED (glyphs not checked)`), and `missing_glyphs` counts the distinct characters no font covers |
@@ -213,18 +213,21 @@ Exit codes. 0 the gate passed and no line is unresolved. 1 the gate failed, the 
 
 ## LLM providers (providers/ and providers.config.json)
 
-The `providers/` package talks to Anthropic, Google Gemini and DeepSeek with `urllib` only, no SDK. Every adapter returns a `ChatResult(text, input_tokens, output_tokens, model, latency_ms)` through one interface, `complete(system, user, temperature, max_tokens, json_mode)`. The Anthropic adapter drops `temperature`, because current Claude models answer it with HTTP 400. Every call asks for the model's own output maximum, `max_output_tokens` per model in `providers.config.json` (Claude 5.5 128000 and DeepSeek 393216 as the APIs state them, Gemini 4 caps any value itself), whatever `max_tokens` the caller passes. Current Claude, Gemini and DeepSeek models think before they answer and the thinking counts against that limit, fixed floors of 16000 and 32000 cut replies in live runs. Only generated tokens are billed. A batched task re-asks up to three times in total, and a reply without content counts as a failed attempt instead of ending the run. Every socket read times out after 600 seconds. Every reply is streamed (Claude and DeepSeek `stream: true`, Gemini `streamGenerateContent?alt=sse`), so a reply that thinks for minutes keeps sending events and never reaches that timeout. Each adapter puts the events back together into one reply and retries a stream that sends an error or ends before its end mark. The Gemini key travels in the `x-goog-api-key` header. Prompt caching, checked live per provider. Anthropic caches only on request, so the adapter sends the system prompt as one block with `cache_control` and the following calls of a run read it at a tenth of the input price or less. DeepSeek caches prompt prefixes on its own. Gemini 4 showed no cache hits in live tests, and explicit caching is not offered for Gemini 4. `ChatResult` carries `cache_read_tokens` and `cache_write_tokens`, the budget log records them and `budget_report.py` prices them with `price_cache_read` and `price_cache_write` of `providers.config.json`. `as_legacy()` wraps a provider for the old `complete(system, user) -> str` interface of `orchestrator_stub.py`.
+The `providers/` package talks to Anthropic, Google Gemini and DeepSeek with `urllib` only, no SDK. Every adapter returns a `ChatResult(text, input_tokens, output_tokens, model, latency_ms)` through one interface, `complete(system, user, temperature, max_tokens, json_mode)`. The Anthropic adapter drops `temperature`, because current Claude models answer it with HTTP 400. Every call asks for the model's own output maximum, `max_output_tokens` per model in `providers.config.json` (Claude 5.5 128000 and DeepSeek 393216 as the APIs state them, Gemini 4 caps any value itself), whatever `max_tokens` the caller passes. Current Claude, Gemini and DeepSeek models think before they answer and the thinking counts against that limit, fixed floors of 16000 and 32000 cut replies in live runs. Only generated tokens are billed. A batched task re-asks up to three times in total, and a reply without content counts as a failed attempt instead of ending the run. Every socket read times out after 600 seconds. Every reply is streamed (Claude and DeepSeek `stream: true`, Gemini `streamGenerateContent?alt=sse`), so a reply that thinks for minutes keeps sending events and never reaches that timeout. Each adapter puts the events back together into one reply and retries a stream that sends an error or ends before its end mark. The Gemini key travels in the `x-goog-api-key` header. Prompt caching, checked live per provider. Anthropic caches only on request, so the adapter sends the system prompt as one block with `cache_control` and the following calls of a run read it at a tenth of the input price or less. DeepSeek caches prompt prefixes on its own. Gemini 4 showed no cache hits in live tests, and explicit caching is not offered for Gemini 4. `ChatResult` carries `cache_read_tokens`, `cache_write_tokens` and in batch mode `batch_id`, the budget log records them and `budget_report.py` prices them with `price_cache_read` and `price_cache_write` of `providers.config.json`. `as_legacy()` wraps a provider for the old `complete(system, user) -> str` interface of `orchestrator_stub.py`.
 
 | Piece | Behaviour |
 |---|---|
 | Retry | HTTP 429, 5xx and network errors are retried with exponential backoff (1, 2, 4, 8 seconds, or the `Retry-After` header), at most 5 attempts |
 | Rate limit | `rps` per provider from the config, shared by every model of that provider |
-| Budget log | every call appends one JSON line to `budget.jsonl` with `role`, `provider`, `alias`, `model`, `input_tokens`, `output_tokens`, `latency_ms`, `ok` and `fallback_from` when a fallback answered |
+| Budget log | every call appends one JSON line to `budget.jsonl` with `role`, `provider`, `alias`, `model`, `input_tokens`, `output_tokens`, `latency_ms`, `ok`, `fallback_from` when a fallback answered and `batch` and `batch_id` when a batch job answered |
 | Fallback | a model the API does not know (`not found`) switches once to the `fallback` alias of its config entry and the switch is noted in the report. Without a fallback the run stops with exit 2 |
 | Fake provider | `providers/fake.py` answers from a scenario file (prompt hash to reply, per line score rules) or from deterministic built-in rules. Every tool that calls a model takes `--dry-run` (fake provider, no key, no network) and `--fake-scenario FILE` |
 | Offline guard | the environment variable `GCL_OFFLINE=1` refuses every network call (the test suite sets it) |
+| Batch size | a batched task sends up to 100 rows per call for Pass 1, the back-translation and the jury, 30 for Pass 2, 50 for the pairwise task and the blind pick and 25 lines for the deliberation round, and every call also has a character budget (20000 characters of source for Pass 1, 24000 of target for the jury, 10000 for Pass 2), so long letters never pile up in one call. Every call resends the system prompt, fewer and larger calls cost less. `--batch-size` of a tool overrides the row limit |
+| Cache priming | when a step sends several batches at once, the first one goes alone and the others start after it, so it writes the system prompt to the prompt cache once and the others read it. Parallel first calls each paid the cache write before |
+| Batch mode | `--batch` on every model calling tool sends the calls of Anthropic and Google models through Message Batches and Gemini Batch Mode at half the price (`providers/batch.py`). The calls a step sends together become one job, the job is polled and every call gets its own reply, a reply comes when the job ends (usually within an hour, at most a day). DeepSeek has no batch API and stays real time. With `--batch` a tool keeps at least 64 calls in flight per step so a job holds them all, and the first batch is not sent alone. A failed request or job fails only its calls, which are asked again in the next job |
 
-`providers.config.json` holds the provider endpoints, the name of the API key environment variable of each provider (`ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `DEEPSEEK_API_KEY`), the model ids with prices in USD per 1M tokens (`null` means the price is not entered yet), the roles (`pass1`, `pass2`, `roundtrip`, `literal`) and the three jury tiers `J1`, `J2`, `J3`. Every tier needs one member from each family, two members of one family in a tier is a config error (exit 2). `agreement`, `budget_caps` and `roundtrip` hold the jury thresholds. `providers.deepseek.thinking` maps a role (or `default`) to `true` or `false` to switch DeepSeek thinking mode, a missing role keeps the API default. API keys are never written to any file.
+`providers.config.json` holds the provider endpoints, the name of the API key environment variable of each provider (`ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `DEEPSEEK_API_KEY`), the model ids with prices in USD per 1M tokens (`null` means the price is not entered yet), the roles (`pass1`, `pass2`, `roundtrip`, `literal`) and the three jury tiers `J1`, `J2`, `J3`. Every tier needs one member from each family, two members of one family in a tier is a config error (exit 2). `agreement`, `budget_caps` and `roundtrip` hold the jury thresholds. `providers.deepseek.thinking` maps a role (or `default`) to `true` or `false` to switch DeepSeek thinking mode, a missing role keeps the API default. `providers.anthropic.batch` and `providers.google.batch` hold the settings of batch mode, `price_factor` (share of the standard price, 0.5), `linger_s` (a job is sent once no new call came for this long, 5), `poll_s` (30) and `max_requests` per job. Gemini inline jobs also stay under 18 MB, Anthropic jobs under 200 MB. A `batch` entry on DeepSeek is a config error. API keys are never written to any file.
 
 ## providers_check.py (provider config, API keys, model ping)
 
@@ -358,7 +361,7 @@ Reads the studio's professional reference table (`key`, `en`, the target column,
 | `--unknown-models` | comma separated model aliases for the unknown lines, default the `pass1` model |
 | `--no-unknown` | skip the unknown lines |
 | `--limit` / `--seed` | seeded subset of N rows (default all rows, seed 1234) |
-| `--batch-size` | rows per model call, default 30 |
+| `--batch-size` | rows per model call, default 100 with a character budget |
 | `--min-pairs` | exit 1 when fewer usable pairs result, default 30 |
 | `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access, the budget log defaults to `budget.jsonl` next to `--out` (or `langpack/.cache/` inside the bundled langpack folder) |
 
@@ -385,7 +388,7 @@ The `roundtrip` model translates a target line back into English as literally as
 | `--min-words` | override `roundtrip.min_words` |
 | `--langpack-dir` | root of the packs, default the skill's `langpack/` |
 | `--out` | calibration output, default `langpack/<locale>/roundtrip_threshold.json` |
-| `--batch-size` | lines per model call, default 30 |
+| `--batch-size` | lines per model call, default 100 with a character budget |
 | `--providers-config`, `--dry-run`, `--fake-scenario`, `--budget-log` | model access |
 
 Check report. `rows[{key, applied, calque_score, back, suspect}]` (`reason` `register` or `short` when not applied) and `summary{rows, applied, suspects}`. Calibration file. `{locale, threshold, calibrated, weak, balanced_accuracy, n_native, n_robot, native_mean, robot_mean, min_words, registers, source}`.
@@ -438,7 +441,7 @@ Exit codes. 0 every member reached the gate. 1 at least one member is below it. 
 python budget_report.py loc_work/budget.jsonl [--rows 400] [--project-rows 20000] [--project-locales 15] [--max-cost 500]
 ```
 
-Aggregates the `budget.jsonl` lines of every model call by role, by provider, by model and by role and model. Cost uses `price_in` and `price_out` (USD per 1M tokens) of `providers.config.json`. A model with a `null` price is shown as `price not set (fiyat girilmedi)` and its cost is left out of every total, so a total that contains such a model is a lower bound. Calls made with `--dry-run` are counted and flagged, their tokens are estimates.
+Aggregates the `budget.jsonl` lines of every model call by role, by provider, by model and by role and model. Every line is one request, the report puts the request count next to the cost, with `--rows` also the requests per source line, and how many requests went through how many batch jobs. Cost uses `price_in` and `price_out` (USD per 1M tokens) of `providers.config.json`, a batched request costs `batch.price_factor` of that (half at Anthropic and Google). A model with a `null` price is shown as `price not set (fiyat girilmedi)` and its cost is left out of every total, so a total that contains such a model is a lower bound. Calls made with `--dry-run` are counted and flagged, their tokens are estimates.
 
 | Flag | Meaning |
 |---|---|
@@ -448,7 +451,7 @@ Aggregates the `budget.jsonl` lines of every model call by role, by provider, by
 | `--project-rows` / `--project-locales` | projection size, default 20000 lines and 15 locales |
 | `--max-cost` | exit 1 when the projected cost (or the actual cost without `--rows`) in USD is above this |
 
-JSON report. `{files, records, dry_run_records, totals, by_role, by_provider, by_model, by_role_model, projection{calls_per_row, cost_per_row_usd, calls, input_tokens, output_tokens, cost_usd, complete, note}, missing_prices, fallbacks}`. Every group has `calls`, `errors`, `input_tokens`, `output_tokens`, `latency_ms`, `mean_latency_ms`, `cost_usd` and `priced`.
+JSON report. `{files, records, dry_run_records, totals, by_role, by_provider, by_model, by_role_model, projection{calls_per_row, cost_per_row_usd, calls, input_tokens, output_tokens, cost_usd, complete, note}, missing_prices, fallbacks}`. Every group has `calls` (requests), `errors`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `batched`, `batch_jobs`, `latency_ms`, `mean_latency_ms`, `cost_usd` and `priced`.
 
 Exit codes. 0 report written. 1 cost above `--max-cost`. 2 usage or input error (no log, broken line).
 
@@ -485,7 +488,7 @@ Evidence per line. `ban_hits` (locale rules of `rules/<locale>.json` on the targ
 | `--no-warmup` / `--warmup-count` | leave out the warm-up, or set its size (default 40) |
 | `--shots` | contrastive few-shot pairs, default 6 |
 | `--seed` | seed of the warm-up and few-shot sample, default 1234 |
-| `--batch-size` | lines per model call, default 40 |
+| `--batch-size` | lines per model call, default 100 with a character budget |
 | `--no-budget-caps` | never stop at the J2 or J3 cap |
 | `--no-deliberation` | leave J3 disagreements `unresolved` instead of running the deliberation round |
 | `--tm` | translation memory (`tm.py` SQLite file) for the `tm_neighbors` evidence, queried by the English source when `--source-table` is given, else by the target |
@@ -508,7 +511,7 @@ For lines the J3 tier disagrees on (spread of 2 or more). `jury.py` runs it auto
 
 1. The three J3 members have voted.
 2. Each member sees the other two scores, issue types, reasons and suggestions as juror A and juror B. Model and family names are never shown and are scrubbed from the reason text. The evidence package holds the ban list hits, the three closest approved translation memory lines (target text only) and the back-translation signal (`applied`, `calque_score`, `suspect`). No source text reaches the jurors.
-3. Each member votes once more.
+3. Each member votes once more. A member re-votes all disputed lines of a run in a few calls (up to 25 lines each, task `deliberate_many`), one call per line and member until 3.1.0, and the outcome of every line stays the same.
 4. Two equal scores decide (`final_tier` `deliberation`, status from the score). Three different scores leave the line `unresolved`, it reaches the developer with the three rationales. A juror who still scores the line critical (at or below `critical_max`) next to a majority above it is not overruled either, the line goes to the developer (`critical_holdout`). One critical vote sends a line from J1 straight to J3, so the last tier is never laxer than the first.
 
 | Flag | Meaning |

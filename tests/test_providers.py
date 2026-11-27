@@ -242,7 +242,7 @@ class HttpAdapterTests(unittest.TestCase):
         self.assertEqual((r2.input_tokens, r2.cache_read_tokens, r2.cache_write_tokens), (3321, 3072, 0))
         # Gemini 4 showed no cache hits live, its results keep the zero defaults
         p3, _, _ = self._make("google", [(200, GOOGLE_OK, {})], model="gemini-4-neon")
-        self.assertEqual(p3.complete("S", "U")[5:], (0, 0))
+        self.assertEqual(p3.complete("S", "U")[5:7], (0, 0))
 
     def test_cache_tokens_reach_the_budget_log(self):
         reply = {"content": [{"type": "text", "text": "{}"}], "usage": {"input_tokens": 39, "cache_read_input_tokens": 4336, "output_tokens": 9}}

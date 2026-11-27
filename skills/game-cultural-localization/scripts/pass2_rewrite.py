@@ -189,7 +189,16 @@ def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[st
                  **({"context": ctx.line(l["key"])} if ctx is not None and ctx.line(l["key"]) else {})} for l, r in recheck]
         agreement = {k: int(x) for k, x in router.config.agreement.items()}
         members = router.jury("J1")
-        scores = [score_entries(m.provider, view, locale, tier="J1", system=pick_system, workers=workers, memo=memo) for m in members]
+
+        def rescore(m: Any) -> Dict[str, Dict[str, Any]]:
+            return score_entries(m.provider, view, locale, tier="J1", system=pick_system, workers=workers, memo=memo)
+        # the three members score side by side, as in the pick. One after another the Lithuanian recheck of 2026-11-27
+        # waited over 20 minutes, most of it on the slowest member alone.
+        if int(workers) > 1 and len(members) > 1:
+            with ThreadPoolExecutor(max_workers=len(members)) as ex:
+                scores = list(ex.map(rescore, members))
+        else:
+            scores = [rescore(m) for m in members]
         unconfirmed = set()
         for l, _r in recheck:
             got = [s[l["key"]]["score"] for s in scores]

@@ -27,6 +27,7 @@ from .base import (
 )
 from .deepseek import DeepSeekProvider
 from .fake import FakeProvider, FakeScenario
+from .batch import BACKENDS as BATCH_BACKENDS, BATCH_PRICE_FACTOR, BatchCollector
 from .google import GoogleProvider
 
 __all__ = [
@@ -157,6 +158,16 @@ def load_providers_config(path: Optional[Path] = None) -> ProvidersConfig:
         thinking = p.get("thinking", {})
         if not isinstance(thinking, dict) or not all(isinstance(v, bool) or v is None for v in thinking.values()):
             raise L10nError(f"{path}: providers.{name}.thinking must map roles to true, false or null")
+        batch = p.get("batch")
+        if batch is not None:
+            if name not in BATCH_BACKENDS:
+                raise L10nError(f"{path}: providers.{name}.batch is set, but only {', '.join(sorted(BATCH_BACKENDS))} have a batch API")
+            if not isinstance(batch, dict):
+                raise L10nError(f"{path}: providers.{name}.batch must be an object")
+            for bk in ("price_factor", "linger_s", "poll_s", "max_requests"):
+                v = batch.get(bk)
+                if v is not None and (not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0):
+                    raise L10nError(f"{path}: providers.{name}.batch.{bk} must be a number >= 0")
     for alias, m in data["models"].items():
         if not isinstance(m, dict):
             raise L10nError(f"{path}: models.{alias} must be an object")
@@ -243,7 +254,7 @@ class RoleProvider:
         self.spec = spec
         self.role = role
         self.fallback_from: Optional[str] = None
-        self._impl = router._instantiate(spec, role, force_thinking=False)
+        self._impl = router._batch_wrap(spec, router._instantiate(spec, role, force_thinking=False))
 
     @property
     def name(self) -> str:
@@ -260,6 +271,11 @@ class RoleProvider:
     @property
     def alias(self) -> str:
         return self.spec.alias
+
+    @property
+    def batched(self) -> bool:
+        """True when the calls go through the provider's batch API (Router(batch=True), anthropic and google)."""
+        return bool(getattr(self._impl, "batched", False))
 
     def complete(self, system: str, user: str, *, temperature: float = 0.0,
                  max_tokens: int = 2048, json_mode: bool = False) -> ChatResult:
@@ -298,6 +314,11 @@ class RoleProvider:
             rec["cache_read_tokens"] = res.cache_read_tokens
         if res is not None and res.cache_write_tokens:
             rec["cache_write_tokens"] = res.cache_write_tokens
+        if res is not None and getattr(res, "batch_id", ""):
+            rec["batch"] = True
+            rec["batch_id"] = res.batch_id
+        elif self.batched:
+            rec["batch"] = True
         if self.router.dry_run:
             rec["dry_run"] = True
         if self.fallback_from:
@@ -312,9 +333,13 @@ class Router:
 
     def __init__(self, config: ProvidersConfig, *, dry_run: bool = False, scenario: Optional[FakeScenario] = None,
                  budget_log: Optional[Path] = None, env: Optional[Mapping[str, str]] = None,
-                 transport: Optional[Transport] = None, sleep: Optional[Callable[[float], None]] = None) -> None:
+                 transport: Optional[Transport] = None, sleep: Optional[Callable[[float], None]] = None,
+                 batch: bool = False, get_transport: Optional[Callable[..., Any]] = None) -> None:
         self.config = config
         self.dry_run = dry_run
+        self.batch = bool(batch)
+        self.get_transport = get_transport
+        self._collectors: Dict[str, BatchCollector] = {}
         self.scenario = scenario or FakeScenario()
         self.budget = BudgetLog(budget_log)
         self.env = env if env is not None else os.environ
@@ -369,6 +394,25 @@ class Router:
         if self.sleep is not None:
             kwargs["sleep"] = self.sleep
         return get_provider(spec.provider, spec.id, **kwargs)
+
+    def _batch_wrap(self, spec: ModelSpec, impl: Any) -> Any:
+        """In batch mode the adapter of an anthropic or google model sits behind one shared BatchCollector per model,
+        so the calls of every role and juror seat of that model go out together. DeepSeek has no batch API and stays real time."""
+        if not self.batch or self.dry_run or spec.provider not in BATCH_BACKENDS:
+            return impl
+        conf = self.config.providers.get(spec.provider, {}).get("batch") or {}
+        col = self._collectors.get(spec.alias)
+        if col is None:
+            kw: Dict[str, Any] = {k: conf[k] for k in ("linger_s", "poll_s", "max_requests") if conf.get(k) is not None}
+            if self.sleep is not None:
+                kw["sleep"] = self.sleep
+            col = BatchCollector(BATCH_BACKENDS[spec.provider](impl, get=self.get_transport), **kw)
+            self._collectors[spec.alias] = col
+        return col
+
+    def batch_jobs(self) -> List[Dict[str, Any]]:
+        """Every batch job sent so far (job id, request count, model)."""
+        return [j for c in self._collectors.values() for j in c.jobs]
 
     def for_model(self, alias: str, role: str) -> RoleProvider:
         """Provider for an explicit model alias, logged under `role`."""

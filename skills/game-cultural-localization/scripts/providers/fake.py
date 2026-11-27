@@ -128,6 +128,17 @@ class FakeProvider:
                 return rule
         return None
 
+    def _revote(self, p: Dict[str, Any]) -> Dict[str, Any]:
+        """One deliberation re-vote, a scenario rule or the member's own first vote."""
+        key, tgt = str(p.get("key", "")), str(p.get("target", ""))
+        own = p.get("own") or {}
+        rule = self._first("deliberate", tgt, key)
+        if rule is not None:
+            return {"score": int(rule.get("score", own.get("score", 3))), "issue_type": str(rule.get("issue_type", own.get("issue_type", "other"))),
+                    "reason": str(rule.get("reason", "revised after deliberation")), "suggested": str(rule.get("suggested", own.get("suggested", "")))}
+        return {"score": int(own.get("score", 3)), "issue_type": str(own.get("issue_type", "other")),
+                "reason": str(own.get("reason", "")) or "keeps the first vote", "suggested": str(own.get("suggested", ""))}
+
     @staticmethod
     def _unmark(text: str) -> str:
         if text.startswith("[") and "] " in text:
@@ -193,14 +204,9 @@ class FakeProvider:
                 out.append({"id": pr.get("id"), "choice": choice})
             return dump({"choices": out})
         if task == "deliberate":
-            key, tgt = str(p.get("key", "")), str(p.get("target", ""))
-            own = p.get("own") or {}
-            rule = self._first("deliberate", tgt, key)
-            if rule is not None:
-                return dump({"score": int(rule.get("score", own.get("score", 3))), "issue_type": str(rule.get("issue_type", own.get("issue_type", "other"))),
-                             "reason": str(rule.get("reason", "revised after deliberation")), "suggested": str(rule.get("suggested", own.get("suggested", "")))})
-            return dump({"score": int(own.get("score", 3)), "issue_type": str(own.get("issue_type", "other")),
-                         "reason": str(own.get("reason", "")) or "keeps the first vote", "suggested": str(own.get("suggested", ""))})
+            return dump(self._revote(p))
+        if task == "deliberate_many":  # the re-votes of one juror for many lines in one call
+            return dump({"votes": [{"key": str(line.get("key", "")), **self._revote(line)} for line in p.get("lines", [])]})
         if task == "pass2":
             n = int(p.get("n_candidates", 3))
             out = []

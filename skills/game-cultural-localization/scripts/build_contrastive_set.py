@@ -79,7 +79,7 @@ def select_rows(rows: Sequence[Dict[str, Any]], limit: int, seed: int) -> List[D
 
 
 def build_contrastive(rows: Sequence[Dict[str, Any]], locale: str, robot_provider: Any, unknown_providers: Dict[str, Any],
-                      batch_size: int = 30) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+                      batch_size: Optional[int] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Generate robot and unknown lines and assemble the pairs. Returns (pairs, stats)."""
     src_rows = [{"key": r["key"], "source": r["en"], "register": r["register"]} for r in rows]
     robot = translate_rows(robot_provider, src_rows, locale, task="literal", system=render_prompt("literal", locale), batch_size=batch_size)
@@ -116,7 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--no-unknown", action="store_true", help="Skip the unknown lines")
     ap.add_argument("--limit", type=int, default=0, help="Use a seeded subset of N rows (default: all)")
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED, help=f"Seed of --limit (default {DEFAULT_SEED})")
-    ap.add_argument("--batch-size", type=int, default=30, help="Rows per model call (default 30)")
+    ap.add_argument("--batch-size", type=int, default=None, help="Rows per model call (default 100, with a character budget so long letters never pile up in one call)")
     ap.add_argument("--min-pairs", type=int, default=DEFAULT_MIN_PAIRS, help=f"Exit 1 when fewer usable pairs result (default {DEFAULT_MIN_PAIRS})")
     add_model_args(ap)
     add_common_args(ap, TOOL)

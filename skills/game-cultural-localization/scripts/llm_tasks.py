@@ -93,6 +93,11 @@ INSTRUCTIONS: Dict[str, str] = {
                    'mechanical evidence package (ban list hits, closest approved translation memory lines, back-translation signal). '
                    'Weigh them and vote once more. You may keep or change your score. ' + EVERYDAY_CHECK + 'Reply with '
                    '{"odd_words": ["..."], "score": 1-5, "issue_type": "...", "reason": "...", "suggested": "..."} and nothing else.'),
+    "deliberate_many": ('You already scored every line in "lines" ("own"). For each line "others" are the anonymous votes of two other '
+                        'jurors and "evidence" is the mechanical evidence package (ban list hits, closest approved translation memory '
+                        'lines, back-translation signal). Weigh them and vote once more on every line, each on its own. You may keep '
+                        'or change your score. ' + EVERYDAY_CHECK + 'Reply with {"votes": [{"key": "...", "odd_words": ["..."], '
+                        '"score": 1-5, "issue_type": "...", "reason": "...", "suggested": "..."}]}, one vote per line, and nothing else.'),
 }
 
 
@@ -101,6 +106,53 @@ def chunked(items: Sequence[T], size: int) -> Iterator[List[T]]:
     size = max(1, int(size))
     for i in range(0, len(items), size):
         yield list(items[i:i + size])
+
+
+# Rows per model call. Every call resends the system prompt (the context map, the warm-up lines and the few-shots,
+# up to about 48000 tokens for Pass 1), so fewer and larger calls cost less. On the 13 language run of 2026-11-27
+# one provider saw 2696 requests and 69M tokens in a day with 30 rows per Pass 1 call and 40 per jury call. A row
+# limit alone would put a hundred long letters into one call, so every batch also has a character budget.
+BATCH_ROWS = {"pass1": 100, "literal": 100, "roundtrip": 100, "jury": 100, "pairwise": 50, "pass2": 30, "pick": 50, "deliberate": 25}
+BATCH_CHARS = {"pass1": 20000, "literal": 20000, "roundtrip": 20000, "jury": 24000, "pairwise": 24000, "pass2": 10000, "pick": 24000,
+               "deliberate": 16000}
+
+
+BATCH_WORKERS = 64  # calls in flight per step with --batch, they wait for their job and cost no rate limit
+
+
+def chunked_budget(items: Sequence[T], size: int, max_chars: int, text_of: Callable[[T], str]) -> List[List[T]]:
+    """Consecutive slices of at most `size` items whose texts add up to at most `max_chars` characters.
+
+    An item longer than the budget goes alone. The order of the items is kept, so the merged result does not change.
+    """
+    size, max_chars = max(1, int(size)), max(1, int(max_chars))
+    out: List[List[T]] = []
+    cur: List[T] = []
+    used = 0
+    for it in items:
+        n = len(text_of(it))
+        if cur and (len(cur) >= size or used + n > max_chars):
+            out.append(cur)
+            cur, used = [], 0
+        cur.append(it)
+        used += n
+    if cur:
+        out.append(cur)
+    return out
+
+
+def _text_len(*fields: str) -> Callable[[Dict[str, Any]], str]:
+    def text_of(item: Dict[str, Any]) -> str:
+        return "".join(str(item.get(f, "")) for f in fields)
+    return text_of
+
+
+def primes(provider: Any) -> bool:
+    """Whether a wave of calls to this provider starts with one call alone to write the prompt cache.
+
+    A batch API provider gathers the calls into one job, a call alone first would cost a whole job's wait.
+    """
+    return not getattr(provider, "batched", False)
 
 
 class BatchMemo:
@@ -148,12 +200,17 @@ class BatchMemo:
 
 
 def run_batches(batches: Sequence[T], fn: Callable[[T], Dict[str, Any]], workers: int = 1,
-                memo: Optional[BatchMemo] = None, tag: Any = None) -> Dict[str, Any]:
+                memo: Optional[BatchMemo] = None, tag: Any = None, prime: bool = True) -> Dict[str, Any]:
     """Call fn on every batch, at most `workers` at a time, and merge the dict results in batch order.
 
     Model calls spend most of their time waiting on the network, so threads give a near linear speed up.
     The first failing batch raises after the running ones finish. With a memo every finished batch is kept
     under (tag, batch) and a rerun answers it from the file without a model call.
+
+    With `prime` the first batch runs alone before the others start. All batches of a wave share the system
+    prompt, and parallel first calls each write it to the prompt cache (1.25x the input price at Anthropic)
+    because none of them can read what the others are still writing. On 2026-11-27 eight parallel first calls
+    all paid the write and the Sonnet cache hit rate was 61 percent. One call first writes it once.
     """
     call = fn
     if memo is not None:
@@ -170,8 +227,11 @@ def run_batches(batches: Sequence[T], fn: Callable[[T], Dict[str, Any]], workers
         for b in batches:
             out.update(call(b))
         return out
+    rest = list(batches)
+    if prime:
+        out.update(call(rest.pop(0)))
     with ThreadPoolExecutor(max_workers=int(workers)) as ex:
-        for res in ex.map(call, batches):  # map yields in submission order, the merge stays deterministic
+        for res in ex.map(call, rest):  # map yields in submission order, the merge stays deterministic
             out.update(res)
     return out
 
@@ -229,23 +289,34 @@ def _call_keyed(provider: Any, system: str, task: str, base_payload: Dict[str, A
 
 
 def translate_rows(provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, task: str = "pass1",
-                   system: Optional[str] = None, batch_size: int = 30, max_tokens: int = 4096,
-                   extra: Optional[Dict[str, Any]] = None, workers: int = 1, memo: Optional[BatchMemo] = None) -> Dict[str, str]:
-    """Translate rows [{key, source, ...}] with task 'pass1' or 'literal'; return key -> target."""
+                   system: Optional[str] = None, batch_size: Optional[int] = None, max_tokens: int = 4096,
+                   extra: Optional[Dict[str, Any]] = None, workers: int = 1, memo: Optional[BatchMemo] = None,
+                   max_chars: Optional[int] = None) -> Dict[str, str]:
+    """Translate rows [{key, source, ...}] with task 'pass1' or 'literal'; return key -> target.
+
+    An empty target for a row with a source counts as no answer and is asked again. On 2026-11-27 a Pass 1 reply
+    gave two zh-Hant rows an empty target, the jury never saw them and the game would have shown nothing.
+    """
     if task not in ("pass1", "literal"):
         raise L10nError(f"translate_rows: unknown task '{task}'")
     sys_prompt = system_for(task, locale, system)
 
     def one(batch: List[Dict[str, Any]]) -> Dict[str, str]:
-        got = _call_keyed(provider, sys_prompt, task, {"locale": locale, **(extra or {})}, batch, "rows", "rows", "key",
-                          lambda it: isinstance(it.get("target"), str), max_tokens)
+        needs = {str(r.get("key")) for r in batch if str(r.get("source", "")).strip()}
+
+        def ok(it: Dict[str, Any]) -> bool:
+            t = it.get("target")
+            return isinstance(t, str) and (bool(t.strip()) or str(it.get("key")) not in needs)
+        got = _call_keyed(provider, sys_prompt, task, {"locale": locale, **(extra or {})}, batch, "rows", "rows", "key", ok, max_tokens)
         return {k: str(v["target"]) for k, v in got.items()}
     tag = (task, getattr(provider, "model", "?"), sys_prompt, INSTRUCTIONS[task], locale, extra or {}, max_tokens)
-    return run_batches(list(chunked(list(rows), batch_size)), one, workers, memo, tag)
+    batches = chunked_budget(list(rows), batch_size or BATCH_ROWS[task], max_chars or BATCH_CHARS[task], _text_len("source"))
+    return run_batches(batches, one, workers, memo, tag, prime=primes(provider))
 
 
 def backtranslate_rows(provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
-                       batch_size: int = 30, max_tokens: int = 4096, workers: int = 1, memo: Optional[BatchMemo] = None) -> Dict[str, str]:
+                       batch_size: Optional[int] = None, max_tokens: int = 4096, workers: int = 1, memo: Optional[BatchMemo] = None,
+                       max_chars: Optional[int] = None) -> Dict[str, str]:
     """Back-translate rows [{key, target}] into English; return key -> back translation."""
     sys_prompt = system_for("roundtrip", locale, system)
 
@@ -254,7 +325,9 @@ def backtranslate_rows(provider: Any, rows: Sequence[Dict[str, Any]], locale: st
                           lambda it: isinstance(it.get("back"), str), max_tokens)
         return {k: str(v["back"]) for k, v in got.items()}
     tag = ("roundtrip", getattr(provider, "model", "?"), sys_prompt, INSTRUCTIONS["roundtrip"], locale, max_tokens)
-    return run_batches(list(chunked([{"key": r["key"], "target": r["target"]} for r in rows], batch_size)), one, workers, memo, tag)
+    batches = chunked_budget([{"key": r["key"], "target": r["target"]} for r in rows], batch_size or BATCH_ROWS["roundtrip"],
+                             max_chars or BATCH_CHARS["roundtrip"], _text_len("target"))
+    return run_batches(batches, one, workers, memo, tag, prime=primes(provider))
 
 
 def normalize_vote(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -317,8 +390,9 @@ def everyday_rule(votes: Sequence[Dict[str, Any]]) -> bool:
 
 
 def score_entries(provider: Any, entries: Sequence[Dict[str, Any]], locale: str, *, tier: str = "J1",
-                  system: Optional[str] = None, batch_size: int = 40, max_tokens: int = 4096,
-                  extra: Optional[Dict[str, Any]] = None, workers: int = 1, memo: Optional[BatchMemo] = None) -> Dict[str, Dict[str, Any]]:
+                  system: Optional[str] = None, batch_size: Optional[int] = None, max_tokens: int = 4096,
+                  extra: Optional[Dict[str, Any]] = None, workers: int = 1, memo: Optional[BatchMemo] = None,
+                  max_chars: Optional[int] = None) -> Dict[str, Dict[str, Any]]:
     """Ask one jury member to score target-only entries [{key, target, ...}]; return key -> normalized vote."""
     sys_prompt = system_for("jury", locale, system)
 
@@ -328,11 +402,13 @@ def score_entries(provider: Any, entries: Sequence[Dict[str, Any]], locale: str,
         targets = {str(e.get("key")): str(e.get("target", "")) for e in batch}
         return {k: everyday_check(normalize_vote(v), targets.get(k, "")) for k, v in got.items()}  # type: ignore[arg-type]
     tag = ("jury", getattr(provider, "model", "?"), sys_prompt, INSTRUCTIONS["jury"], locale, tier, extra or {}, max_tokens)
-    return run_batches(list(chunked(list(entries), batch_size)), one, workers, memo, tag)
+    batches = chunked_budget(list(entries), batch_size or BATCH_ROWS["jury"], max_chars or BATCH_CHARS["jury"], _text_len("target"))
+    return run_batches(batches, one, workers, memo, tag, prime=primes(provider))
 
 
 def pairwise_choices(provider: Any, pairs: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
-                     batch_size: int = 20, max_tokens: int = 2048, workers: int = 1, memo: Optional[BatchMemo] = None) -> Dict[str, str]:
+                     batch_size: Optional[int] = None, max_tokens: int = 2048, workers: int = 1, memo: Optional[BatchMemo] = None,
+                     max_chars: Optional[int] = None) -> Dict[str, str]:
     """Ask one member which side of each pair [{id, a, b}] is more natural; return id -> 'a' | 'b'."""
     sys_prompt = system_for("pairwise", locale, system)
 
@@ -341,7 +417,8 @@ def pairwise_choices(provider: Any, pairs: Sequence[Dict[str, Any]], locale: str
                           lambda it: str(it.get("choice", "")).strip().lower() in ("a", "b"), max_tokens)
         return {k: str(v["choice"]).strip().lower() for k, v in got.items()}
     tag = ("pairwise", getattr(provider, "model", "?"), sys_prompt, INSTRUCTIONS["pairwise"], locale, max_tokens)
-    return run_batches(list(chunked(list(pairs), batch_size)), one, workers, memo, tag)
+    batches = chunked_budget(list(pairs), batch_size or BATCH_ROWS["pairwise"], max_chars or BATCH_CHARS["pairwise"], _text_len("a", "b"))
+    return run_batches(batches, one, workers, memo, tag, prime=primes(provider))
 
 
 def revote(provider: Any, payload: Dict[str, Any], locale: str, *, system: Optional[str] = None, max_tokens: int = 1024) -> Dict[str, Any]:
@@ -362,8 +439,30 @@ def revote(provider: Any, payload: Dict[str, Any], locale: str, *, system: Optio
     raise L10nError(f"deliberate: model {getattr(provider, 'model', '?')} returned no valid vote for {payload.get('key')}")
 
 
+def revote_many(provider: Any, payloads: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
+                batch_size: Optional[int] = None, max_chars: Optional[int] = None, max_tokens: int = 4096, workers: int = 1,
+                memo: Optional[BatchMemo] = None) -> Dict[str, Dict[str, Any]]:
+    """The deliberation re-votes of one juror for many disputed lines, several lines per call; key -> normalized vote.
+
+    Each payload is what revote() sends for one line. Until 3.1.0 every disputed line and juror was its own request,
+    the 675 Pass 2 lines of the Lithuanian run of 2026-11-27 came after hundreds of them.
+    """
+    sys_prompt = system_for("jury", locale, system)
+    targets = {str(pl["key"]): str(pl.get("target", "")) for pl in payloads}
+
+    def one(batch: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        got = _call_keyed(provider, sys_prompt, "deliberate_many", {"locale": locale}, batch, "lines", "votes", "key",
+                          lambda it: normalize_vote(it) is not None, max_tokens)
+        return {k: everyday_check(normalize_vote(v), targets.get(k, "")) for k, v in got.items()}  # type: ignore[arg-type]
+    tag = ("deliberate_many", getattr(provider, "model", "?"), sys_prompt, INSTRUCTIONS["deliberate_many"], locale, max_tokens)
+    batches = chunked_budget(list(payloads), batch_size or BATCH_ROWS["deliberate"], max_chars or BATCH_CHARS["deliberate"],
+                             lambda pl: json.dumps(pl, ensure_ascii=False))
+    return run_batches(batches, one, workers, memo, tag, prime=primes(provider))
+
+
 def pass2_candidates(provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, n: int = 3, system: Optional[str] = None,
-                     batch_size: int = 10, max_tokens: int = 4096, workers: int = 1, memo: Optional[BatchMemo] = None) -> Dict[str, List[str]]:
+                     batch_size: Optional[int] = None, max_tokens: int = 4096, workers: int = 1, memo: Optional[BatchMemo] = None,
+                     max_chars: Optional[int] = None) -> Dict[str, List[str]]:
     """Ask the Pass 2 model for n candidates per row [{key, source, target, ...}]; returns key -> distinct non-empty candidates."""
     sys_prompt = system or DEFAULT_SYSTEM["pass1"].format(locale=locale)
 
@@ -375,11 +474,13 @@ def pass2_candidates(provider: Any, rows: Sequence[Dict[str, Any]], locale: str,
         got = _call_keyed(provider, sys_prompt, "pass2", {"locale": locale, "n_candidates": n}, batch, "rows", "rows", "key", ok, max_tokens)
         return {k: ordered_unique(str(x) for x in v["candidates"] if isinstance(x, str) and x.strip())[:n] for k, v in got.items()}
     tag = ("pass2", getattr(provider, "model", "?"), sys_prompt, INSTRUCTIONS["pass2"], locale, n, max_tokens)
-    return run_batches(list(chunked(list(rows), batch_size)), one, workers, memo, tag)
+    batches = chunked_budget(list(rows), batch_size or BATCH_ROWS["pass2"], max_chars or BATCH_CHARS["pass2"], _text_len("source", "target"))
+    return run_batches(batches, one, workers, memo, tag, prime=primes(provider))
 
 
 def pick_candidates(provider: Any, items: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
-                    batch_size: int = 20, max_tokens: int = 2048, workers: int = 1, memo: Optional[BatchMemo] = None) -> Dict[str, str]:
+                    batch_size: Optional[int] = None, max_tokens: int = 2048, workers: int = 1, memo: Optional[BatchMemo] = None,
+                    max_chars: Optional[int] = None) -> Dict[str, str]:
     """Blind choice among candidates: items [{key, context..., candidates: [{id, text}]}] -> key -> chosen id."""
     sys_prompt = system_for("jury", locale, system)
     ids = {str(it["key"]): {str(c["id"]) for c in it["candidates"]} for it in items}
@@ -389,7 +490,9 @@ def pick_candidates(provider: Any, items: Sequence[Dict[str, Any]], locale: str,
                           lambda it: str(it.get("choice")) in ids.get(str(it.get("key")), set()), max_tokens)
         return {k: str(v["choice"]) for k, v in got.items()}
     tag = ("pick", getattr(provider, "model", "?"), sys_prompt, INSTRUCTIONS["pick"], locale, max_tokens)
-    return run_batches(list(chunked(list(items), batch_size)), one, workers, memo, tag)
+    batches = chunked_budget(list(items), batch_size or BATCH_ROWS["pick"], max_chars or BATCH_CHARS["pick"],
+                             lambda it: "".join(str(c.get("text", "")) for c in it.get("candidates", [])))
+    return run_batches(batches, one, workers, memo, tag, prime=primes(provider))
 
 
 def word_count(text: str) -> int:
@@ -419,6 +522,9 @@ def add_model_args(ap: Any) -> None:
     ap.add_argument("--dry-run", action="store_true", help="Use the offline fake provider (no API key, no network)")
     ap.add_argument("--fake-scenario", help="Fake provider scenario JSON (with --dry-run)")
     ap.add_argument("--budget-log", default=None, help="budget.jsonl that receives one line per model call")
+    ap.add_argument("--batch", action="store_true",
+                    help="Send the calls of Anthropic and Google models through their batch APIs at half the price. A reply comes "
+                         "when its job ends, usually within an hour, at most a day. DeepSeek stays real time")
 
 
 def default_budget_path(out: Path) -> Path:
@@ -438,8 +544,12 @@ def make_router(args: Any, roles: Sequence[str], budget_default: Optional[Path] 
     from providers import FakeScenario, Router, load_providers_config
     cfg = load_providers_config(Path(args.providers_config) if getattr(args, "providers_config", None) else None)
     budget = Path(args.budget_log) if getattr(args, "budget_log", None) else budget_default
+    batch = bool(getattr(args, "batch", False))
     router = Router(cfg, dry_run=bool(getattr(args, "dry_run", False)),
                     scenario=FakeScenario.load(Path(args.fake_scenario)) if getattr(args, "fake_scenario", None) else None,
-                    budget_log=budget)
+                    budget_log=budget, batch=batch)
     router.require(roles)
+    if batch and hasattr(args, "workers"):
+        # a job takes the calls that wait together, so every batch of a step must be in flight at once
+        args.workers = max(int(args.workers or 1), BATCH_WORKERS)
     return router
