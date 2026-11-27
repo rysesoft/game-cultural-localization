@@ -1,0 +1,63 @@
+{
+  "locale": "pl-PL",
+  "langpack_version": "pl-PL-ad08e2b75029",
+  "trust_level": "estimated",
+  "basis": "proxy_signals",
+  "sources": {
+    "bundle": [
+      "godot-editor",
+      "pixelorama"
+    ],
+    "local": [
+      "wesnoth",
+      "0ad",
+      "mindustry",
+      "openttd",
+      "veloren",
+      "gnome-chess",
+      "libreoffice-calc",
+      "kde"
+    ]
+  },
+  "rows": {
+    "bundle": 5552,
+    "local": 11707,
+    "by_register": {
+      "bundle": {
+        "ui": 3547,
+        "tutorial": 2005
+      },
+      "local": {
+        "ui": 7334,
+        "tutorial": 4223,
+        "dialogue_casual": 150
+      }
+    }
+  },
+  "filters_out": {
+    "layer1_source_selection": 23262,
+    "layer2_mechanical": 18736,
+    "layer3_mt_detection": 18736,
+    "layer4_cross_consistency": 17968,
+    "layer5_jury_prescreen": 17968
+  },
+  "roundtrip": {
+    "min_words": 6,
+    "registers": [
+      "dialogue_casual",
+      "dialogue_formal"
+    ]
+  },
+  "calibration": null,
+  "native_review": {
+    "done": false
+  },
+  "known_limits": [
+    "Native judgement for locales without a professional reference is an estimate.",
+    "Open corpora are mostly translations themselves, so warm-up calibrates to good translation, not to original writing.",
+    "Back-translation carries no signal for UI and short text.",
+    "Self-preference of a model family is reduced by deliberation, not removed.",
+    "Cultural errors are not caught by any proxy signal.",
+    "Cost is unknown until measured, rough estimate 5 to 15 calls per line."
+  ]
+}

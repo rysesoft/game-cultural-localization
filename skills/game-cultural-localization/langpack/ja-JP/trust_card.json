@@ -1,0 +1,64 @@
+{
+  "locale": "ja-JP",
+  "langpack_version": "ja-JP-5f5c49d186b0",
+  "trust_level": "estimated",
+  "basis": "proxy_signals",
+  "sources": {
+    "bundle": [
+      "godot-editor",
+      "pixelorama"
+    ],
+    "local": [
+      "wesnoth",
+      "0ad",
+      "mindustry",
+      "openttd",
+      "veloren",
+      "gnome-chess",
+      "libreoffice-calc",
+      "kde"
+    ]
+  },
+  "rows": {
+    "bundle": 5070,
+    "local": 9682,
+    "by_register": {
+      "bundle": {
+        "ui": 2713,
+        "tutorial": 2357
+      },
+      "local": {
+        "ui": 5035,
+        "tutorial": 4625,
+        "dialogue_casual": 21,
+        "dialogue_formal": 1
+      }
+    }
+  },
+  "filters_out": {
+    "layer1_source_selection": 22818,
+    "layer2_mechanical": 16042,
+    "layer3_mt_detection": 16042,
+    "layer4_cross_consistency": 15281,
+    "layer5_jury_prescreen": 15281
+  },
+  "roundtrip": {
+    "min_words": 6,
+    "registers": [
+      "dialogue_casual",
+      "dialogue_formal"
+    ]
+  },
+  "calibration": null,
+  "native_review": {
+    "done": false
+  },
+  "known_limits": [
+    "Native judgement for locales without a professional reference is an estimate.",
+    "Open corpora are mostly translations themselves, so warm-up calibrates to good translation, not to original writing.",
+    "Back-translation carries no signal for UI and short text.",
+    "Self-preference of a model family is reduced by deliberation, not removed.",
+    "Cultural errors are not caught by any proxy signal.",
+    "Cost is unknown until measured, rough estimate 5 to 15 calls per line."
+  ]
+}

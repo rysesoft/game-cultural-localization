@@ -1,0 +1,280 @@
+{
+  "locale": "lt-LT",
+  "langpack_version": "lt-LT-460c40836f6a",
+  "built_with": "build_language_pack 3.0.0",
+  "sources": [
+    {
+      "id": "pixelorama",
+      "name": "Pixelorama translations",
+      "license": "MIT",
+      "license_class": "bundle",
+      "version": "v1.0.5",
+      "attribution": "Orama Interactive and the Pixelorama translators, MIT license, https://github.com/Orama-Interactive/Pixelorama",
+      "homepage": "https://crowdin.com/project/pixelorama",
+      "files": [
+        {
+          "file": "https://raw.githubusercontent.com/Orama-Interactive/Pixelorama/v1.0.5/Translations/lt_LT.po",
+          "sha256": "be6f399964bccdd5b5cd15c929347693e25c31d6b0e55dcf38c51af74a14299e",
+          "pinned": false,
+          "rows": 974
+        }
+      ],
+      "rows": 974,
+      "hashes_pinned": false
+    },
+    {
+      "id": "wesnoth",
+      "name": "Battle for Wesnoth",
+      "license": "GPL-2.0-or-later",
+      "license_class": "local",
+      "version": "1.18.4",
+      "attribution": "The Battle for Wesnoth Project, GPL-2.0-or-later",
+      "homepage": "https://www.wesnoth.org/",
+      "files": [
+        {
+          "file": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth-lib/lt.po",
+          "sha256": "7692de8119bfead2673cbe0f2384507d41ef48a1a89ddf2567a7c5f8e501a35c",
+          "pinned": false,
+          "rows": 1564
+        },
+        {
+          "file": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth/lt.po",
+          "sha256": "656ea683cb6a10ab005d442c8296e1d81ba23d0d9c04ede92fca3006295da307",
+          "pinned": false,
+          "rows": 1397
+        }
+      ],
+      "rows": 2961,
+      "hashes_pinned": false
+    },
+    {
+      "id": "0ad",
+      "name": "0 A.D.",
+      "license": "GPL-2.0-or-later (code), CC-BY-SA-3.0 (data)",
+      "license_class": "local",
+      "version": "A26",
+      "attribution": "Wildfire Games and the 0 A.D. translators",
+      "homepage": "https://play0ad.com/",
+      "files": [
+        {
+          "file": "https://raw.githubusercontent.com/0ad/0ad/A26/binaries/data/mods/public/l10n/lt.public-gui-ingame.po",
+          "sha256": "3771c9f71e3e08396b9f71a1d2b8df1fb84a6105694e290a93fcdd6613e385a8",
+          "pinned": false,
+          "rows": 362
+        },
+        {
+          "file": "https://raw.githubusercontent.com/0ad/0ad/A26/binaries/data/mods/public/l10n/lt.public-tutorials.po",
+          "sha256": "020c0f90fd2039f267401ebf4a668e45a688474938c75ca40aae8fdc51631b8a",
+          "pinned": false,
+          "rows": 110
+        }
+      ],
+      "rows": 472,
+      "hashes_pinned": false
+    },
+    {
+      "id": "mindustry",
+      "name": "Mindustry",
+      "license": "GPL-3.0",
+      "license_class": "local",
+      "version": "v146",
+      "attribution": "Anuken and the Mindustry translators, GPL-3.0",
+      "homepage": "https://mindustrygame.github.io/",
+      "files": [
+        {
+          "file": "https://raw.githubusercontent.com/Anuken/Mindustry/v146/core/assets/bundles/bundle_lt.properties",
+          "sha256": "2e11e5ddcaf5666b534d385144d05215d40c4b90a68e69a6c381fcab9e10f0a1",
+          "pinned": false,
+          "en_sha256": "6db9a92e3de4881f9e4e55fbea3c9f5a69f36f1fca4547d2a1e8ff98931c4ae3",
+          "rows": 2318
+        }
+      ],
+      "rows": 2318,
+      "hashes_pinned": false
+    },
+    {
+      "id": "openttd",
+      "name": "OpenTTD",
+      "license": "GPL-2.0",
+      "license_class": "local",
+      "version": "14.1",
+      "attribution": "The OpenTTD team and translators, GPL-2.0",
+      "homepage": "https://www.openttd.org/",
+      "files": [
+        {
+          "file": "https://raw.githubusercontent.com/OpenTTD/OpenTTD/14.1/src/lang/lithuanian.txt",
+          "sha256": "ce42c3359432aa75fbbbdbf5b96d38bcb938f2474edb483c80301b42478d5aa0",
+          "pinned": false,
+          "en_sha256": "c14cd9a200d1316fe0d087f35eadc458a3e627e6ff548c5a7e82c8144b3e6862",
+          "rows": 4265
+        }
+      ],
+      "rows": 4265,
+      "hashes_pinned": false
+    },
+    {
+      "id": "gnome-chess",
+      "name": "GNOME Chess (GNOME translation memory)",
+      "license": "GPL-3.0-or-later",
+      "license_class": "local",
+      "version": "48.0",
+      "attribution": "The GNOME Project translators, GPL-3.0-or-later",
+      "homepage": "https://l10n.gnome.org/module/gnome-chess/",
+      "files": [
+        {
+          "file": "https://gitlab.gnome.org/GNOME/gnome-chess/-/raw/48.0/po/lt.po",
+          "sha256": "b7e3478f8315ff5a6d4f0cbd26a294d5ac2a7e7fcd8764f17d05a0d328838a35",
+          "pinned": false,
+          "rows": 242
+        }
+      ],
+      "rows": 242,
+      "hashes_pinned": false
+    },
+    {
+      "id": "libreoffice-calc",
+      "name": "LibreOffice Calc (LibreOffice translation memory)",
+      "license": "MPL-2.0",
+      "license_class": "local",
+      "version": "libreoffice-24-8",
+      "attribution": "The Document Foundation and the LibreOffice translators, MPL-2.0",
+      "homepage": "https://translations.documentfoundation.org/",
+      "files": [
+        {
+          "file": "https://raw.githubusercontent.com/LibreOffice/translations/libreoffice-24-8/source/lt/sc/messages.po",
+          "sha256": "d42f4c1f7e0579d19d86606467ae03d3f604461bcb7b61bf0b224d5e6ab5b8f1",
+          "pinned": false,
+          "rows": 5665
+        }
+      ],
+      "rows": 5665,
+      "hashes_pinned": false
+    },
+    {
+      "id": "kde",
+      "name": "KDE games translations (KDE translation memory)",
+      "license": "GPL-2.0-or-later (KDE translations, per module)",
+      "license_class": "local",
+      "version": "trunk-kf6 r1753957",
+      "attribution": "The KDE translation teams",
+      "homepage": "https://l10n.kde.org/",
+      "files": [
+        {
+          "file": "https://websvn.kde.org/trunk/l10n-kf6/lt/messages/kpat/kpat.po?view=co&pathrev=1753957",
+          "sha256": "e7221c088480f585a0348eece1f175911d09b814e82438710d8a974efe73985b",
+          "pinned": false,
+          "rows": 232
+        },
+        {
+          "file": "https://websvn.kde.org/trunk/l10n-kf6/lt/messages/kmines/kmines.po?view=co&pathrev=1753957",
+          "sha256": "fdecb0cc852df612313f97c6badbe142bda749f4cec83f8c43fe0e2435346d47",
+          "pinned": false,
+          "rows": 51
+        },
+        {
+          "file": "https://websvn.kde.org/trunk/l10n-kf6/lt/messages/knavalbattle/knavalbattle.po?view=co&pathrev=1753957",
+          "sha256": "29b1eeb59c59494728b59b2592bbf64a73e18b9f497e27ad6dc3ab66d9b425c1",
+          "pinned": false,
+          "rows": 104
+        },
+        {
+          "file": "https://websvn.kde.org/trunk/l10n-kf6/lt/messages/ksudoku/ksudoku.po?view=co&pathrev=1753957",
+          "sha256": "6cb58ee9a1d39b3e75086239637d509b9684c2924d21636d29f2926eafb780d0",
+          "pinned": false,
+          "rows": 172
+        },
+        {
+          "file": "https://websvn.kde.org/trunk/l10n-kf6/lt/messages/kbounce/kbounce.po?view=co&pathrev=1753957",
+          "sha256": "5df6a4a4a70f2fd6d1883ed71ab5323070f746c710540b61d5e8ec4c430b7732",
+          "pinned": false,
+          "rows": 43
+        }
+      ],
+      "rows": 602,
+      "hashes_pinned": false
+    }
+  ],
+  "filters": {
+    "layer1_source_selection": {
+      "sources_in": 8,
+      "sources_kept": 8,
+      "dropped": [],
+      "not_available": [
+        "godot-editor",
+        "veloren"
+      ],
+      "rows_in": 17499
+    },
+    "layer2_mechanical": {
+      "in": 17499,
+      "out": 9773,
+      "dropped": {
+        "ban_list": 84,
+        "duplicate": 1752,
+        "empty": 2884,
+        "fuzzy": 696,
+        "length_ratio": 118,
+        "technical": 500,
+        "untranslated": 1692
+      },
+      "length_ratio_bounds": [
+        0.3,
+        3.0
+      ],
+      "reference_exempt": {
+        "length_ratio": [],
+        "rule_hits": [],
+        "by_rule": {}
+      }
+    },
+    "layer3_mt_detection": {
+      "applied": false,
+      "in": 9773,
+      "out": 9773,
+      "checked": 0,
+      "min_words": 6,
+      "bulk_commit_limit": 500,
+      "bulk_commits": [],
+      "dropped": {}
+    },
+    "layer4_cross_consistency": {
+      "in": 9773,
+      "out": 9391,
+      "terms_checked": 5641,
+      "trusted": 17,
+      "disputed": 127,
+      "single": 5497,
+      "dropped": {
+        "disputed": 382
+      },
+      "examples_bundle": []
+    },
+    "layer5_jury_prescreen": {
+      "applied": false,
+      "in": 9391,
+      "out": 9391,
+      "dropped": {},
+      "cross_source_duplicates": 389
+    }
+  },
+  "counts": {
+    "bundle": 0,
+    "local": 9002,
+    "by_register": {
+      "bundle": {},
+      "local": {
+        "ui": 6170,
+        "tutorial": 2724,
+        "dialogue_casual": 106,
+        "dialogue_formal": 2
+      }
+    }
+  },
+  "files": {
+    "warmup": "warmup.jsonl",
+    "warmup_local": "local/warmup.jsonl",
+    "contrastive": "contrastive.json",
+    "roundtrip_threshold": "roundtrip_threshold.json",
+    "trust_card": "trust_card.json"
+  }
+}

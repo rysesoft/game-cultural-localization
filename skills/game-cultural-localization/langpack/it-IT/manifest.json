@@ -1,0 +1,426 @@
+{
+  "locale": "it-IT",
+  "langpack_version": "it-IT-8d4b74ec5e7a",
+  "built_with": "build_language_pack 3.0.0",
+  "sources": [
+    {
+      "id": "godot-editor",
+      "name": "Godot Engine editor translations",
+      "license": "MIT",
+      "license_class": "bundle",
+      "version": "4.3-stable",
+      "attribution": "Godot Engine contributors and translators, MIT license, https://godotengine.org/license",
+      "homepage": "https://hosted.weblate.org/projects/godot-engine/godot/",
+      "files": [
+        {
+          "file": "https://raw.githubusercontent.com/godotengine/godot/4.3-stable/editor/translations/editor/it.po",
+          "sha256": "b51a6ce357a4403e6e8dda35d6d5a0de20c7bb1317f109887e7ee0f526ea1bb7",
+          "pinned": false,
+          "rows": 5243
+        }
+      ],
+      "rows": 5243,
+      "hashes_pinned": false
+    },
+    {
+      "id": "pixelorama",
+      "name": "Pixelorama translations",
+      "license": "MIT",
+      "license_class": "bundle",
+      "version": "v1.0.5",
+      "attribution": "Orama Interactive and the Pixelorama translators, MIT license, https://github.com/Orama-Interactive/Pixelorama",
+      "homepage": "https://crowdin.com/project/pixelorama",
+      "files": [
+        {
+          "file": "https://raw.githubusercontent.com/Orama-Interactive/Pixelorama/v1.0.5/Translations/it_IT.po",
+          "sha256": "58f5fc625b1a4b3dbaf44696c09b7421f8abedeffbcaf43b9389eff3baa418e8",
+          "pinned": false,
+          "rows": 974
+        }
+      ],
+      "rows": 974,
+      "hashes_pinned": false
+    },
+    {
+      "id": "wesnoth",
+      "name": "Battle for Wesnoth",
+      "license": "GPL-2.0-or-later",
+      "license_class": "local",
+      "version": "1.18.4",
+      "attribution": "The Battle for Wesnoth Project, GPL-2.0-or-later",
+      "homepage": "https://www.wesnoth.org/",
+      "files": [
+        {
+          "file": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth-lib/it.po",
+          "sha256": "3fdb124e5d45c279332c5bdfe4acc2b6804670cee99eebfa985d868aec30e1e6",
+          "pinned": false,
+          "rows": 1564
+        },
+        {
+          "file": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth/it.po",
+          "sha256": "c8f5a86c2a3f0e02a61e7e6cfa12333f5198b6185acbd47a34ee25525ee1a5d3",
+          "pinned": false,
+          "rows": 1397
+        }
+      ],
+      "rows": 2961,
+      "hashes_pinned": false
+    },
+    {
+      "id": "0ad",
+      "name": "0 A.D.",
+      "license": "GPL-2.0-or-later (code), CC-BY-SA-3.0 (data)",
+      "license_class": "local",
+      "version": "A26",
+      "attribution": "Wildfire Games and the 0 A.D. translators",
+      "homepage": "https://play0ad.com/",
+      "files": [
+        {
+          "file": "https://raw.githubusercontent.com/0ad/0ad/A26/binaries/data/mods/public/l10n/it.public-gui-ingame.po",
+          "sha256": "7b21310d7aafb1a0ae8a95f692abd9da47d7ea8037a55e3c54b7cc78b3cb99dd",
+          "pinned": false,
+          "rows": 362
+        },
+        {
+          "file": "https://raw.githubusercontent.com/0ad/0ad/A26/binaries/data/mods/public/l10n/it.public-tutorials.po",
+          "sha256": "fd70822c59149607c81f4c9edd5ee8ec33000367c96b3d17950dc2d4126a9a26",
+          "pinned": false,
+          "rows": 110
+        }
+      ],
+      "rows": 472,
+      "hashes_pinned": false
+    },
+    {
+      "id": "mindustry",
+      "name": "Mindustry",
+      "license": "GPL-3.0",
+      "license_class": "local",
+      "version": "v146",
+      "attribution": "Anuken and the Mindustry translators, GPL-3.0",
+      "homepage": "https://mindustrygame.github.io/",
+      "files": [
+        {
+          "file": "https://raw.githubusercontent.com/Anuken/Mindustry/v146/core/assets/bundles/bundle_it.properties",
+          "sha256": "c75a4ed0ef38c6bed3941ec398bd6ebe2e82d63484e9ab6c8ba03c49fb457086",
+          "pinned": false,
+          "en_sha256": "6db9a92e3de4881f9e4e55fbea3c9f5a69f36f1fca4547d2a1e8ff98931c4ae3",
+          "rows": 2318
+        }
+      ],
+      "rows": 2318,
+      "hashes_pinned": false
+    },
+    {
+      "id": "openttd",
+      "name": "OpenTTD",
+      "license": "GPL-2.0",
+      "license_class": "local",
+      "version": "14.1",
+      "attribution": "The OpenTTD team and translators, GPL-2.0",
+      "homepage": "https://www.openttd.org/",
+      "files": [
+        {
+          "file": "https://raw.githubusercontent.com/OpenTTD/OpenTTD/14.1/src/lang/italian.txt",
+          "sha256": "fdfc57ee3bc191893e5da3e0287d1cab2d219841848442f07695007327977abd",
+          "pinned": false,
+          "en_sha256": "c14cd9a200d1316fe0d087f35eadc458a3e627e6ff548c5a7e82c8144b3e6862",
+          "rows": 4622
+        }
+      ],
+      "rows": 4622,
+      "hashes_pinned": false
+    },
+    {
+      "id": "veloren",
+      "name": "Veloren",
+      "license": "GPL-3.0",
+      "license_class": "local",
+      "version": "v0.17.0",
+      "attribution": "The Veloren contributors and translators, GPL-3.0",
+      "homepage": "https://veloren.net/",
+      "files": [
+        {
+          "file": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/it/main.ftl",
+          "sha256": "15f7a1733b7eebae16571c5d1c116459a94c9072a41d4ef4f9b63c1e6354a19b",
+          "pinned": false,
+          "en_sha256": "eedebdf173d8f5bbda4f0332363602736c76ece496ccb1786531918351184ac1",
+          "rows": 87
+        },
+        {
+          "file": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/it/common.ftl",
+          "sha256": "6783da09b9b2e27b583ea6922c31f3b8f5b8a881cf45cb8175d0f338ff5146d7",
+          "pinned": false,
+          "en_sha256": "e7e6c18b96ebaf0ab32c175ea147444edda675b87cc0ac04178f40842705cf71",
+          "rows": 103
+        }
+      ],
+      "rows": 190,
+      "hashes_pinned": false
+    },
+    {
+      "id": "gnome-chess",
+      "name": "GNOME Chess (GNOME translation memory)",
+      "license": "GPL-3.0-or-later",
+      "license_class": "local",
+      "version": "48.0",
+      "attribution": "The GNOME Project translators, GPL-3.0-or-later",
+      "homepage": "https://l10n.gnome.org/module/gnome-chess/",
+      "files": [
+        {
+          "file": "https://gitlab.gnome.org/GNOME/gnome-chess/-/raw/48.0/po/it.po",
+          "sha256": "c4fbdbde7818f9643dcfbf76399c6a7f10d68f4f45d7c001d6103ac99699e03c",
+          "pinned": false,
+          "rows": 257
+        }
+      ],
+      "rows": 257,
+      "hashes_pinned": false
+    },
+    {
+      "id": "libreoffice-calc",
+      "name": "LibreOffice Calc (LibreOffice translation memory)",
+      "license": "MPL-2.0",
+      "license_class": "local",
+      "version": "libreoffice-24-8",
+      "attribution": "The Document Foundation and the LibreOffice translators, MPL-2.0",
+      "homepage": "https://translations.documentfoundation.org/",
+      "files": [
+        {
+          "file": "https://raw.githubusercontent.com/LibreOffice/translations/libreoffice-24-8/source/it/sc/messages.po",
+          "sha256": "79c2cc4680189056c557a65cc0e11b3898dc93492220ed038aa251e9aee6f36e",
+          "pinned": false,
+          "rows": 5665
+        }
+      ],
+      "rows": 5665,
+      "hashes_pinned": false
+    },
+    {
+      "id": "kde",
+      "name": "KDE games translations (KDE translation memory)",
+      "license": "GPL-2.0-or-later (KDE translations, per module)",
+      "license_class": "local",
+      "version": "trunk-kf6 r1753957",
+      "attribution": "The KDE translation teams",
+      "homepage": "https://l10n.kde.org/",
+      "files": [
+        {
+          "file": "https://websvn.kde.org/trunk/l10n-kf6/it/messages/kpat/kpat.po?view=co&pathrev=1753957",
+          "sha256": "9ec393dcce682bb8f5efe249c3902bad3682865b412a4b3641033d01d7c0076e",
+          "pinned": false,
+          "rows": 232
+        },
+        {
+          "file": "https://websvn.kde.org/trunk/l10n-kf6/it/messages/kmines/kmines.po?view=co&pathrev=1753957",
+          "sha256": "311e4fc058dead45882ddf2018b3e83550cf816b1d159f49312b52254e9308d6",
+          "pinned": false,
+          "rows": 51
+        },
+        {
+          "file": "https://websvn.kde.org/trunk/l10n-kf6/it/messages/knavalbattle/knavalbattle.po?view=co&pathrev=1753957",
+          "sha256": "47e021156c4570c6fb122379a239a351d8675681cd01719d0199000273271942",
+          "pinned": false,
+          "rows": 104
+        },
+        {
+          "file": "https://websvn.kde.org/trunk/l10n-kf6/it/messages/ksudoku/ksudoku.po?view=co&pathrev=1753957",
+          "sha256": "404a0db49c85afae3cc7caf888cb30bc0f21020c7b6774f3cbcf743e9cdf034f",
+          "pinned": false,
+          "rows": 172
+        },
+        {
+          "file": "https://websvn.kde.org/trunk/l10n-kf6/it/messages/kbounce/kbounce.po?view=co&pathrev=1753957",
+          "sha256": "08df7f662e72c533e120661d5b5dedf9b1c396c562b7f8ccd3235c2e8c1d3737",
+          "pinned": false,
+          "rows": 43
+        }
+      ],
+      "rows": 602,
+      "hashes_pinned": false
+    }
+  ],
+  "filters": {
+    "layer1_source_selection": {
+      "sources_in": 10,
+      "sources_kept": 10,
+      "dropped": [],
+      "not_available": [],
+      "rows_in": 23304
+    },
+    "layer2_mechanical": {
+      "in": 23304,
+      "out": 18354,
+      "dropped": {
+        "ban_list": 261,
+        "duplicate": 2370,
+        "empty": 11,
+        "length_ratio": 121,
+        "technical": 618,
+        "untranslated": 1569
+      },
+      "length_ratio_bounds": [
+        0.3,
+        3.0
+      ],
+      "reference_exempt": {
+        "length_ratio": [],
+        "rule_hits": [],
+        "by_rule": {}
+      }
+    },
+    "layer3_mt_detection": {
+      "applied": false,
+      "in": 18354,
+      "out": 18354,
+      "checked": 0,
+      "min_words": 6,
+      "bulk_commit_limit": 500,
+      "bulk_commits": [],
+      "dropped": {}
+    },
+    "layer4_cross_consistency": {
+      "in": 18354,
+      "out": 17691,
+      "terms_checked": 10469,
+      "trusted": 98,
+      "disputed": 211,
+      "single": 10160,
+      "dropped": {
+        "disputed": 663
+      },
+      "examples_bundle": [
+        {
+          "en": "Double Click",
+          "text": "Doppio click",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Select",
+          "text": "Seleziona",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Left",
+          "text": "Sinistra",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Right",
+          "text": "Destra",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Down",
+          "text": "Giù",
+          "source": "godot-editor"
+        },
+        {
+          "en": "End",
+          "text": "Fine",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Indent",
+          "text": "Indenta",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Delete",
+          "text": "Elimina",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Scroll Up",
+          "text": "Scorri su",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Scroll Down",
+          "text": "Scorri giù",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Built-in",
+          "text": "Integrato",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Add",
+          "text": "Aggiungi",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Action",
+          "text": "Azione",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Time:",
+          "text": "Tempo:",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Create",
+          "text": "Crea",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Sine",
+          "text": "Sinusoidale",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Quad",
+          "text": "Quadratica",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Ease Type:",
+          "text": "Tipo di allentamento:",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Replace",
+          "text": "Sostituisci",
+          "source": "godot-editor"
+        },
+        {
+          "en": "Replace All",
+          "text": "Sostituisci tutti",
+          "source": "godot-editor"
+        }
+      ]
+    },
+    "layer5_jury_prescreen": {
+      "applied": false,
+      "in": 17691,
+      "out": 17691,
+      "dropped": {},
+      "cross_source_duplicates": 733
+    }
+  },
+  "counts": {
+    "bundle": 5595,
+    "local": 11363,
+    "by_register": {
+      "bundle": {
+        "ui": 3039,
+        "tutorial": 2556
+      },
+      "local": {
+        "ui": 6452,
+        "tutorial": 4750,
+        "dialogue_casual": 157,
+        "dialogue_formal": 4
+      }
+    }
+  },
+  "files": {
+    "warmup": "warmup.jsonl",
+    "warmup_local": "local/warmup.jsonl",
+    "contrastive": "contrastive.json",
+    "roundtrip_threshold": "roundtrip_threshold.json",
+    "trust_card": "trust_card.json"
+  }
+}

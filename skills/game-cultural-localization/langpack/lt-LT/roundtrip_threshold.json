@@ -1,0 +1,10 @@
+{
+  "locale": "lt-LT",
+  "threshold": 0.85,
+  "calibrated": false,
+  "min_words": 6,
+  "registers": [
+    "dialogue_casual",
+    "dialogue_formal"
+  ]
+}
