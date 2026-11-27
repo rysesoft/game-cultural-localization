@@ -185,5 +185,37 @@ class OtherFormatTests(unittest.TestCase):
             self.assertNotIn("fuzzy", (td / "out" / "tr.po").read_text(encoding="utf-8"))   # a filled entry is no longer fuzzy
 
 
+def _unity_table(script: str, code: str, values: list) -> str:
+    entries = "".join(f"  - m_Id: {i + 1}\n    m_Localized: {v}\n    m_Metadata:\n      m_Items: []\n" for i, v in enumerate(values))
+    return ("%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n--- !u!114 &11400000\nMonoBehaviour:\n"
+            f"  m_Script: {{fileID: 11500000, guid: {script}, type: 3}}\n  m_Name: T_{code}\n"
+            f"  m_LocaleId:\n    m_Code: {code}\n  m_SharedData: {{fileID: 11400000, guid: 0123456789abcdef0123456789abcdef, type: 2}}\n"
+            f"  m_Metadata:\n    m_Items: []\n  m_TableData:\n{entries}")
+
+
+class AssetTableTests(unittest.TestCase):
+    """A Unity Localization AssetTable holds asset GUIDs, never text (DecalTextures of the first game)."""
+
+    GUIDS = ["99f909044abd13e43b187a1e55a4e2c5", "e1e451010f96d0340b693ae60d814d46"]
+
+    def test_known_script_and_guid_only_entries_are_asset_tables(self):
+        from l10n_common import UNITY_ASSET_TABLE_SCRIPT, is_unity_asset_table
+        self.assertTrue(is_unity_asset_table(_unity_table(UNITY_ASSET_TABLE_SCRIPT, "fr", ["Hangar"])))
+        self.assertTrue(is_unity_asset_table(_unity_table("ffffffffffffffffffffffffffffffff", "fr", self.GUIDS)))
+        self.assertFalse(is_unity_asset_table(_unity_table("e9620f8c34305754d8cc9a7e49e852d9", "fr", ["Hangar", self.GUIDS[0]])))
+
+    def test_unity_tables_leaves_an_asset_table_out_and_the_loader_refuses_it(self):
+        from l10n_common import UNITY_ASSET_TABLE_SCRIPT, L10nError, load_table
+        with TempDir() as td:
+            (td / "Decals").mkdir()
+            (td / "General").mkdir()
+            write_text(td / "Decals" / "Decals_fr.asset", _unity_table(UNITY_ASSET_TABLE_SCRIPT, "fr", self.GUIDS))
+            write_text(td / "General" / "General_fr.asset", _unity_table("e9620f8c34305754d8cc9a7e49e852d9", "fr", ["Bonjour"]))
+            self.assertEqual([p.parent.name for p in ex.unity_tables(td, "fr")], ["General"])
+            with self.assertRaises(L10nError) as ctx:
+                load_table(td / "Decals" / "Decals_fr.asset", "en", "fr")
+            self.assertIn("AssetTable", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -661,6 +661,27 @@ def _yaml_scalar(value: str, following: List[str], indent: int, content_indent: 
     return v, 0
 
 
+# The Unity Localization package's AssetTable script. Its entries hold asset GUIDs (textures, sprites, audio), not text.
+UNITY_ASSET_TABLE_SCRIPT = "97269afb30aa84742ae3f3342603618a"
+_ASSET_GUID_RE = re.compile(r"[0-9a-f]{32}")
+
+
+def is_unity_asset_table(text: str) -> bool:
+    """True for a Unity Localization AssetTable, whose entries are asset GUIDs and never text.
+
+    Known by its script GUID, or, for a script the plugin does not know, by every non-empty entry being a 32 digit
+    hex asset GUID. On 2026-11-27 the pipeline read the DecalTextures AssetTable of a game as text, translated its 21
+    texture GUIDs and wrote the word Hangar in place of a GUID in five languages.
+    """
+    if f"guid: {UNITY_ASSET_TABLE_SCRIPT}" in text[:4000]:
+        return True
+    if "m_TableData:" not in text or "m_SharedData:" not in text:
+        return False
+    values = [v.strip().strip("'\"") for v in re.findall(r"\n\s+m_Localized: (.*)", text)]
+    values = [v for v in values if v]
+    return bool(values) and all(_ASSET_GUID_RE.fullmatch(v) for v in values)
+
+
 def parse_unity_yaml(text: str) -> Dict[str, Any]:
     """Extract Unity Localization data from a StringTable / SharedTableData .asset.
 
@@ -817,7 +838,10 @@ def load_table(
 
 
 def _load_unity_rows(path: Path, src_input: Optional[Path], shared_table: Optional[Path]) -> List[Row]:
-    data = parse_unity_yaml(read_text_bom(path))
+    raw = read_text_bom(path)
+    if is_unity_asset_table(raw):
+        raise L10nError(f"{path}: this is a Unity Localization AssetTable (asset GUIDs, not text), it has nothing to translate")
+    data = parse_unity_yaml(raw)
     if data["kind"] != "string_table":
         raise L10nError(f"{path}: no 'm_Localized' entries found; expected a Unity Localization StringTable .asset")
     key_names: Dict[str, str] = {}

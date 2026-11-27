@@ -56,7 +56,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from l10n_common import (  # noqa: E402
     EXIT_FINDINGS, EXIT_OK, PLACEHOLDER_STYLES, TAG_STYLES, L10nError, _yaml_scalar, add_common_args, add_input_argument, apply_config,
-    emit_report, load_json_data, load_table, normalize_locale, parity_problems, parse_po, parse_unity_yaml, read_text_bom, resolve_input,
+    emit_report, is_unity_asset_table, load_json_data, load_table, normalize_locale, parity_problems, parse_po, parse_unity_yaml,
+    read_text_bom, resolve_input,
     run_main, sniff_delimiter, __version__,
 )
 
@@ -317,12 +318,14 @@ def unity_rewrite(text: str, id_texts: Dict[str, str], written: Optional[Dict[st
 
 
 def unity_tables(template_dir: Path, locale: str) -> List[Path]:
-    """Every StringTable asset of the locale under template_dir (by m_LocaleId, not by file name)."""
+    """Every StringTable asset of the locale under template_dir (by m_LocaleId, not by file name).
+
+    An AssetTable of the locale (textures and other assets by GUID) is left out, it holds no text to write."""
     found = []
     for p in sorted(template_dir.rglob("*.asset")):
-        head = read_text_bom(p)[:4000]
-        m = re.search(r"m_LocaleId:\s*\n\s+m_Code: (\S+)", head)
-        if m and normalize_locale(m.group(1))[0] == locale:
+        text = read_text_bom(p)
+        m = re.search(r"m_LocaleId:\s*\n\s+m_Code: (\S+)", text[:4000])
+        if m and normalize_locale(m.group(1))[0] == locale and not is_unity_asset_table(text):
             found.append(p)
     return found
 
