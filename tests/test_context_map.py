@@ -275,6 +275,300 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(bcm.summary(scan, ["Hud.Deadline", "MachineTable:Hud.Deadline"])["wanted_missing"], [])
 
 
+# --------------------------------------------------------------------------- #
+# Use trace. The two cases that misled the jury on 2026-11-27, in miniature
+# --------------------------------------------------------------------------- #
+TRACE_TABLE = "8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c"
+WARN_GUID = "2222aaaa3333bbbb4444cccc5555dddd"
+LICENSE_GUID = "3333aaaa4444bbbb5555cccc6666dddd"
+TRACE_KEYS = {300: "Warning.NeedBrokenItem", 301: "Warning.ItemSentStorage", 302: "Warning.HotHandle", 310: "License.WorkshopCondition",
+              311: "License.ReputationCondition", 312: "License.Upgrade", 313: "License.Max", 314: "License.Locked", 315: "License.Occupied",
+              316: "License.Named", 317: "License.Busy"}
+
+WARN_CS = r"""using UnityEngine;
+using UnityEngine.Localization;
+
+public class WarningMessageController : MonoBehaviour
+{
+    [HideInInspector] public static string NEED_BROKEN_ITEM = "Don't have any broken item in the salvage machine!";
+    [HideInInspector] public static string ITEM_SENT_STORAGE = "Delivered items has been sent to the storage.";
+    [HideInInspector] public static string HOT_HANDLE = "You can't fire the laser this close to a surface.";
+    [SerializeField] LocalizedString NEED_BROKEN_ITEM_LOC;
+    [SerializeField] LocalizedString ITEM_SENT_STORAGE_LOC;
+    [SerializeField] LocalizedString HOT_HANDLE_LOC;
+
+    void Awake() { NEED_BROKEN_ITEM_LOC.StringChanged += LanguageChanged; }
+
+    void LanguageChanged(string _)
+    {
+        NEED_BROKEN_ITEM = NEED_BROKEN_ITEM_LOC.GetLocalizedString();
+        ITEM_SENT_STORAGE = ITEM_SENT_STORAGE_LOC.GetLocalizedString();
+        if (HOT_HANDLE_LOC != null && !HOT_HANDLE_LOC.IsEmpty) HOT_HANDLE = HOT_HANDLE_LOC.GetLocalizedString();
+    }
+
+    public void ShowWarningMessage(string text) { }
+}
+"""
+
+SALVAGE_CS = r"""public class SalvageMachine : MonoBehaviour
+{
+    int count;
+    int GetTotalItemCount() => count;
+
+    bool CanSalvage()
+    {
+        return GetTotalItemCount() > 0;
+    }
+
+    public void StartSalvage()
+    {
+        if (!CanSalvage())
+        {
+            WarningMessageController.SafeExecute(inst => inst.ShowWarningMessage(WarningMessageController.NEED_BROKEN_ITEM));
+            return;
+        }
+        // inst.ShowWarningMessage(WarningMessageController.HOT_HANDLE);
+        /* WarningMessageController.HOT_HANDLE */
+        Debug.Log("WarningMessageController.HOT_HANDLE is a string here, not a use");
+    }
+}
+"""
+
+CRAFT_CS = r"""public class CraftController : MonoBehaviour
+{
+    public void CompleteProduction(CraftableResourceSO craftable, bool sentToStorage)
+    {
+        if (sentToStorage)
+        {
+            WarningMessageController.SafeExecute(w =>
+            {
+                string itemName = craftable.itemName;
+                w.ShowWarningMessage($"{WarningMessageController.ITEM_SENT_STORAGE}: {itemName}");
+            });
+        }
+    }
+
+    public string DumpInto(int moved)
+    {
+        string message = "";
+        if (moved > 0)
+            message = WarningMessageController.ITEM_SENT_STORAGE;
+        return message;
+    }
+}
+"""
+
+LICENSE_CS = r"""using UnityEngine.Localization;
+
+public class LicensePanelController : MonoBehaviour
+{
+    [SerializeField] LocalizedString needReputationTextLoc;
+    [SerializeField] LocalizedString needWorkshopTextLoc;
+    [SerializeField] LocalizedString upgradeTextLoc;
+    [SerializeField] LocalizedString maxTextLoc;
+    [SerializeField] LocalizedString lockedString;
+    [SerializeField] LocalizedString occupiedString;
+    [SerializeField] LocalizedString namedLoc;
+    [SerializeField] LocalizedString busyLoc;
+
+    string needReputationText = "Need More Reputation:";
+    string needWorkshopText = "Upgrade workshop!";
+    string maxText = "MAX";
+
+    void Awake()
+    {
+        needReputationTextLoc.StringChanged += NeedReputationTextLoc_StringChanged;
+        maxTextLoc.StringChanged += MaxTextLoc_StringChanged;
+    }
+
+    void NeedReputationTextLoc_StringChanged(string value)
+    {
+        needReputationText = value;
+        needWorkshopText = needWorkshopTextLoc.GetLocalizedString();
+    }
+
+    void MaxTextLoc_StringChanged(string value) => maxText = value;
+
+    public void DrawPanel(int rep, int have, int amount, bool atMax, bool active, string hangarName, string nameText, State state)
+    {
+        string hoverDescription = "";
+        if (rep > have)
+        {
+            hoverDescription += $"{needReputationText} {rep - have}\r\n";
+        }
+        if (have > 0)
+        {
+            hint.text = "";
+        }
+        else
+        {
+            hint.text = needReputationText;
+        }
+        button.SetText(upgradeTextLoc.GetLocalizedString() + "\n¢" + amount);
+        title.text = atMax ? maxText : "";
+        string statusLabel = !active
+            ? lockedString.GetLocalizedString()
+            : occupiedString.GetLocalizedString();
+        button.SetText($"{hangarName} ({statusLabel})");
+        label.text = string.Format("{0}: {1}", nameText, namedLoc.GetLocalizedString());
+        switch (state)
+        {
+            case State.Busy:
+                Show(busyLoc.GetLocalizedString());
+                break;
+        }
+    }
+}
+"""
+
+
+def trace_shared() -> str:
+    entries = "".join(f"  - m_Id: {kid}\n    m_Key: {key}\n    m_Metadata:\n      m_Items: []\n" for kid, key in TRACE_KEYS.items())
+    return (f"%YAML 1.1\n--- !u!114 &11400000\nMonoBehaviour:\n  m_Name: Trace Shared Data\n  m_TableCollectionName: TraceTable\n"
+            f"  m_TableCollectionNameGuidString: {TRACE_TABLE}\n  m_Entries:\n{entries}")
+
+
+def mono_prefab(name: str, script_guid: str, refs: dict) -> str:
+    body = "".join(f"  {fld}:\n    m_TableReference:\n      m_TableCollectionName: GUID:{TRACE_TABLE}\n    m_TableEntryReference:\n"
+                   f"      m_KeyId: {kid}\n      m_Key:\n" for fld, kid in refs.items())
+    return (f"%YAML 1.1\n--- !u!1 &10\nGameObject:\n  m_Name: {name}\n--- !u!224 &11\nRectTransform:\n  m_GameObject: {{fileID: 10}}\n"
+            f"  m_Father: {{fileID: 0}}\n--- !u!114 &30\nMonoBehaviour:\n  m_GameObject: {{fileID: 10}}\n"
+            f"  m_Script: {{fileID: 11500000, guid: {script_guid}, type: 3}}\n  m_Name:\n{body}")
+
+
+def make_trace_project(td: Path) -> Path:
+    proj = td / "Trace"
+    (proj / "ProjectSettings").mkdir(parents=True)
+    a = proj / "Assets"
+    put(a / "Localisation" / "Trace Shared Data.asset", trace_shared())
+    put(a / "Scripts" / "_Controller" / "WarningMessageController.cs", WARN_CS)
+    put(a / "Scripts" / "_Controller" / "WarningMessageController.cs.meta", f"fileFormatVersion: 2\nguid: {WARN_GUID}\n")
+    put(a / "Scripts" / "CraftSystem" / "SalvageMachine.cs", SALVAGE_CS)
+    (a / "Scripts" / "CraftSystem" / "CraftController.cs").parent.mkdir(parents=True, exist_ok=True)
+    write_text(a / "Scripts" / "CraftSystem" / "CraftController.cs", CRAFT_CS, newline="\r\n")   # the game's files use CRLF
+    put(a / "Scripts" / "Player Menu" / "LicensePanelController.cs", LICENSE_CS)
+    put(a / "Scripts" / "Player Menu" / "LicensePanelController.cs.meta", f"fileFormatVersion: 2\nguid: {LICENSE_GUID}\n")
+    put(a / "Prefabs" / "WarningMessageCanvas.prefab", mono_prefab("WarningMessageCanvas", WARN_GUID,
+        {"NEED_BROKEN_ITEM_LOC": 300, "ITEM_SENT_STORAGE_LOC": 301, "HOT_HANDLE_LOC": 302}))
+    put(a / "Prefabs" / "License.prefab", mono_prefab("License", LICENSE_GUID,
+        {"needWorkshopTextLoc": 310, "needReputationTextLoc": 311, "upgradeTextLoc": 312, "maxTextLoc": 313, "lockedString": 314,
+         "occupiedString": 315, "namedLoc": 316, "busyLoc": 317}))
+    return proj
+
+
+def line_of(text: str, needle: str) -> int:
+    return text[: text.index(needle)].count("\n") + 1
+
+
+class UseTraceTests(unittest.TestCase):
+    """Every loaded text is followed to the code that reads it, so a scout writes per key notes from facts."""
+
+    @classmethod
+    def setUpClass(cls):
+        with TempDir() as td:
+            cls.scan = bcm.scan_unity(make_trace_project(td))
+            cls.blob = json.dumps(cls.scan)
+            cls.td = str(td)
+
+    def key(self, name: str) -> dict:
+        return self.scan["keys"][name]
+
+    def test_a_warning_carries_its_own_trigger_not_the_group_note(self):
+        # the line note of a whole warning group said "a wrong item or the machine is busy", the code says "the machine is empty"
+        info = self.key("Warning.NeedBrokenItem")
+        self.assertEqual(info["loads"], [{"file": "Assets/Scripts/_Controller/WarningMessageController.cs",
+                                          "line": line_of(WARN_CS, "NEED_BROKEN_ITEM = NEED"), "variable": "WarningMessageController.NEED_BROKEN_ITEM",
+                                          "via": "GetLocalizedString", "scope": "static"}])
+        self.assertEqual(info["uses_total"], 1)
+        use = info["uses"][0]
+        self.assertEqual((use["file"], use["line"]), ("Assets/Scripts/CraftSystem/SalvageMachine.cs", line_of(SALVAGE_CS, "inst.ShowWarningMessage(Warn")))
+        self.assertEqual((use["method"], use["trigger"], use["concat"]), ("StartSalvage", ["if (!CanSalvage())"], False))
+        self.assertEqual(use["helpers"], {"CanSalvage()": "GetTotalItemCount() > 0"})
+        self.assertFalse(info["loaded_not_shown"])
+
+    def test_a_text_loaded_and_never_read_is_flagged(self):
+        # the group note said the code appends a colon and the missing amount, the variable is never read at all
+        info = self.key("License.WorkshopCondition")
+        self.assertEqual([(ld["variable"], ld["scope"]) for ld in info["loads"]], [("needWorkshopText", "field")])
+        self.assertEqual((info["uses"], info["uses_total"], info["loaded_not_shown"]), ([], 0, True))
+        hot = self.key("Warning.HotHandle")           # its only use is commented out, a string literal and a comment do not count
+        self.assertEqual((hot["uses"], hot["loaded_not_shown"]), ([], True))
+        self.assertEqual(self.scan["use_trace"]["loaded_not_shown"], 2)
+        self.assertTrue(self.scan["use_trace"]["heuristic"])
+        self.assertIn("Heuristic", self.scan["use_trace"]["note"])
+
+    def test_static_field_uses_across_files_with_their_glue(self):
+        info = self.key("Warning.ItemSentStorage")
+        uses = {u["method"]: u for u in info["uses"]}
+        self.assertEqual(info["uses_total"], 2)
+        craft = uses["CompleteProduction"]
+        self.assertEqual((craft["file"], craft["line"]), ("Assets/Scripts/CraftSystem/CraftController.cs", line_of(CRAFT_CS, "w.ShowWarningMessage($")))
+        self.assertEqual((craft["shape"], craft["concat"], craft["trigger"]), ("{THIS}: {itemName}", True, ["if (sentToStorage)"]))
+        dump = uses["DumpInto"]                        # a braceless if, the text handed on to another variable
+        self.assertEqual((dump["trigger"], dump["assigned_to"], dump["concat"]), (["if (moved > 0)"], "message", False))
+        self.assertNotIn(self.td, self.blob)           # no machine path in the output
+
+    def test_string_changed_handler_concat_else_ternary_format_and_switch(self):
+        rep = self.key("License.ReputationCondition")
+        self.assertEqual([(ld["variable"], ld["via"]) for ld in rep["loads"]], [("needReputationText", "StringChanged")])
+        by_line = {u["line"]: u for u in rep["uses"]}
+        glued = by_line[line_of(LICENSE_CS, "hoverDescription += ")]
+        self.assertEqual((glued["shape"], glued["trigger"], glued["method"]), ("{hoverDescription}{THIS} {rep - have}\r\n", ["if (rep > have)"], "DrawPanel"))
+        self.assertEqual(by_line[line_of(LICENSE_CS, "hint.text = needReputationText")]["trigger"], ["else of if (have > 0)"])
+        upgrade = self.key("License.Upgrade")["uses"][0]  # read in place, no variable in between
+        self.assertEqual((upgrade["variable"], upgrade["shape"]), ("upgradeTextLoc", "{THIS}\n¢{amount}"))
+        mx = self.key("License.Max")                     # an expression bodied handler stores the text
+        self.assertEqual([(ld["variable"], ld["via"]) for ld in mx["loads"]], [("maxText", "StringChanged")])
+        self.assertEqual(mx["uses"][0]["trigger"], ["when (atMax)"])
+        locked, occupied = self.key("License.Locked"), self.key("License.Occupied")
+        self.assertEqual((locked["loads"][0]["scope"], locked["loads"][0]["trigger"]), ("local", ["when (!active)"]))
+        self.assertEqual(occupied["loads"][0]["trigger"], ["when not (!active)"])
+        self.assertEqual(occupied["uses"][0]["shape"], "{hangarName} ({THIS})")
+        self.assertEqual(self.key("License.Named")["uses"][0]["shape"], "{nameText}: {THIS}")
+        self.assertEqual(self.key("License.Busy")["uses"][0]["trigger"], ["case State.Busy of switch (state)"])
+
+    def test_masking_keeps_offsets_and_interpolation_holes(self):
+        src = 'var a = "x // y"; // gone\nchar c = \'{\'; var b = $"{n} \\"q\\" {s.Name}" + @"v""w"; /* z */ d();\n'
+        nc, mk, strings = bcm._mask_cs(src)
+        self.assertEqual((len(nc), len(mk)), (len(src), len(src)))
+        self.assertNotIn("gone", nc)
+        self.assertIn('"x // y"', nc)                    # a comment marker inside a literal is text
+        self.assertNotIn("x // y", mk)
+        self.assertIn("s.Name", mk)                       # the holes stay code
+        self.assertNotIn("{", mk.replace(bcm._HOLE, ""))  # neither the char literal nor the holes open a block
+        self.assertEqual([(s.interp, s.verbatim) for s in strings], [(False, False), (True, False), (False, True)])
+        self.assertEqual(bcm._render(bcm._CsFile("x", src).prepare(), strings[1]), '{n} "q" {s.Name}')
+
+    def test_summary_slices_and_cli(self):
+        s = bcm.summary(self.scan)
+        self.assertEqual(s["loaded_not_shown"], ["License.WorkshopCondition", "Warning.HotHandle"])
+        md = bcm.render_summary(self.scan, s)
+        self.assertIn("`License.WorkshopCondition`", md)
+        self.assertIn("heuristic", md)
+        self.assertEqual(text_style.punctuation_problems(md), [])
+        with TempDir() as td:
+            proj = make_trace_project(td)
+            tables: dict = {}
+            scan = bcm.scan_unity(proj, tables_out=tables, use_sites=1)
+            slices, _stats = bcm.build_slices(scan, tables, {"all": ["*"]}, "en")
+            rows = {r["key"]: r for r in slices["all"]}
+            sent = rows["Warning.ItemSentStorage"]
+            self.assertEqual((len(sent["uses"]), sent["uses_total"]), (1, 2))      # --use-sites caps the list, the total stays
+            self.assertEqual(rows["Warning.NeedBrokenItem"]["uses"][0]["trigger"], ["if (!CanSalvage())"])
+            self.assertTrue(rows["License.WorkshopCondition"]["loaded_not_shown"])
+            out = td / "context"
+            base = ("build_context_map.py", "--scan", "--project", str(proj), "--out", str(out))
+            code, stdout, err = run_cli(*base)
+            self.assertEqual(code, 0, err)                                         # a text never shown is a game bug, not a failed scan
+            self.assertIn("loaded but never shown", stdout)
+            self.assertIn("heuristic", stdout)
+            self.assertEqual(run_cli(*base, "--use-sites", "0")[0], 0)
+            data = json.loads((out / "key_usage.json").read_text(encoding="utf-8"))
+            self.assertNotIn("use_trace", data)
+            self.assertNotIn("uses", data["keys"]["Warning.NeedBrokenItem"])
+            self.assertEqual(run_cli(*base, "--use-sites", "-1")[0], 2)
+
+
 class SliceTests(unittest.TestCase):
     """Scout inputs come from the project's own string tables, never from an ad hoc export."""
 
