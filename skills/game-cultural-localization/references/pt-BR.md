@@ -159,7 +159,7 @@ Currently in `lqa_linter.py` for `pt-BR`: `Ecrã|Definições|Utilizador` (ERR, 
 **Suggested linter patterns (regex-friendly, low false-positive risk, for the scripts owner).**
 * ERR `\b(?:o|a|os|as|um|uma|do|da|no|na|ao|à|pelo|pela)\s+\{\w+\}`, article/contraction glued to a placeholder (§6).
 * ERR `\b(?:Ecrã|Definições|Utilizador|Rato|Ficheiro|Equipa|Guardar jogo)\b` (case-insensitive), `pt-PT` lexicon. WARN `\bGuardar\b` alone in UI categories.
-* ERR `\bOBTER ITENS\b`, `\bMover para\b`.
+* ERR `\bOBTER ITENS\b`, `\bMover\s+(?:para|pra)\s+(?:a\s+)?(?:frente|tr[aá]s|esquerda|direita)\b`. Only a direction marks the keybinding, `MOVER PARA O HANGAR` moves an object and passes.
 * WARN `\bnão pode ser \w+ad[oa]s?\b`, English passive.
 * WARN `\bcom sucesso\b|\bexitosamente\b`, calque / Spanish.
 * WARN `\b(?:Realizar|Efetuar) (?:a|o) \w+\b`, corporate verb.

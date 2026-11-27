@@ -49,6 +49,10 @@
           "message": {
             "type": "string"
           },
+          "note": {
+            "type": "string",
+            "description": "Why the rule exists or how it was narrowed, for maintainers. The linter ignores it and never prints it"
+          },
           "context": {
             "enum": [
               "any",

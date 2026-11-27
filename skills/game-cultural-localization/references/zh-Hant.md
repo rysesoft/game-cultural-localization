@@ -219,11 +219,11 @@ Currently in `lqa_linter.py` for `zh-Hant`: Mainland-term leak `設置|屏幕|�
 
 | Severity | Regex | Message |
 |---|---|---|
-| ERR | `(?:設置\|全屏\|默認\|鼠標\|分辨率\|軟件\|程序\|視頻\|網絡\|服務器\|菜單\|登錄\|存盤\|等離子)` | Mainland term in `zh-Hant` (TW default) |
+| ERR | `(?:設置\|全屏\|默認\|鼠標\|分辨率\|軟件\|程序\|視頻\|網絡\|服務器\|菜單\|存盤\|等離子)` plus `登錄` in its login sense only (`登錄帳號`, `重新登錄`, a lone `登錄` button) | Mainland term in `zh-Hant` (TW default). `登錄在案` (on record) is Taiwanese and passes |
 | WARN (ERR unless `--variant hk`) | `(?:屏幕\|激光\|信息\|質素\|數據\|打印\|的士)` | HK vocabulary, legitimate only in a zh-HK build |
 | WARN | `優化` | `最佳化` in settings UI. `優化` tolerated in patch notes/dialogue |
 | ERR | `硅` | Mainland character, TW/HK standard is `矽` |
-| ERR | `[们这个来时说为对从后无与体设档过当该这里]` | Simplified character in a Traditional string |
+| ERR | `[们这个来时说为对从后无与体设档过当该这]` plus `里` in its inside sense only (`這里`, `心里`, `里面`) | Simplified character in a Traditional string. `里` in names (`哈里森`) and units (`公里`) is valid Traditional |
 | WARN | `[“”]` | Mainland quotes, use `「」` |
 | WARN | `妳` | gendered *you*, use `你` |
 | WARN | `當.{1,12}的時候` | *when…* frame, use `……時` |

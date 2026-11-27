@@ -174,7 +174,7 @@ Each pair keeps the **same meaning**. Only register changes. Generic roles, no p
 |---|---|---|
 | ERR | `\behe\b` without `re.I` (replace current rule) | archaic `ehe`. Keeps `Ehe` legal |
 | ERR | `\{\w+\}(?:Upgrade\|Bauplan\|Rezept\|Modul)\b` | compound with placeholder needs hyphen `{0}-Upgrade` |
-| ERR | `\b(?:den\|dem\|des\|der\|die\|das\|mit\|von\|zum\|zur)\s+\{\w+\}` | article/case directly before placeholder |
+| ERR | `\b(?:den\|dem\|des\|der\|die\|das\|zum\|zur)\s+\{\w+\}(?!-\|\s+[A-ZÄÖÜ])` | article directly before a placeholder. Bare prepositions (`von {0}`) and an article on a fixed noun (`den {0}-Bauplan`, `die {0} Teile`) pass |
 | ERR | `\w+(?:\*\|:\|_)innen\b` or `\b[a-zäöüß]+Innen\b` | Gendersternchen / Binnen-I |
 | WARN | `\b(?:sämtliche\|sofern\|verfügt über\|entnehmen\|platziert werden)\b` | written-register connector / passive |
 | WARN | `\b(?:besitzt\|besitzen)\b` | notary `besitzen`: use `haben` |

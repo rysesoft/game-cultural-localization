@@ -162,10 +162,10 @@ Currently in `lqa_linter.py` for `pt-PT`: `Configurações|Usuário` (ERR), `Car
 **Suggested linter patterns (regex-friendly, low false-positive risk, for the scripts owner).**
 * ERR `\b(?:o|a|os|as|um|uma|do|da|no|na|ao|à|pelo|pela)\s+\{\w+\}`, article/contraction glued to a placeholder (§6).
 * ERR `\b(?:Tela|Mouse|Arquivo|Deletar|Time|Controle|Salvar|Usuário|Celular|Ônibus)\b` (case-insensitive), `pt-BR` lexicon.
-* ERR `^\s*[A-ZÁÉÍÓÚÂÊÔÃÕÇ]\w+(?:ando|endo|indo)\b` in UI categories, a gerund progress label at string start (`Carregando…`, `Transferindo itens`). Plain `\w+ndo` is too noisy (`quando`, `segundo`, `mundo`). Extend the existing explicit list rather than replacing it.
+* ERR `^\s*[A-ZÁÉÍÓÚÂÊÔÃÕÇ]\w+(?:ando|endo|indo)\b` in UI categories, a gerund progress label at string start (`Carregando…`, `Transferindo itens`). Plain `\w+ndo` is too noisy (`quando`, `segundo`, `mundo`). Extend the existing explicit list rather than replacing it. Nouns such as `Remendo`, `Comando`, `Dividendo` and `Adendo` are on that list, their gerunds (`Remendando`) still fire.
 * WARN `^\s*(?:Me|Te|Se|Lhe|Nos)\s+\w+`, sentence-initial clitic (`pt-BR` proclisis).
 * WARN `\b\w+(?:ar|er|ir)\s+(?:ele|ela|eles|elas)\b`, object pronoun after infinitive (`consertar ela`).
-* ERR `\bcontato\b|\bOBTER ITENS\b|\bMover para\b`. WARN `\baspecto\b` (→ `aspeto`), `\bfato\b` when meaning *fact* (keep WARN *fato* = suit is legitimate).
+* ERR `\bcontato\b|\bOBTER ITENS\b|\bMover para (?:a )?(?:frente|trás|esquerda|direita)\b`. WARN `\baspecto\b` (→ `aspeto`), `\bfato\b` when meaning *fact* (keep WARN *fato* = suit is legitimate).
 * WARN `\bnão pode ser \w+ad[oa]s?\b`, English passive. WARN `\bJá se encontra\b`.
 * WARN `\bcom sucesso\b`, calque of *successfully*.
 * WARN `\bBem-vind[oa]s?\b`, use `Boas-vindas`. WARN `\w\([ao]\)`, bracketed gender hacks (`Caro(a)`, `jogador(a)`).

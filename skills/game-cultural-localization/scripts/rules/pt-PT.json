@@ -135,15 +135,18 @@
     {
       "id": "PTPT-OBTER-ITENS",
       "severity": "ERR",
-      "pattern": "\\bOBTER (?:ITENS|OBJETOS)\\b|\\bMover para\\b",
+      "pattern": "\\bOBTER (?:ITENS|OBJETOS)\\b|\\bMover\\s+para\\s+(?:a\\s+)?(?:frente|trás|esquerda|direita)\\b",
       "flags": "",
-      "message": "Literal 'OBTER ITENS' (GET ITEMS): use 'RECOLHER TUDO'",
+      "message": "Literal 'OBTER ITENS' (GET ITEMS) or a manual-speak movement keybinding ('Mover para a frente'). Use 'RECOLHER TUDO', 'Avançar' or 'Recuar'",
+      "note": "The 'Mover para' branch was narrowed together with PTBR-MOVER-PARA after the 2026-11-27 run. Only a direction marks the keybinding, moving something to a place ('Mover para o hangar') is normal European Portuguese.",
       "examples": {
         "match": [
-          "OBTER ITENS"
+          "OBTER ITENS",
+          "Mover para a frente"
         ],
         "nomatch": [
-          "RECOLHER TUDO"
+          "RECOLHER TUDO",
+          "Mover para o hangar"
         ]
       }
     },
@@ -180,18 +183,27 @@
     {
       "id": "PTPT-GERUND-START",
       "severity": "ERR",
-      "pattern": "^\\s*(?!(?:Quando|Segundo|Comando|Bando|Fundo|Mundo|Lindo|Grande)\\b)[A-ZÁÉÍÓÚÂÊÔÃÕÇ]\\w+(?:ando|endo|indo)\\b",
+      "pattern": "^\\s*(?!(?:Quando|Segundo|Comando|Bando|Fundo|Mundo|Lindo|Grande|Remendo|Tremendo|Estupendo|Horrendo|Dividendo|Adendo|Referendo|Reverendo|Memorando|Contrabando|Mando|Brando|Nefando|Venerando|Findo|Infindo|Fernando|Orlando|Arlindo|Entendo|Compreendo|Pretendo|Aprendo|Defendo)\\b)[A-ZÁÉÍÓÚÂÊÔÃÕÇ]\\w+(?:ando|endo|indo)\\b",
       "flags": "",
-      "message": "Gerund progress label at string start (UI): pt-PT uses 'A carregar…'",
+      "message": "Gerund progress label at string start (UI). pt-PT uses 'A carregar…' (estar a + infinitive)",
+      "note": "Extended after the 2026-11-27 run, where 'Remendo do casco' (the noun 'patch') fired. Nouns, adjectives, names and first person verbs that end in -ando, -endo or -indo are not gerunds and are listed in the exclusion (Remendo, Comando, Tremendo, Dividendo, Adendo, Entendo and more). Their gerunds still fire ('Remendando', 'Comandando').",
       "context": "ui",
       "examples": {
         "match": [
           "Transferindo itens",
-          "Guardando…"
+          "Guardando…",
+          "Remendando o casco",
+          "Comandando a frota"
         ],
         "nomatch": [
           "A transferir itens",
-          "Quando chegares"
+          "Quando chegares",
+          "Remendo do casco",
+          "Comando de voz",
+          "Tremendo trabalho!",
+          "Dividendo pago",
+          "Adendo ao contrato",
+          "Entendo, capitão."
         ]
       }
     },

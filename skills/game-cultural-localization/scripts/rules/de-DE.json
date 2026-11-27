@@ -325,16 +325,23 @@
     {
       "id": "DE-ARTICLE-PLACEHOLDER",
       "severity": "ERR",
-      "pattern": "\\b(?:den|dem|des|der|die|das|mit|von|zum|zur)\\s+\\{\\w+\\}",
+      "pattern": "\\b(?:den|dem|des|der|die|das|zum|zur)\\s+\\{\\w+\\}(?!-|\\s+[A-ZÄÖÜ])",
       "flags": "",
-      "message": "Article/case marker directly before a placeholder: the inserted noun cannot inflect",
+      "message": "Article directly before a placeholder that stands for a noun, the inserted noun cannot match its gender and case. Put the article on a fixed noun ('den {0}-Bauplan', 'die {0} Teile') or rephrase",
+      "note": "Narrowed after the 2026-11-27 run. Bare prepositions (von, mit) are no longer listed because a name or number after them needs no article ('Bringt Teile von {0} ins Lager', 'Helm von {playerName}' as references/de-DE.md recommends). An article whose noun follows the placeholder as a hyphen compound or a capitalised classifier noun agrees with that fixed noun and passes. The contractions zum and zur still fire because they carry an article.",
       "examples": {
         "match": [
           "Geh zum {0}",
-          "Nimm den {itemName}"
+          "Nimm den {itemName}",
+          "Sprich mit der {npcName} am Tor",
+          "Gib das {0}."
         ],
         "nomatch": [
-          "Geh zur Station {0}"
+          "Geh zur Station {0}",
+          "Bringt Teile von {0} ins Lager",
+          "Kämpfe mit {0}",
+          "Nimm die {0} Teile",
+          "Lade den {0}-Bauplan"
         ]
       }
     },

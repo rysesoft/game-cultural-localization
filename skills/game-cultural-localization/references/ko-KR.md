@@ -214,14 +214,14 @@ Each pair keeps the **same meaning** as the English gloss. Only the Korean chang
 * ✓ `"이미 다른 물건이 있습니다. 원자로를 제작하거나 구매해 창고에 1개 준비하세요."`
 
 ## 12. Linter Coverage Note
-Currently in `lqa_linter.py` for `ko-KR`: `당신(?:은|이|의|을|에게)` (ERR), `에\s*의해\s` (WARN, misses string-final `에 의해`), `소유하고\s*있습니다` (WARN). The `{0}` + particle trap of §6.1 has no rule yet. Never use `\b` around Hangul. Use substrings or lookarounds.
+Currently in `lqa_linter.py` for `ko-KR`: `당신(?:은|이|의|을|에게)` (ERR), `에\s*의해\s` (WARN, misses string-final `에 의해`), `소유하고\s*있습니다` (WARN). `KO-PLACEHOLDER-PARTICLE` (ERR) covers the `{0}` + particle trap of §6.1. Never use `\b` around Hangul. Use substrings or lookarounds.
 
 ### Suggested linter patterns
 
 | Severity | Regex | Message |
 |---|---|---|
 | ERR | `당신` | 번역투 `당신`, use title / name / omission |
-| ERR | `[}\]>]\s?(?:을\|를\|이\|가\|은\|는\|으로)(?=[\s,.!?]\|$)` | particle glued to a placeholder, rephrase, use `\|hpp`, or `{0}을(를)` |
+| ERR | `(?:\}\|%(?:\d+\$)?[sd])(?:</\w+>\|\[/\w+\])*(?:을\|를\|이\|가\|은\|는\|과\|와\|으로\|로\|이나\|나\|이랑\|랑\|아\|야)(?=[\s,.!?]\|$)` | alternating particle glued to a placeholder, rephrase, use `\|hpp`, or `{0}을(를)`. A particle after a closing tag around fixed text (`<u>철</u>을`) passes |
 | WARN | `[}\]>]\s?(?:을\(를\)\|이\(가\)\|은\(는\)\|과\(와\)\|\(으\)로)` | fallback particle notation, prefer invariant particle or engine resolution |
 | WARN | `에\s*의해(?:서)?` | English passive calque `~에 의해` |
 | WARN | `그녀` | `그녀`, gender leak / pronoun spam |
