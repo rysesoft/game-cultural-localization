@@ -27,6 +27,11 @@ from l10n_common import L10nError
 MAX_ATTEMPTS = 5            # 429 / 5xx / network errors are retried, at most 5 attempts in total
 BACKOFF_BASE_S = 1.0        # 1, 2, 4, 8 seconds between the attempts
 BACKOFF_CAP_S = 30.0
+# A 429 is a rate or spend limit, a few seconds do not lift it. Google's spend based limit of a new paid account
+# stopped two Gemini models in the first calibration with the map after 1, 2, 4 and 8 second waits.
+RATE_LIMIT_BASE_S = 15.0    # 15, 30, 60, 120 seconds unless the server names a delay
+RATE_LIMIT_CAP_S = 120.0
+_RETRY_DELAY = re.compile(r'"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"')
 DEFAULT_TIMEOUT_S = 600.0   # a long JSON answer after thinking can take minutes, 10 minutes like the vendor SDKs
 # Current models of all three families think before they answer and the thinking counts against the output
 # limit. Every adapter asks for at least this many tokens so a batch answer is never cut off. Only generated
@@ -186,6 +191,18 @@ def backoff_delay(attempt: int, retry_after: Optional[str] = None) -> float:
     return min(BACKOFF_CAP_S, BACKOFF_BASE_S * (2 ** attempt))
 
 
+def rate_limit_delay(attempt: int, retry_after: Optional[str] = None, body: str = "") -> float:
+    """Seconds to wait after a 429. Retry-After or Google's retryDelay when given, else 15, 30, 60, 120 (capped)."""
+    m = _RETRY_DELAY.search(body or "")
+    for hint in (retry_after, m.group(1) if m else None):
+        if hint:
+            try:
+                return max(0.0, min(RATE_LIMIT_CAP_S, float(hint)))
+            except ValueError:
+                pass
+    return min(RATE_LIMIT_CAP_S, RATE_LIMIT_BASE_S * (2 ** attempt))
+
+
 # transport(url, headers, body, timeout) -> (status, response body, lower-cased headers)
 Transport = Callable[[str, Dict[str, str], bytes, float], Tuple[int, bytes, Dict[str, str]]]
 
@@ -269,7 +286,8 @@ def post_json(url: str, headers: Dict[str, str], payload: Dict[str, Any], *, tra
         if status == 429 or 500 <= status < 600:
             last = f"HTTP {status}: {snippet}"
             if attempt < max_attempts - 1:
-                sleep(backoff_delay(attempt, hdrs.get("retry-after")))
+                sleep(rate_limit_delay(attempt, hdrs.get("retry-after"), text) if status == 429
+                      else backoff_delay(attempt, hdrs.get("retry-after")))
             continue
         if status in (401, 403):
             raise ProviderError(f"{label}: authentication failed (HTTP {status}); check the API key environment variable")

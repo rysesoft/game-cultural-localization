@@ -172,6 +172,35 @@ class EvaluateTests(unittest.TestCase):
             full = ec.evaluate(Router(load_providers_config(), dry_run=True), "tr-TR", ["J1", "J2", "J3"], pairs, shots, **kw)
             self.assertEqual(rep, full)   # resumed and uninterrupted runs give the same report
 
+    def test_finished_batches_survive_a_stopped_model(self):
+        from llm_tasks import BatchMemo, run_batches
+        with TempDir() as td:
+            memo = BatchMemo(td / "m.batches.json")
+            calls: List[Any] = []
+
+            def flaky(b):
+                calls.append(b)
+                if 3 in b:
+                    raise ValueError("rate limited")
+                return {str(x): x for x in b}
+            with self.assertRaises(ValueError):
+                run_batches([[1, 2], [3], [4]], flaky, memo=memo, tag="t")
+            self.assertEqual(len(BatchMemo(td / "m.batches.json")), 1)          # [1, 2] is on disk
+            calls.clear()
+            res = run_batches([[1, 2], [3], [4]], lambda b: calls.append(b) or {str(x): x for x in b}, memo=BatchMemo(td / "m.batches.json"), tag="t")
+            self.assertEqual((res, calls), ({"1": 1, "2": 2, "3": 3, "4": 4}, [[3], [4]]))
+            self.assertEqual(len(run_batches([[1, 2]], lambda b: {"x": 0}, memo=BatchMemo(td / "m.batches.json"), tag="other")), 1)  # another tag never reuses
+        shots, pairs = ec.split_shots(cset()["pairs"], 2, 0, 1)
+        kw = dict(warmup=False, pack_dir=None, seed=1, warmup_count=5, pairwise_min=0.85, langpack_version=None, workers=4)
+        with TempDir() as td:
+            store = td / "eval_cache.json"
+            first = ec.evaluate(Router(load_providers_config(), dry_run=True), "tr-TR", ["J1"], pairs, shots, store=store, **kw)
+            self.assertTrue((td / "eval_cache.batches.json").is_file())
+            store.unlink()                                                      # only the batches are left
+            router = Router(load_providers_config(), dry_run=True)
+            self.assertEqual(ec.evaluate(router, "tr-TR", ["J1"], pairs, shots, store=store, **kw), first)
+            self.assertEqual(router.budget.records, [])                          # every batch came from the file
+
     def test_run_batches_keeps_order_and_raises(self):
         from llm_tasks import run_batches
         self.assertEqual(run_batches([[1, 2], [3], [4, 5]], lambda b: {str(x): x * 10 for x in b}, workers=3),

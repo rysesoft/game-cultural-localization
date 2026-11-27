@@ -19,7 +19,10 @@ Python 3.9+, standard library only.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequence, TypeVar
@@ -78,19 +81,75 @@ def chunked(items: Sequence[T], size: int) -> Iterator[List[T]]:
         yield list(items[i:i + size])
 
 
-def run_batches(batches: Sequence[T], fn: Callable[[T], Dict[str, Any]], workers: int = 1) -> Dict[str, Any]:
+class BatchMemo:
+    """Finished batch answers in a JSON file, so a stopped run resumes at the batch where it stopped.
+
+    The key is a sha256 of the task, the model, the system prompt and the batch itself, so a changed prompt
+    or batch never reuses an old answer. Thread safe, the file is replaced atomically after every batch.
+    The first calibration with the context map lost the finished batches of four models when Google's
+    spend limit and a DeepSeek queue stopped them halfway, this keeps every one of them.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        self._lock = threading.Lock()
+        self.hits = 0
+        self._data: Dict[str, Any] = {}
+        if self.path.is_file():
+            try:
+                data = json.loads(self.path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                raise L10nError(f"{self.path}: batch cache is not valid JSON ({exc.msg}), delete it to start over")
+            self._data = data if isinstance(data, dict) else {}
+
+    @staticmethod
+    def key(*parts: Any) -> str:
+        return hashlib.sha256(json.dumps(parts, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+    def get(self, key: str) -> Optional[Any]:
+        with self._lock:
+            value = self._data.get(key)
+            if value is not None:
+                self.hits += 1
+            return value
+
+    def put(self, key: str, value: Any) -> None:
+        with self._lock:
+            self._data[key] = value
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self._data, ensure_ascii=False) + "\n", encoding="utf-8")
+            tmp.replace(self.path)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+
+def run_batches(batches: Sequence[T], fn: Callable[[T], Dict[str, Any]], workers: int = 1,
+                memo: Optional[BatchMemo] = None, tag: Any = None) -> Dict[str, Any]:
     """Call fn on every batch, at most `workers` at a time, and merge the dict results in batch order.
 
     Model calls spend most of their time waiting on the network, so threads give a near linear speed up.
-    The first failing batch raises after the running ones finish.
+    The first failing batch raises after the running ones finish. With a memo every finished batch is kept
+    under (tag, batch) and a rerun answers it from the file without a model call.
     """
+    call = fn
+    if memo is not None:
+        def call(b: T) -> Dict[str, Any]:
+            k = memo.key(tag, b)
+            hit = memo.get(k)
+            if hit is not None:
+                return hit
+            res = fn(b)
+            memo.put(k, res)
+            return res
     out: Dict[str, Any] = {}
     if int(workers) <= 1 or len(batches) <= 1:
         for b in batches:
-            out.update(fn(b))
+            out.update(call(b))
         return out
     with ThreadPoolExecutor(max_workers=int(workers)) as ex:
-        for res in ex.map(fn, batches):  # map yields in submission order, the merge stays deterministic
+        for res in ex.map(call, batches):  # map yields in submission order, the merge stays deterministic
             out.update(res)
     return out
 
@@ -181,7 +240,7 @@ def normalize_vote(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def score_entries(provider: Any, entries: Sequence[Dict[str, Any]], locale: str, *, tier: str = "J1",
                   system: Optional[str] = None, batch_size: int = 40, max_tokens: int = 4096,
-                  extra: Optional[Dict[str, Any]] = None, workers: int = 1) -> Dict[str, Dict[str, Any]]:
+                  extra: Optional[Dict[str, Any]] = None, workers: int = 1, memo: Optional[BatchMemo] = None) -> Dict[str, Dict[str, Any]]:
     """Ask one jury member to score target-only entries [{key, target, ...}]; return key -> normalized vote."""
     sys_prompt = system_for("jury", locale, system)
 
@@ -189,11 +248,12 @@ def score_entries(provider: Any, entries: Sequence[Dict[str, Any]], locale: str,
         got = _call_keyed(provider, sys_prompt, "jury", {"locale": locale, "tier": tier, **(extra or {})}, batch, "entries", "votes", "key",
                           lambda it: normalize_vote(it) is not None, max_tokens)
         return {k: normalize_vote(v) for k, v in got.items()}  # type: ignore[misc]
-    return run_batches(list(chunked(list(entries), batch_size)), one, workers)
+    tag = ("jury", getattr(provider, "model", "?"), sys_prompt, locale, tier, extra or {}, max_tokens)
+    return run_batches(list(chunked(list(entries), batch_size)), one, workers, memo, tag)
 
 
 def pairwise_choices(provider: Any, pairs: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
-                     batch_size: int = 20, max_tokens: int = 2048, workers: int = 1) -> Dict[str, str]:
+                     batch_size: int = 20, max_tokens: int = 2048, workers: int = 1, memo: Optional[BatchMemo] = None) -> Dict[str, str]:
     """Ask one member which side of each pair [{id, a, b}] is more natural; return id -> 'a' | 'b'."""
     sys_prompt = system_for("pairwise", locale, system)
 
@@ -201,7 +261,8 @@ def pairwise_choices(provider: Any, pairs: Sequence[Dict[str, Any]], locale: str
         got = _call_keyed(provider, sys_prompt, "pairwise", {"locale": locale}, batch, "pairs", "choices", "id",
                           lambda it: str(it.get("choice", "")).strip().lower() in ("a", "b"), max_tokens)
         return {k: str(v["choice"]).strip().lower() for k, v in got.items()}
-    return run_batches(list(chunked(list(pairs), batch_size)), one, workers)
+    tag = ("pairwise", getattr(provider, "model", "?"), sys_prompt, locale, max_tokens)
+    return run_batches(list(chunked(list(pairs), batch_size)), one, workers, memo, tag)
 
 
 def revote(provider: Any, payload: Dict[str, Any], locale: str, *, system: Optional[str] = None, max_tokens: int = 1024) -> Dict[str, Any]:

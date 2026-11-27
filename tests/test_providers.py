@@ -22,7 +22,7 @@ from providers import (  # noqa: E402
     FakeProvider, FakeScenario, MissingKeyError, ModelNotFoundError, ProviderError, Router, as_legacy, envelope, extract_json,
     get_provider, load_providers_config,
 )
-from providers.base import BudgetLog, FromLegacy, RateLimiter, backoff_delay, post_json, redact, urllib_transport  # noqa: E402
+from providers.base import BudgetLog, FromLegacy, RateLimiter, backoff_delay, post_json, rate_limit_delay, redact, urllib_transport  # noqa: E402
 
 NO_KEYS = {"ANTHROPIC_API_KEY": "", "GOOGLE_API_KEY": "", "DEEPSEEK_API_KEY": "", "GCL_OFFLINE": "1"}
 EXPECTED_IDS = {
@@ -238,8 +238,17 @@ class HttpAdapterTests(unittest.TestCase):
         p, t, sleeps = self._make("anthropic", [(429, {"error": "rate"}, {}), (503, b"busy", {}), (200, ANTHROPIC_OK, {})])
         res = p.complete("s", "u")
         self.assertEqual(len(t.requests), 3)
-        self.assertEqual([s for s in sleeps if s >= 1.0], [1.0, 2.0])
+        self.assertEqual([s for s in sleeps if s >= 1.0], [15.0, 2.0])   # a rate limit waits longer than a 5xx
         self.assertEqual(res.output_tokens, 3)
+
+    def test_rate_limit_waits_long_or_as_told(self):
+        self.assertEqual([rate_limit_delay(i) for i in range(5)], [15.0, 30.0, 60.0, 120.0, 120.0])
+        self.assertEqual(rate_limit_delay(0, "7"), 7.0)
+        google = '{"error": {"code": 429, "details": [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "41s"}]}}'
+        self.assertEqual(rate_limit_delay(2, None, google), 41.0)
+        p, _, sleeps = self._make("google", [(429, google.encode("utf-8"), {}), (200, GOOGLE_OK, {})])
+        p.complete("s", "u")
+        self.assertIn(41.0, sleeps)
 
     def test_retry_after_header_is_honoured(self):
         p, _, sleeps = self._make("deepseek", [(429, b"", {"retry-after": "3"}), (200, DEEPSEEK_OK, {})])

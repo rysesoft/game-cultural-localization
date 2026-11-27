@@ -42,7 +42,7 @@ from l10n_common import (  # noqa: E402
 )
 from build_context_map import ContextPack, load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR  # noqa: E402
-from llm_tasks import add_model_args, default_budget_path, make_router, pairwise_choices, score_entries  # noqa: E402
+from llm_tasks import BatchMemo, add_model_args, default_budget_path, make_router, pairwise_choices, score_entries  # noqa: E402
 from prompt_templates import render_contrastive, render_prompt  # noqa: E402
 from warmup_loader import REGISTERS, load_warmup, render_warmup  # noqa: E402
 
@@ -165,6 +165,8 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
 
     stored: Dict[str, Any] = load_json_data(store) if store is not None and Path(store).is_file() else {}
     lock = threading.Lock()
+    # every finished batch is kept too, so a model stopped halfway (rate limit, provider queue) resumes where it stopped
+    memo = BatchMemo(Path(store).with_name(Path(store).stem + ".batches.json")) if store is not None else None
 
     def signature(model: str, tier: str) -> str:
         blob = json.dumps({"model": model, "tier": tier, "system": system, "pairs": pw, "entries": entries}, ensure_ascii=False, sort_keys=True)
@@ -176,8 +178,8 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
         if sig in stored:
             return model, stored[sig], None
         try:
-            choices = pairwise_choices(m.provider, pw, locale, system=system, workers=workers)
-            votes = score_entries(m.provider, entries, locale, tier=tier, system=system, workers=workers)
+            choices = pairwise_choices(m.provider, pw, locale, system=system, workers=workers, memo=memo)
+            votes = score_entries(m.provider, entries, locale, tier=tier, system=system, workers=workers, memo=memo)
         except Exception as exc:  # noqa: BLE001  one failing model must not throw away the finished ones
             return model, None, f"{type(exc).__name__}: {exc}"
         result = {"choices": choices, "scores": {k: v["score"] for k, v in votes.items()}}
