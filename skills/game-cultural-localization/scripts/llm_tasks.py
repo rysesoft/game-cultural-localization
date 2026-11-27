@@ -62,14 +62,18 @@ DEFAULT_SYSTEM: Dict[str, str] = {
 
 # The first question a juror asks of a line, set by the studio. Every word of it must be part of everyday use of the
 # language. A correct but rare, bookish or dictionary word is what makes a translation sound translated. The answer
-# weighs heavily, the code caps the score of a line with such a word (EVERYDAY_CAP), so it never passes a tier.
+# weighs heavily. When at least EVERYDAY_MIN_JURORS jurors of a tier find such a word in the same line, the code caps
+# every score of that tier at EVERYDAY_CAP, so the line never passes and J3 sends it to Pass 2 (everyday_rule).
+# One juror alone does not cap. Measured on 385 tr-TR pairs with J1, a single flag sent 29 % of the studio's own lines
+# up a tier (16 % without the check) for 2 more points on the literal lines, two flags 17 %.
 EVERYDAY_CAP = 3
+EVERYDAY_MIN_JURORS = 2
 EVERYDAY_CHECK = ('First ask of every word of the line whether it belongs to everyday use of the target language. Would a native '
                   'speaker use it in daily life for this meaning, or read it in this kind of game text? A rare, bookish, archaic, '
                   'made up, word for word or dictionary choice is not everyday, even when it is correct. Proper names, placeholders, '
                   'tags and the game\'s own terms that the context map names are not judged this way. List the words of the line '
-                  'that are not everyday in "odd_words", an empty list when there is none. This answer weighs heavily, a line with '
-                  'such a word scores 3 at most. ')
+                  'that are not everyday in "odd_words", an empty list when there is none. This answer weighs heavily. When two of '
+                  'the three jurors list a word of the same line, the line scores 3 at most. ')
 
 INSTRUCTIONS: Dict[str, str] = {
     "pass1": 'Translate every row. Reply with {"rows": [{"key": "...", "target": "..."}]} and nothing else.',
@@ -276,11 +280,9 @@ def normalize_vote(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
 def everyday_check(vote: Dict[str, Any], target: str) -> Dict[str, Any]:
-    """Apply the everyday word check to a normalized vote (in place).
+    """Keep the words of a normalized vote that the line really holds (in place), the score is left to everyday_rule.
 
-    Only words the line really holds count, so a word a model made up or took from another line never lowers a
-    score, and placeholders or tags are no words. A line with a word that is not everyday scores EVERYDAY_CAP
-    at most, whatever score the juror gave, and its reason names the words.
+    A word a model made up or took from another line never counts, and placeholders or tags are no words.
     """
     low = str(target).casefold()
     words: List[str] = []
@@ -289,13 +291,29 @@ def everyday_check(vote: Dict[str, Any], target: str) -> Dict[str, Any]:
         if w and any(ch.isalpha() for ch in w) and not any(ch in w for ch in "{}<>%[]") and w.casefold() in low and w not in words:
             words.append(w)
     vote["odd_words"] = words[:10]
-    if words and vote["score"] > EVERYDAY_CAP:
-        vote["score"] = EVERYDAY_CAP
-        if vote["issue_type"] == "none":
-            vote["issue_type"] = "translationese"
-        note = "words a native would not use every day (" + ", ".join(words) + ")"
-        vote["reason"] = f"{vote['reason'].rstrip('. ')}. {note}" if vote["reason"].strip() else note
     return vote
+
+
+def everyday_rule(votes: Sequence[Dict[str, Any]]) -> bool:
+    """The weight of the everyday word check on the votes of one tier for one line (in place).
+
+    When at least EVERYDAY_MIN_JURORS jurors found a word that is not everyday, every score of the tier is capped at
+    EVERYDAY_CAP and every reason names the words, so the line never passes and an agreeing J3 sends it to Pass 2.
+    The words of a single juror stay in its vote as evidence. Returns True when the cap applied.
+    """
+    flaggers = [v for v in votes if v.get("odd_words")]
+    if len(flaggers) < EVERYDAY_MIN_JURORS:
+        return False
+    words = list(dict.fromkeys(w for v in flaggers for w in v["odd_words"]))
+    note = f"{len(flaggers)} jurors found words a native would not use every day ({', '.join(words)})"
+    for v in votes:
+        if v["score"] > EVERYDAY_CAP:
+            v["score"] = EVERYDAY_CAP
+            if v.get("issue_type") in (None, "none"):
+                v["issue_type"] = "translationese"
+        reason = str(v.get("reason") or "")
+        v["reason"] = f"{reason.rstrip('. ')}. {note}" if reason.strip() else note
+    return True
 
 
 def score_entries(provider: Any, entries: Sequence[Dict[str, Any]], locale: str, *, tier: str = "J1",

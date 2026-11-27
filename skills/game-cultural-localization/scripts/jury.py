@@ -51,7 +51,7 @@ from l10n_common import (  # noqa: E402
 import lqa_linter  # noqa: E402
 from build_context_map import load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR, infer_register  # noqa: E402
-from llm_tasks import BatchMemo, add_model_args, default_budget_path, make_router, score_entries  # noqa: E402
+from llm_tasks import BatchMemo, add_model_args, default_budget_path, everyday_rule, make_router, score_entries  # noqa: E402
 from prompt_templates import render_contrastive, render_prompt  # noqa: E402
 from roundtrip_check import load_threshold, roundtrip_evidence  # noqa: E402
 from warmup_loader import REGISTERS, load_warmup, render_warmup  # noqa: E402
@@ -215,6 +215,8 @@ def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], local
     for m, votes in zip(members, results):
         for key, v in votes.items():
             out[key].append({"key": key, "tier": tier, "member": m.index, "family": m.family, "model": m.provider.model, **v})
+    for key_votes in out.values():  # two jurors who find a word that is not everyday cap the tier (llm_tasks.everyday_rule)
+        everyday_rule(key_votes)
     return out
 
 

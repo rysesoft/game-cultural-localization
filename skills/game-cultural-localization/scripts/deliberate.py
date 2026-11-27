@@ -39,7 +39,7 @@ from l10n_common import (  # noqa: E402
 from build_context_map import load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR  # noqa: E402
 from jury import build_system_prompt, juror_view, load_blind_slice, status_for  # noqa: E402
-from llm_tasks import add_model_args, default_budget_path, make_router, revote  # noqa: E402
+from llm_tasks import add_model_args, default_budget_path, everyday_rule, make_router, revote  # noqa: E402
 
 TOOL = "deliberate"
 LABELS = ("A", "B")
@@ -97,6 +97,7 @@ def deliberate_line(entry: Dict[str, Any], j3_votes: Sequence[Dict[str, Any]], e
                    "evidence": package}
         v = revote(m.provider, payload, locale, system=system)
         revotes.append({"key": entry["key"], "tier": "deliberation", "member": m.index, "family": m.family, "model": m.provider.model, **v})
+    everyday_rule(revotes)  # the everyday word check keeps its weight in the re-vote
     scores = [v["score"] for v in revotes]
     majority = decide(scores)
     first = [by_member[i]["score"] for i in sorted(by_member)]

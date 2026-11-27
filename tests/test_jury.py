@@ -76,35 +76,45 @@ class RuleTests(unittest.TestCase):
 class EverydayWordTests(unittest.TestCase):
     """The first question of a juror, set by the studio. Is every word of the line part of everyday use of the language?"""
 
-    def test_a_word_that_is_not_everyday_caps_the_score(self):
-        from llm_tasks import EVERYDAY_CAP, INSTRUCTIONS, everyday_check, normalize_vote
+    def test_two_jurors_who_find_such_a_word_cap_the_tier(self):
+        from llm_tasks import EVERYDAY_CAP, EVERYDAY_MIN_JURORS, INSTRUCTIONS, everyday_check, everyday_rule, normalize_vote
+        self.assertEqual((EVERYDAY_CAP, EVERYDAY_MIN_JURORS), (3, 2))
         self.assertTrue(INSTRUCTIONS["jury"].startswith("First ask of every word"))     # asked before the score
-        self.assertIn("odd_words", INSTRUCTIONS["jury"])
-        self.assertIn("odd_words", INSTRUCTIONS["deliberate"])
-        self.assertIn("odd_words", INSTRUCTIONS["pass2"])
+        for task in ("jury", "deliberate", "pass2"):
+            self.assertIn("odd_words", INSTRUCTIONS[task])
         line = "Mevcut bakiyeniz yetersizdir."
-        v = everyday_check(normalize_vote({"score": 5, "odd_words": ["Mevcut", "yetersizdir"]}), line)
-        self.assertEqual((v["score"], v["issue_type"], v["odd_words"]), (EVERYDAY_CAP, "translationese", ["Mevcut", "yetersizdir"]))
-        self.assertIn("not use every day (Mevcut, yetersizdir)", v["reason"])
-        self.assertEqual(text_style.punctuation_problems(v["reason"]), [])
-        v = everyday_check(normalize_vote({"score": 4, "issue_type": "register", "reason": "stiff.", "odd_words": "Mevcut"}), line)
-        self.assertEqual((v["score"], v["issue_type"]), (3, "register"))
-        self.assertTrue(v["reason"].startswith("stiff. words a native"))
-        v = everyday_check(normalize_vote({"score": 2, "issue_type": "ui_verb", "reason": "x", "odd_words": ["Mevcut"]}), line)
-        self.assertEqual(v["score"], 2)                                               # a lower score stays as it is
-        # only words the line holds count, placeholders and tags are no words, an empty list changes nothing
-        v = everyday_check(normalize_vote({"score": 5, "odd_words": ["müstakbel", "{0}", "<b>", "123"]}), "{0} <b>123</b> kredi kazandın")
-        self.assertEqual((v["score"], v["odd_words"]), (5, []))
-        self.assertEqual(everyday_check(normalize_vote({"score": 5}), line)["score"], 5)
 
-    def test_the_jury_sends_such_a_line_on_and_pass2_gets_the_words(self):
-        sc = {"scores": [{"key": "ESC", "tier": "J1", "family": "google", "score": 5, "odd_words": ["koyulalım"]}]}
-        v = {x["key"]: x for x in run(sc, slice_doc())["verdicts"]}
+        def vote(**kw):
+            return everyday_check(normalize_vote(kw), line)
+        # one vote keeps its score, only the words the line holds count, placeholders and tags are no words
+        v = vote(score=5, odd_words=["Mevcut", "müstakbel", "{0}", "<b>", "123"])
+        self.assertEqual((v["score"], v["odd_words"]), (5, ["Mevcut"]))
+        # one juror alone is evidence, the tier keeps its scores
+        tier = [vote(score=5, odd_words=["Mevcut"]), vote(score=5), vote(score=4, issue_type="register", reason="stiff")]
+        self.assertFalse(everyday_rule(tier))
+        self.assertEqual([x["score"] for x in tier], [5, 5, 4])
+        # two jurors cap every score of the tier, every reason names the words, a lower score stays
+        tier = [vote(score=5, odd_words=["Mevcut"]), vote(score=4, reason="stiff.", odd_words="yetersizdir"), vote(score=2, issue_type="ui_verb", reason="x")]
+        self.assertTrue(everyday_rule(tier))
+        self.assertEqual([x["score"] for x in tier], [3, 3, 2])
+        self.assertEqual(tier[0]["issue_type"], "translationese")
+        self.assertTrue(tier[1]["reason"].startswith("stiff. 2 jurors found words a native would not use every day (Mevcut, yetersizdir)"))
+        self.assertTrue(all(text_style.punctuation_problems(x["reason"]) == [] for x in tier))
+
+    def test_one_juror_is_evidence_two_jurors_send_the_line_on(self):
+        one = {"scores": [{"key": "ESC", "tier": "J1", "family": "google", "score": 5, "odd_words": ["koyulalım"]}]}
+        v = {x["key"]: x for x in run(one, slice_doc())["verdicts"]}
+        self.assertEqual((v["ESC"]["status"], v["ESC"]["final_tier"]), ("pass", "J1"))       # a single flag does not cap
+        self.assertEqual([x["odd_words"] for x in v["ESC"]["votes"] if x["family"] == "google"], [["koyulalım"]])   # but it is kept
+        two = {"scores": [{"key": "ESC", "tier": "J1", "family": f, "score": 5, "odd_words": ["koyulalım"]} for f in ("google", "deepseek")]}
+        v = {x["key"]: x for x in run(two, slice_doc())["verdicts"]}
         esc = v["ESC"]
-        self.assertEqual([x["score"] for x in esc["votes"] if x["tier"] == "J1"], [5, 5, 3])   # one juror, the whole line escalates
+        self.assertEqual([x["score"] for x in esc["votes"] if x["tier"] == "J1"], [3, 3, 3])   # the whole tier is capped
         self.assertEqual(esc["final_tier"], "J2")
-        self.assertIn("koyulalım", [w for x in esc["votes"] for w in x["odd_words"]])
         self.assertEqual(v["OK"]["status"], "pass")
+        three = {"scores": [{"key": "ESC", "family": f, "score": 5, "odd_words": ["koyulalım"]} for f in ("google", "deepseek")]}
+        esc = {x["key"]: x for x in run(three, slice_doc())["verdicts"]}["ESC"]
+        self.assertEqual((esc["final_tier"], esc["status"], esc["score"]), ("J3", "rewrite", 3))   # J3 agrees, Pass 2 rewrites it
         import pass2_rewrite as p2
         rows: List[Dict[str, Any]] = []
         real = p2.pass2_candidates
@@ -112,11 +122,10 @@ class EverydayWordTests(unittest.TestCase):
         def spy(provider, rws, locale, **kw):
             rows.extend(rws)
             return real(provider, rws, locale, **kw)
-        verdict = dict(esc, status="rewrite", votes=[dict(x, tier="J2") for x in esc["votes"] if x["tier"] == "J1"], final_tier="J2")
         router = Router(load_providers_config(), dry_run=True, scenario=FakeScenario({}))
         from unittest import mock
         with mock.patch.object(p2, "pass2_candidates", spy):
-            p2.rewrite_lines([verdict], {"ESC": {"en": "Let's get to work.", "target": "Hadi bakalım, işe koyulalım."}}, "tr-TR", router,
+            p2.rewrite_lines([esc], {"ESC": {"en": "Let's get to work.", "target": "Hadi bakalım, işe koyulalım."}}, "tr-TR", router,
                              pass2_system="P2", pick_system="CRITIC")
         self.assertEqual(rows[0]["odd_words"], ["koyulalım"])
 

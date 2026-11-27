@@ -39,9 +39,10 @@ EVIDENCE = {"ban_hits": [{"rule": "TR-KNOWN-CALQUE", "severity": "WARN", "messag
 class SpyProvider:
     """Captures deliberation payloads and answers with a fixed score."""
 
-    def __init__(self, model: str, score: int) -> None:
+    def __init__(self, model: str, score: int, odd: Any = ()) -> None:
         self.model = model
         self.score = score
+        self.odd = list(odd)
         self.payloads: List[Dict[str, Any]] = []
         self.systems: List[str] = []
 
@@ -49,8 +50,8 @@ class SpyProvider:
         _i, p = split_envelope(user)
         self.payloads.append(p)
         self.systems.append(system)
-        return ChatResult(json.dumps({"score": self.score, "issue_type": "translationese", "reason": f"revote {self.score}", "suggested": ""}),
-                          1, 1, self.model, 0)
+        return ChatResult(json.dumps({"score": self.score, "issue_type": "translationese", "reason": f"revote {self.score}", "suggested": "",
+                                      "odd_words": self.odd}), 1, 1, self.model, 0)
 
 
 class Seat:
@@ -58,10 +59,10 @@ class Seat:
         self.index, self.family, self.provider = index, family, provider
 
 
-def seats(scores: List[int]) -> List[Seat]:
+def seats(scores: List[int], odd: Any = ((), (), ())) -> List[Seat]:
     fams = ("anthropic", "deepseek", "google")
     models = ("claude-opus-5-5", "deepseek-v4-pro", "gemini-4-carbon")
-    return [Seat(i, fams[i], SpyProvider(models[i], s)) for i, s in enumerate(scores)]
+    return [Seat(i, fams[i], SpyProvider(models[i], s, odd[i])) for i, s in enumerate(scores)]
 
 
 class DeliberationTests(unittest.TestCase):
@@ -81,6 +82,13 @@ class DeliberationTests(unittest.TestCase):
         self.assertEqual(len(res["rationales"]), 3)
         res = dl.deliberate_line(ENTRY, J3, EVIDENCE, seats([5, 5, 3]), "tr-TR", "SYS", self.scrub)
         self.assertEqual((res["score"], res["status"]), (5, "pass"))             # a mild doubt does not block a majority
+
+    def test_the_everyday_word_check_keeps_its_weight_in_the_revote(self):
+        one = dl.deliberate_line(ENTRY, J3, EVIDENCE, seats([5, 5, 5], ((), ["aletleri"], ())), "tr-TR", "SYS", self.scrub)
+        self.assertEqual((one["score"], one["status"]), (5, "pass"))              # one juror's word is evidence only
+        two = dl.deliberate_line(ENTRY, J3, EVIDENCE, seats([5, 5, 4], (["sakın"], ["aletleri"], ())), "tr-TR", "SYS", self.scrub)
+        self.assertEqual((two["score"], two["status"], two["deliberation"]["revote"]), (3, "rewrite", [3, 3, 3]))
+        self.assertIn("2 jurors found words a native would not use every day (sakın, aletleri)", two["rationales"][2])
 
     def test_unresolved_keeps_three_rationales(self):
         res = dl.deliberate_line(ENTRY, J3, EVIDENCE, seats([5, 3, 2]), "tr-TR", "SYS", self.scrub)
