@@ -4,6 +4,10 @@ All notable changes to this plugin are documented here. The version number lives
 
 ## [Unreleased]
 
+### Fixed
+- A line whose placeholders or rich text tags differ from its source line went through the jury unseen, since the jury never sees the source, and in the Pass 2 pick the broken old line could even win and stay. The orchestrator now sends such a line to Pass 2 as `rewrite` with the difference as its first rationale, and an old line that breaks parity never stays by the pick. The dry run of the game's Russian machine translation found one, `TutorialGuide.Label.MarshalShip` had lost `{binding1}` and both `<u>` tags.
+- The leak check of the blind slice stopped the first Russian run. It compared every context value with every source line of the batch, and the speaker `Dorian Crowe` is also the English text of the codex line that names him. It now refuses a value equal to the row's own source line or to any source sentence of more than three words.
+
 ### Added
 - Language packs for Russian and German (`langpack/ru-RU/`, `langpack/de-DE/`), built from the volunteer translations of open source games and tools, no professional reference, so they are estimated. `sources.manifest.json` lists the Russian files of every source next to the German ones (17 files, each checked to exist). Russian keeps 17896 lines after the filters, German 18183, the Godot editor and Pixelorama lines ship (MIT), the GPL corpora stay on the building machine.
 - Review mode for an existing translation. `orchestrator_stub.py --draft-field <column>` keeps the translation a game already has (a machine translation, an older version) as the Pass 1 text and translates only the rows where it is empty. The jury judges the draft and Pass 2 corrects only the lines it flags, so the change reports show the real corrections and a good line stays as the game has it. Before, Pass 1 always translated again from the English source and threw the draft away.

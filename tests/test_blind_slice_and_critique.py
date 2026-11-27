@@ -41,6 +41,15 @@ class BlindSliceTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertIn("contains source text", err)
             self.assertFalse((td / "o.json").exists())
+            # another row's sentence leaks too, a short name another row holds does not (the first Russian run stopped on it)
+            src = write_json(td / "q.json", [{"key": "N", "en": "Dorian Crowe", "dst": "Дориан Кроу"},
+                                             {"key": "L", "en": "Hi, I am Dorian. Welcome aboard.", "dst": "Привет, я Дориан.", "speaker": "Dorian Crowe"},
+                                             {"key": "M", "en": "Fine", "dst": "Хорошо", "note": "Hi, I am Dorian. Welcome aboard."}])
+            code, _, err = run_cli("make_blind_slice.py", str(src), "--locale", "ru-RU", "--out", str(td / "q_out.json"), "--context-cols", "speaker")
+            self.assertEqual(code, 0, err)
+            code, _, err = run_cli("make_blind_slice.py", str(src), "--locale", "ru-RU", "--out", str(td / "q_out2.json"), "--context-cols", "note")
+            self.assertEqual(code, 2)
+            self.assertIn("contains source text", err)
 
     def test_csv_tsv_po_asset_inputs_and_csv_output(self):
         with TempDir() as td:

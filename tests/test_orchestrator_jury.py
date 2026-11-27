@@ -56,6 +56,25 @@ class JuryFlowTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertIn("no row holds a draft in the column 'nope'", err)
 
+    def test_a_draft_that_lost_a_placeholder_goes_to_pass2(self):
+        # the Russian machine translation of the first project lost {binding1} and two <u> tags, the blind jury passed such lines
+        src = [dict(SOURCE[2], mt="X'e bas"), dict(SOURCE[0], mt="İlerlemeni kaydet")]
+        sc = {"pass2": [{"key": "TIP_1", "candidates": ["X'e bas hemen", "<b>X</b> tuşuna basıp {0} kullan", "Bas"]}],
+              "picks": [{"contains": "{0} kullan", "prefer": "X'e bas"}]}       # the jurors even like the broken old line best
+        with TempDir() as td:
+            code, out, err = run_cli("orchestrator_stub.py", "--dry-run", "--locale", "tr-TR", "--input", str(write_json(td / "src.json", src)),
+                                     "--workdir", str(td / "w"), "--draft-field", "mt", "--fake-scenario", str(write_json(td / "sc.json", sc)),
+                                     "--no-budget-caps", "--langpack-dir", str(td / "np"), "--json", env_extra=NO_KEYS)
+            self.assertIn("1 lines break placeholder or tag parity with the source, sent to Pass 2", out)
+            w = td / "w"
+            v = {x["key"]: x for x in json.loads((w / "verdicts_tr-TR_01.json").read_text(encoding="utf-8"))["verdicts"]}
+            self.assertEqual((v["TIP_1"]["status"], v["BTN_SAVE"]["status"]), ("rewrite", "pass"))
+            self.assertIn("brace placeholders", v["TIP_1"]["evidence"]["parity"][0])
+            self.assertTrue(v["TIP_1"]["rationales"][0].startswith("the line breaks placeholder or tag parity"))
+            final = {r["key"]: r["tr-TR"] for r in json.loads((w / "final_batch_01.json").read_text(encoding="utf-8"))}
+            self.assertEqual(final["TIP_1"], "<b>X</b> tuşuna basıp {0} kullan")   # neither the broken old line nor a broken rewrite
+            self.assertEqual(code, 0, err + out)                                   # and the gate passes
+
     def test_dry_run_end_to_end(self):
         with TempDir() as td:
             src = write_json(td / "src.json", SOURCE)

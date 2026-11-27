@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from l10n_common import (  # noqa: E402
     EXIT_FINDINGS, EXIT_OK, L10nError, Row, add_common_args, add_input_argument, resolve_input, emit_report, extract_placeholders, load_config,
-    load_json_data, load_table, normalize_locale, pick, run_main, SCRIPTS_DIR, __version__,
+    load_json_data, load_table, normalize_locale, parity_problems, pick, run_main, SCRIPTS_DIR, __version__,
 )
 import lqa_linter  # noqa: E402
 import make_blind_slice  # noqa: E402
@@ -319,6 +319,30 @@ def _register(row: Row) -> str:
     return reg if reg else infer_register(str(row.meta.get("category") or ""), row.src, "game")
 
 
+def send_broken_lines_to_pass2(res: Dict[str, Any], targets: Dict[str, str], sources: Dict[str, str], ph_style: str, tag_style: str) -> int:
+    """A line whose placeholders or rich text tags differ from its source line goes to Pass 2, whatever the jury said.
+
+    The jury never sees the source, so it cannot notice a lost {binding1} or <u> tag. Such a line is set to rewrite
+    (score 3 at most) with the difference as its first rationale and in its evidence, and Pass 2, which checks every
+    candidate against the source line, restores it. A machine translation of the first project lost a key binding and
+    two underline tags this way. Returns the number of lines sent on.
+    """
+    counts = res["stats"].get("status", {})
+    sent = 0
+    for v in res["verdicts"]:
+        problems = parity_problems(sources.get(v["key"], ""), targets.get(v["key"], ""), ph_style, tag_style)
+        if not problems:
+            continue
+        v.setdefault("evidence", {})["parity"] = problems
+        v["rationales"] = [f"the line breaks placeholder or tag parity with the source line ({'. '.join(problems)})"] + list(v.get("rationales", []))
+        if v.get("status") in ("pass", "rewrite_light"):
+            counts[v["status"]] = counts.get(v["status"], 1) - 1
+            counts["rewrite"] = counts.get("rewrite", 0) + 1
+            v["status"], v["score"] = "rewrite", min(int(v.get("score", 3)), 3)
+        sent += 1
+    return sent
+
+
 def _batch_budget(router: Any, start: int) -> Optional[Dict[str, Any]]:
     """Budget summary of the model calls since record `start` of the router's budget log, the calls of one batch."""
     import budget_report
@@ -470,6 +494,9 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
                                 tm_lookup=tm_fn if tm is not None else None,
                                 deliberator=deliberate.make_deliberator(router, locale, critic_system) if deliberation else None,
                                 workers=workers)
+            broken = send_broken_lines_to_pass2(res, targets, src_by_key, ph_style, tag_style)
+            if broken:
+                state.say(f"Phase 2: batch {n:02d} {broken} lines break placeholder or tag parity with the source, sent to Pass 2")
             verdict_doc = {"locale": locale, "source_file": p1.name, "langpack_version": info.get("langpack_version"),
                            "prompt": {"warmup_lines": info.get("warmup_lines", 0), "shots": info.get("shots", 0),
                                       "context_map": info.get("context_map"), "context_lines": info.get("context_lines", 0)},

@@ -63,15 +63,21 @@ def build_slice(rows: List[Any], context_cols: List[str], source_col: str, skip_
 
 
 def verify_no_leak(entries: List[Dict[str, Any]], rows: List[Any], source_col: str) -> None:
-    """Abort if any entry carries the source column or any entry value equals a non-trivial source text."""
-    sources = {r.src for r in rows if r.src.strip() and len(r.src.strip()) > 2}
+    """Abort if any entry carries the source column, or a context value equals its own source line or any source sentence.
+
+    A short name is no leak. A speaker such as 'Dorian Crowe' is also the English text of the codex line that names
+    him, and the target writes the name the same way, so only the row's own line and sentences of more than three
+    words count.
+    """
+    own = {r.key: r.src for r in rows}
+    sentences = {r.src for r in rows if len(r.src.split()) > 3}
     for e in entries:
         if source_col in e:
             raise L10nError(f"blind slice would contain the source column '{source_col}' for key '{e['key']}'")
         for k, v in e.items():
             if k in ("key", "target", "plural_index"):
                 continue
-            if isinstance(v, str) and v in sources:
+            if isinstance(v, str) and len(v.strip()) > 2 and (v == own.get(e["key"]) or v in sentences):
                 raise L10nError(f"context column '{k}' of key '{e['key']}' contains source text; remove it from --context-cols")
 
 

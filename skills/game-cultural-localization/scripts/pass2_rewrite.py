@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from l10n_common import (  # noqa: E402
     EXIT_FINDINGS, EXIT_OK, PLACEHOLDER_STYLES, TAG_STYLES, L10nError, add_common_args, add_input_argument, emit_report,
-    apply_config, load_json_data, load_table, normalize_locale, resolve_input, run_main, __version__,
+    apply_config, load_json_data, parity_problems, load_table, normalize_locale, resolve_input, run_main, __version__,
 )
 import validate_critique  # noqa: E402
 from build_context_map import ContextPack, load_context  # noqa: E402
@@ -156,9 +156,10 @@ def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[st
         votes = Counter(id_map[p[key]] for _m, p in picks_by_member)
         ranking = sorted(range(len(texts)), key=lambda i: (-votes.get(i, 0), i))
         chosen, problems_all, entry = None, [], None
+        old_broken = parity_problems(r["source"], r["target"], ph_style, tag_style)
         for idx in ranking:
-            if texts[idx] == r["target"]:  # the old line stays only when the jurors picked it, it needs no validation
-                if idx == ranking[0]:
+            if texts[idx] == r["target"]:  # the old line stays only when the jurors picked it and it keeps the source's tokens
+                if idx == ranking[0] and not old_broken:
                     chosen = idx
                     break
                 continue

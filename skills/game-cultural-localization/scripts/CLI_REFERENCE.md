@@ -144,7 +144,7 @@ python make_blind_slice.py --input <table> --locale <loc> --out <path> [--key-co
 | `--locale` | recorded in the slice, also tried as the target column name of multi-locale tables |
 | `--out` | `.json` (`{locale, source_file, blind: true, entries[{key, category?, speaker?, target}]}`) or `.csv` / `.tsv` |
 | `--key-col`, `--target-col`, `--source-col` | column names (defaults `key`, auto, `en`) |
-| `--context-cols` | context columns to keep (default `category,speaker`). The source column is refused, and any context value equal to a source text aborts with exit 2 |
+| `--context-cols` | context columns to keep (default `category,speaker`). The source column is refused, and a context value equal to the row's own source line or to any source sentence of more than three words aborts with exit 2. A short name another row holds is no leak, a speaker such as `Dorian Crowe` is also the English text of the line that names him |
 | `--src-input`, `--shared-table`, `--delimiter` | Unity and CSV options |
 | `--skip-empty` | drop empty targets |
 | `--max-rows N` | batch size |
@@ -180,7 +180,7 @@ Jury flow (`--dry-run` with the offline fake provider, `--live` with the real AP
 | 2 | blind slice, J1 to J3 jury with deliberation, Pass 2 with three candidates and a blind J1 pick, `validate_critique`, change report | `blind_<loc>_NN.json`, `verdicts_<loc>_NN.json`, `rewrites_<loc>_NN.json`, `final_batch_NN.json`, `changes_<loc>_NN.json`, `changes_<loc>_NN.md` |
 | 3 | `lqa_linter`, `ui_expansion_checker`, optional `font_glyph_scanner` on the final batches | `lqa_<loc>_NN.json`, `budget.jsonl` |
 
-Validated Pass 2 lines replace the Pass 1 text in `final_batch_NN.json`, unresolved lines keep the Pass 1 text until the developer decides. When the budget cap stops the jury, the batch report is written, Phase 3 is skipped and the run exits 1.
+A line whose placeholders or rich text tags differ from its source line goes to Pass 2 as `rewrite` whatever the jury said, with the difference as its first rationale and under `evidence.parity`, since the blind jury cannot see a lost token. In the Pass 2 pick such an old line never stays. Validated Pass 2 lines replace the Pass 1 text in `final_batch_NN.json`, unresolved lines keep the Pass 1 text until the developer decides. When the budget cap stops the jury, the batch report is written, Phase 3 is skipped and the run exits 1.
 
 Legacy flow (`--provider module:function`). Any callable `complete(system: str, user: str) -> str` drives the 2.1 single critic flow (`critique_<loc>_NN.json`). Code callers keep `run_pipeline(..., DryRunProvider(locale))` for the old offline flow.
 
