@@ -4,11 +4,14 @@
 For every verdict that needs work (rewrite_light, rewrite, critical, and unresolved as a proposal)
   1. the 'pass2' model (prompts/pass2.<locale>.md) gets the English source, the current line, the
      context, the jury rationales and suggestions and the approved TM neighbours, and writes 3 candidates
-  2. the three J1 members see only the candidates (seeded order, ids c1..c3) and the context, never the
-     source, and each picks the most natural one. Most picks wins, a tie goes to the earlier candidate
+  2. the three J1 members see the candidates and the current line among them (seeded order, ids c1..c4)
+     and the context, never the source, and each picks the most natural one. Most picks wins, a tie goes
+     to the earlier candidate. When the current line wins it stays, a good line is not rewritten for nothing
   3. the winner is checked with validate_critique (critique schema, placeholder and tag parity with
      the current line). When it fails the next candidate by votes is tried. When none passes, the old
      line stays and the line is flagged
+  4. a new winner is scored once more by the three J1 members. Unless they pass it by the agreement rule
+     of the jury, the old line stays and the line is flagged for the developer
 
 Output rewrites_<locale>_<batch>.json
   {"locale", "source_file", "lines": [{key, en, old, new, status, candidates, picks, chosen, valid, problems}],
@@ -43,7 +46,8 @@ from l10n_common import (  # noqa: E402
 import validate_critique  # noqa: E402
 from build_context_map import ContextPack, load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR, infer_register  # noqa: E402
-from llm_tasks import ISSUE_TYPES, BatchMemo, add_model_args, default_budget_path, make_router, pass2_candidates, pick_candidates  # noqa: E402
+from jury import classify  # noqa: E402
+from llm_tasks import ISSUE_TYPES, BatchMemo, add_model_args, default_budget_path, make_router, pass2_candidates, pick_candidates, score_entries  # noqa: E402
 from prompt_templates import render_contrastive, render_prompt  # noqa: E402
 from text_style import sanitize_prose  # noqa: E402
 from warmup_loader import REGISTERS, load_warmup, render_warmup  # noqa: E402
@@ -120,6 +124,8 @@ def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[st
     items: List[Dict[str, Any]] = []
     id_maps: Dict[str, Dict[str, int]] = {}
     for r in rows:
+        if r["target"] not in cands[r["key"]]:  # the current line competes with the rewrites
+            cands[r["key"]] = list(cands[r["key"]]) + [r["target"]]
         texts = cands[r["key"]]
         order = list(range(len(texts)))
         rng.shuffle(order)
@@ -148,6 +154,11 @@ def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[st
         ranking = sorted(range(len(texts)), key=lambda i: (-votes.get(i, 0), i))
         chosen, problems_all, entry = None, [], None
         for idx in ranking:
+            if texts[idx] == r["target"]:  # the old line stays only when the jurors picked it, it needs no validation
+                if idx == ranking[0]:
+                    chosen = idx
+                    break
+                continue
             e = {"key": key, "score": min(int(v.get("score", 4)), 4), "issue_type": main_issue(v),
                  "reason": sanitize_prose((v.get("rationales") or ["jury flagged the line"])[0] or "jury flagged the line") or "jury flagged the line",
                  "suggested": texts[idx]}
@@ -158,14 +169,30 @@ def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[st
                 chosen, entry = idx, e
                 break
             problems_all.extend(f"{texts[idx]!r}: {p}" for p in problems)
-        if entry is not None:
+        if entry is not None and texts[chosen] != r["target"]:
             entries.append(entry)
         lines.append({"key": key, "en": r["source"], "old": r["target"], "new": texts[chosen] if chosen is not None else r["target"],
                       "status": v.get("status"), "final_tier": v.get("final_tier"), "score": v.get("score"),
                       "candidates": texts, "picks": {f"{m.family}:{m.provider.model}": texts[id_map[p[key]]] for m, p in picks_by_member},
                       "votes_per_candidate": [votes.get(i, 0) for i in range(len(texts))],
                       "chosen": chosen, "valid": chosen is not None, "problems": problems_all,
-                      "selected_by": "J1 blind pick"})
+                      "kept_by_pick": chosen is not None and texts[chosen] == r["target"], "selected_by": "J1 blind pick"})
+    # a new winner is judged once more, a rewrite nobody confirmed does not replace the line
+    recheck = [(l, r) for l, r in zip(lines, rows) if l["valid"] and l["new"] != l["old"]]
+    if recheck:
+        view = [{"key": l["key"], "target": l["new"], **{k: r[k] for k in CONTEXT_FIELDS if r.get(k)},
+                 **({"context": ctx.line(l["key"])} if ctx is not None and ctx.line(l["key"]) else {})} for l, r in recheck]
+        agreement = {k: int(x) for k, x in router.config.agreement.items()}
+        members = router.jury("J1")
+        scores = [score_entries(m.provider, view, locale, tier="J1", system=pick_system, workers=workers, memo=memo) for m in members]
+        unconfirmed = set()
+        for l, _r in recheck:
+            got = [s[l["key"]]["score"] for s in scores]
+            l["recheck"] = got
+            if classify(got, agreement) != "pass":
+                unconfirmed.add(l["key"])
+                l.update(valid=False, new=l["old"], problems=l["problems"] + [f"J1 did not confirm the rewrite (scores {got}), the old line stays"])
+        entries = [e for e in entries if e["key"] not in unconfirmed]
     critique = {"locale": locale, "source_file": source_file, "entries": entries,
                 "summary": {"total": len(verdicts), "flagged": len(entries), "critical": sum(1 for e in entries if e["score"] <= 2)}}
     return {"lines": lines, "critique": critique}

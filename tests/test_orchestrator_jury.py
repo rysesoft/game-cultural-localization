@@ -21,9 +21,9 @@ SOURCE = [
     {"key": "DLG_1", "en": "Take your time, kid. The generator is not going anywhere tonight.", "category": "dialogue", "speaker": "Mentor"},
     {"key": "TIP_1", "en": "Press <b>X</b> to use {0}", "category": "tutorial"},
 ]
-SCENARIO = {"scores": [{"key": "DLG_1", "tier": "J1", "score": 3, "issue_type": "translationese", "reason": "English word order"},
-                       {"key": "DLG_1", "tier": "J2", "score": 3, "issue_type": "translationese", "reason": "still a calque"},
-                       {"key": "DLG_1", "tier": "J3", "score": 3, "issue_type": "translationese", "reason": "agreed calque"}],
+SCENARIO = {"scores": [{"key": "DLG_1", "contains": "[tr-TR]", "tier": "J1", "score": 3, "issue_type": "translationese", "reason": "English word order"},
+                       {"key": "DLG_1", "contains": "[tr-TR]", "tier": "J2", "score": 3, "issue_type": "translationese", "reason": "still a calque"},
+                       {"key": "DLG_1", "contains": "[tr-TR]", "tier": "J3", "score": 3, "issue_type": "translationese", "reason": "agreed calque"}],
             "pass2": [{"key": "DLG_1", "candidates": ["Acele etme evlat, jeneratör bu gece hiçbir yere kaçmıyor.",
                                                      "Yavaş ol evlat, jeneratör kaçmıyor ya.", "Sakin evlat, jeneratör burada."]}],
             "picks": [{"contains": "Acele etme", "prefer": "Acele etme"}]}

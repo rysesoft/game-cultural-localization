@@ -558,8 +558,9 @@ python pass2_rewrite.py verdicts_tr-TR_01.json --source-table pass1_tr-TR_01.jso
 For every verdict with status `rewrite_light`, `rewrite`, `critical` or `unresolved` (the last one as a proposal for the developer).
 
 1. The `pass2` model (default Opus) writes three different candidates with `prompts/pass2.<locale>.md` (a native prompt for each of the 15 locales, `pass2.generic.md` only as a fallback). It sees the English source, the current line, the context, the jury rationales and suggestions and the closest approved translation memory lines.
-2. The three J1 members see only the candidates (seeded order, ids `c1` to `c3`) and the context, never the source, and each picks the most natural one. Most picks wins, a tie goes to the earlier candidate.
-3. The winner goes through `validate_critique` (fixed critique schema, placeholder and tag parity with the current line, not identical to it). When it fails, the next candidate by votes is tried. When none passes, the old line stays and the line is reported.
+2. The three J1 members see the candidates and the current line among them (seeded order, ids `c1` to `c4`) and the context, never the source, and each picks the most natural one. Most picks wins, a tie goes to the earlier candidate. When the current line wins it stays (`kept_by_pick`), a line the jurors still prefer is not rewritten for nothing.
+3. A new winner goes through `validate_critique` (fixed critique schema, placeholder and tag parity with the current line, not identical to it). When it fails, the next candidate by votes is tried. When none passes, the old line stays and the line is reported.
+4. A new winner is scored once more by the three J1 members (`recheck`). Unless they pass it by the jury's agreement rule, the old line stays and the line is reported to the developer, a rewrite nobody confirmed never replaces a line.
 
 | Flag | Meaning |
 |---|---|

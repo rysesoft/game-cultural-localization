@@ -78,14 +78,15 @@ class RewriteTests(unittest.TestCase):
         res = run()
         lines = {l["key"]: l for l in res["lines"]}
         self.assertEqual(set(lines), {"DLG", "PH", "BAD"})                  # pass lines are left alone
-        self.assertTrue(all(len(l["candidates"]) == 3 for l in lines.values()))
+        self.assertTrue(all(len(l["candidates"]) == 4 for l in lines.values()))   # three rewrites and the current line
         dlg = lines["DLG"]
-        self.assertEqual(dlg["candidates"], ["Acele etme evlat.", "Acele etme evlat. (2)", "Acele etme evlat. (3)"])
-        self.assertEqual(dlg["votes_per_candidate"], [0, 2, 1])            # majority of the three J1 members
+        self.assertEqual(dlg["candidates"], ["Acele etme evlat.", "Acele etme evlat. (2)", "Acele etme evlat. (3)", "Zamanını al, çocuk."])
+        self.assertEqual(dlg["votes_per_candidate"], [0, 2, 1, 0])         # majority of the three J1 members
+        self.assertEqual(dlg["recheck"], [5, 5, 5])                          # the new winner is judged once more
         self.assertEqual(dlg["new"], "Acele etme evlat. (2)")
         self.assertTrue(dlg["valid"])
         ph = lines["PH"]
-        self.assertEqual(ph["votes_per_candidate"], [3, 0, 0])
+        self.assertEqual(ph["votes_per_candidate"], [3, 0, 0, 0])
         self.assertEqual(ph["new"], "{0} hemen kullan")                     # top pick lost the placeholder, next one is valid
         self.assertTrue(any("placeholder" in p for p in ph["problems"]))
         bad = lines["BAD"]
@@ -109,7 +110,20 @@ class RewriteTests(unittest.TestCase):
         for s in SOURCES.values():
             self.assertNotIn(s["en"], blob)
         self.assertTrue(all(set(c) == {"id", "text"} for it in seen for c in it["candidates"]))
-        self.assertEqual({c["id"] for c in seen[0]["candidates"]}, {"c1", "c2", "c3"})
+        self.assertEqual({c["id"] for c in seen[0]["candidates"]}, {"c1", "c2", "c3", "c4"})
+
+    def test_the_current_line_can_win_and_a_rewrite_must_be_confirmed(self):
+        # a line the jurors still prefer stays, and a winner the J1 jurors do not pass again does not replace the line
+        sc = dict(SCENARIO, picks=[{"contains": "Zamanını al", "prefer": "Zamanını al"}] + SCENARIO["picks"])
+        lines = {l["key"]: l for l in run(sc)["lines"]}
+        self.assertTrue(lines["DLG"]["kept_by_pick"])
+        self.assertEqual((lines["DLG"]["new"], lines["DLG"]["valid"]), ("Zamanını al, çocuk.", True))
+        sc = dict(SCENARIO, scores=[{"contains": "hemen kullan", "tier": "J1", "score": 3, "reason": "stiff"}])
+        res = run(sc)
+        ph = {l["key"]: l for l in res["lines"]}["PH"]
+        self.assertEqual((ph["new"], ph["valid"], ph["recheck"]), ("{0} şimdi kullan", False, [3, 3, 3]))
+        self.assertIn("did not confirm", ph["problems"][-1])
+        self.assertNotIn("PH", [e["key"] for e in res["critique"]["entries"]])
 
     def test_candidate_order_is_seeded(self):
         a = run(seed=1)
