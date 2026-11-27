@@ -269,6 +269,9 @@ def json_object(text: str, label: str) -> Dict[str, Any]:
     return data
 
 
+STREAM_DONE = {"__done__": True}   # the "data: [DONE]" line that ends an OpenAI compatible stream (DeepSeek)
+
+
 def sse_events(text: str, label: str = "provider") -> List[Dict[str, Any]]:
     """The JSON data of every event of a Server-Sent Events body, in order. Comments and pings without data are skipped."""
     events: List[Dict[str, Any]] = []
@@ -276,6 +279,10 @@ def sse_events(text: str, label: str = "provider") -> List[Dict[str, Any]]:
 
     def flush() -> None:
         if not data:
+            return
+        if "\n".join(data).strip() == "[DONE]":
+            events.append(dict(STREAM_DONE))
+            data.clear()
             return
         try:
             item = json.loads("\n".join(data))
@@ -392,6 +399,11 @@ class HttpProvider:
     def _decode(self, text: str, headers: Dict[str, str]) -> Dict[str, Any]:
         """The 2xx reply body as a dict. A streaming adapter assembles its event stream here."""
         return json_object(text, f"{self.name}/{self.model}")
+
+    @staticmethod
+    def _is_stream(text: str, headers: Dict[str, str]) -> bool:
+        """An event stream (content type, or the first line of the body when a transport drops the headers)."""
+        return "text/event-stream" in headers.get("content-type", "") or text.lstrip().startswith(("event:", "data:", ":"))
 
     def _parse(self, data: Dict[str, Any]) -> Tuple[Any, ...]:
         """(text, input_tokens, output_tokens) or (text, input_tokens, output_tokens, cache_read, cache_write)."""

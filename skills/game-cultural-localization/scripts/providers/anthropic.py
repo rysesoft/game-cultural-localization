@@ -52,7 +52,7 @@ class AnthropicProvider(HttpProvider):
                 "stream": True}
 
     def _decode(self, text: str, headers: Dict[str, str]) -> Dict[str, Any]:
-        if "text/event-stream" in headers.get("content-type", "") or text.lstrip().startswith(("event:", "data:", ":")):
+        if self._is_stream(text, headers):
             return assemble_stream(text, f"{self.name}/{self.model}")
         return super()._decode(text, headers)
 

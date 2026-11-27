@@ -77,6 +77,33 @@ STREAM_BODY = (
 )
 ANTHROPIC_STREAM = sse(STREAM_START, *STREAM_BODY, {"type": "message_stop"})
 SSE_HEADERS = {"content-type": "text/event-stream; charset=utf-8"}
+
+
+def data_sse(*events: Any) -> bytes:
+    """data-only events, as Gemini and DeepSeek stream them ('[DONE]' is passed as the plain string)."""
+    return "".join(f"data: {e if isinstance(e, str) else json.dumps(e)}\r\n\r\n" for e in events).encode("utf-8")
+
+
+# the shapes of a live probe on 2026-11-27 (gemini-4-hydrogen and deepseek-flash, one short JSON reply each)
+_G_USAGE = {"promptTokenCount": 121, "candidatesTokenCount": 11, "totalTokenCount": 254, "thoughtsTokenCount": 122}
+GOOGLE_EVENTS = (
+    {"candidates": [{"content": {"parts": [{"text": "{\"word\": \""}], "role": "model"}, "index": 0}],
+     "usageMetadata": dict(_G_USAGE, candidatesTokenCount=4)},
+    {"candidates": [{"content": {"parts": [{"text": "gemi\"}"}], "role": "model"}, "index": 0}], "usageMetadata": dict(_G_USAGE, candidatesTokenCount=7)},
+    {"candidates": [{"content": {"parts": [{"text": "", "thoughtSignature": "EsoE"}], "role": "model"}, "finishReason": "STOP", "index": 0}],
+     "usageMetadata": _G_USAGE},
+)
+GOOGLE_STREAM = data_sse(*GOOGLE_EVENTS)
+_D = {"id": "x", "object": "chat.completion.chunk", "model": "deepseek-flash"}
+DEEPSEEK_EVENTS = (
+    dict(_D, choices=[{"index": 0, "delta": {"role": "assistant", "content": None, "reasoning_content": ""}, "finish_reason": None}], usage=None),
+    dict(_D, choices=[{"index": 0, "delta": {"content": None, "reasoning_content": "We need"}, "finish_reason": None}], usage=None),
+    dict(_D, choices=[{"index": 0, "delta": {"content": "{\"word\": \"g", "reasoning_content": None}, "finish_reason": None}], usage=None),
+    dict(_D, choices=[{"index": 0, "delta": {"content": "emi\"}", "reasoning_content": None}, "finish_reason": None}], usage=None),
+    dict(_D, choices=[{"index": 0, "delta": {"content": "", "reasoning_content": None}, "finish_reason": "stop"}],
+         usage={"prompt_tokens": 70, "completion_tokens": 37, "prompt_cache_hit_tokens": 64, "prompt_cache_miss_tokens": 6}),
+)
+DEEPSEEK_STREAM = data_sse(*DEEPSEEK_EVENTS, "[DONE]")
 GOOGLE_OK = {"candidates": [{"content": {"parts": [{"text": "merhaba"}]}}], "usageMetadata": {"promptTokenCount": 9, "candidatesTokenCount": 2, "thoughtsTokenCount": 5}}
 DEEPSEEK_OK = {"choices": [{"message": {"content": "hallo"}}], "usage": {"prompt_tokens": 7, "completion_tokens": 4}}
 
@@ -231,7 +258,7 @@ class HttpAdapterTests(unittest.TestCase):
         p, t, _ = self._make("google", [(200, GOOGLE_OK, {})], model="gemini-4-neon")
         res = p.complete("SYS", "USER", json_mode=True)
         req = t.requests[0]
-        self.assertEqual(req["url"], "https://generativelanguage.googleapis.com/v1beta/models/gemini-4-neon:generateContent")
+        self.assertEqual(req["url"], "https://generativelanguage.googleapis.com/v1beta/models/gemini-4-neon:streamGenerateContent?alt=sse")
         self.assertEqual(req["headers"]["x-goog-api-key"], "secret-key-123")   # header, never the URL
         self.assertNotIn("secret-key-123", req["url"])
         self.assertEqual(req["body"]["systemInstruction"], {"parts": [{"text": "SYS"}]})
@@ -253,12 +280,40 @@ class HttpAdapterTests(unittest.TestCase):
         self.assertEqual(req["headers"]["Authorization"], "Bearer secret-key-123")
         self.assertEqual(req["body"]["messages"], [{"role": "system", "content": "SYS"}, {"role": "user", "content": "USER"}])
         self.assertEqual(req["body"]["response_format"], {"type": "json_object"})
+        self.assertEqual((req["body"]["stream"], req["body"]["stream_options"]), (True, {"include_usage": True}))
         self.assertNotIn("thinking", req["body"])
         self.assertEqual((res.text, res.input_tokens, res.output_tokens), ("hallo", 7, 4))
         p2, t2, _ = self._make("deepseek", [(200, DEEPSEEK_OK, {})], options={"thinking": False})
         p2.complete("s", "u")
         self.assertEqual(t2.requests[0]["body"]["thinking"], {"type": "disabled"})
         self.assertEqual(req["body"]["max_tokens"], 393216)   # the API's own maximum, thinking counts against it
+
+    def test_google_and_deepseek_streams_are_assembled(self):
+        p, _, _ = self._make("google", [(200, GOOGLE_STREAM, SSE_HEADERS)], model="gemini-4-hydrogen")
+        res = p.complete("S", "U", json_mode=True)
+        self.assertEqual((res.text, res.input_tokens, res.output_tokens), ("{\"word\": \"gemi\"}", 121, 133))   # 11 + 122 thoughts
+        p, _, _ = self._make("deepseek", [(200, DEEPSEEK_STREAM, SSE_HEADERS)], model="deepseek-flash")
+        res = p.complete("S", "U", json_mode=True)
+        self.assertEqual((res.text, res.input_tokens, res.output_tokens, res.cache_read_tokens), ("{\"word\": \"gemi\"}", 70, 37, 64))
+        p, _, _ = self._make("deepseek", [(200, b": keep-alive\n\n" + DEEPSEEK_STREAM, {})], model="deepseek-flash")
+        self.assertEqual(p.complete("S", "U").text, "{\"word\": \"gemi\"}")   # a keep-alive comment and no content type
+        blocked = data_sse({"promptFeedback": {"blockReason": "SAFETY"}, "usageMetadata": {"promptTokenCount": 5}})
+        p, t, _ = self._make("google", [(200, blocked, SSE_HEADERS)], model="gemini-4-hydrogen")
+        with self.assertRaises(ProviderError) as ctx:
+            p.complete("S", "U")
+        self.assertIn("SAFETY", str(ctx.exception))
+        self.assertEqual(len(t.requests), 1)                                    # a blocked prompt is not asked again
+
+    def test_broken_google_and_deepseek_streams_are_retried(self):
+        cases = (("google", data_sse(*GOOGLE_EVENTS[:2]), GOOGLE_STREAM),                       # no finishReason
+                 ("google", data_sse(GOOGLE_EVENTS[0], {"error": {"code": 503, "status": "UNAVAILABLE", "message": "overloaded"}}), GOOGLE_STREAM),
+                 ("deepseek", data_sse(*DEEPSEEK_EVENTS), DEEPSEEK_STREAM),                     # no [DONE]
+                 ("deepseek", data_sse(*DEEPSEEK_EVENTS[:3]), DEEPSEEK_STREAM),                 # cut before finish_reason
+                 ("deepseek", DEEPSEEK_STREAM[:-60], DEEPSEEK_STREAM))                          # cut inside the last chunk
+        for name, broken, good in cases:
+            p, t, sleeps = self._make(name, [(200, broken, SSE_HEADERS), (200, good, SSE_HEADERS)])
+            self.assertEqual(p.complete("s", "u").text, "{\"word\": \"gemi\"}", name)
+            self.assertEqual((len(t.requests), [s for s in sleeps if s >= 1.0]), (2, [1.0]), name)
 
     def test_every_call_asks_for_the_models_own_maximum(self):
         # fixed floors of 16000 and 32000 cut Gemini, DeepSeek and claude-haiku-5-5 in live runs
@@ -395,16 +450,14 @@ class _MockApi(BaseHTTPRequestHandler):
                     self.wfile.write(event + b"\n\n")
                     self.wfile.flush()
             return
-        if self.path.startswith("/google"):
-            out = GOOGLE_OK
-        else:
-            out = DEEPSEEK_OK
-        raw = json.dumps(out).encode("utf-8")
+        stream = GOOGLE_STREAM if self.path.startswith("/google") else DEEPSEEK_STREAM   # all three stream now
         self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.end_headers()
-        self.wfile.write(raw)
+        for event in stream.split(b"\r\n\r\n"):
+            if event.strip():
+                self.wfile.write(event + b"\r\n\r\n")
+                self.wfile.flush()
 
 
 class UrllibIntegrationTests(unittest.TestCase):
@@ -433,12 +486,12 @@ class UrllibIntegrationTests(unittest.TestCase):
             d = get_provider("deepseek", "deepseek-flash", api_key="k3", endpoint=self.base + "/deepseek", rps=1000)
             res = a.complete("s", "u")                                  # first call gets a 429 and is retried
             self.assertEqual((res.text, res.input_tokens, res.output_tokens), ("{\"ok\": true}", 4374, 57))   # read from the stream
-            self.assertEqual(g.complete("s", "u").text, "merhaba")
-            self.assertEqual(d.complete("s", "u").text, "hallo")
+            self.assertEqual((g.complete("s", "u").text, d.complete("s", "u").text), ("{\"word\": \"gemi\"}",) * 2)
         paths = [s["path"] for s in _MockApi.seen]
         self.assertEqual(paths[0], paths[1])  # retried request
         self.assertIs(_MockApi.seen[1]["body"]["stream"], True)
-        self.assertIn("/google/models/gemini-4-neon:generateContent", paths)
+        self.assertIn("/google/models/gemini-4-neon:streamGenerateContent?alt=sse", paths)
+        self.assertIs(_MockApi.seen[-1]["body"]["stream"], True)
         google_req = next(s for s in _MockApi.seen if s["path"].startswith("/google/"))
         self.assertEqual(google_req["headers"]["x-goog-api-key"], "k2")
         self.assertEqual(_MockApi.seen[0]["headers"]["x-api-key"], "k1")
