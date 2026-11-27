@@ -77,6 +77,7 @@ class ModelSpec(NamedTuple):
     fallback_thinking: bool
     price_cache_read: Optional[float] = None    # USD per 1M prompt tokens served from the cache, None = price_in
     price_cache_write: Optional[float] = None   # USD per 1M prompt tokens written to the cache, None = price_in
+    max_output_tokens: Optional[int] = None     # the model's own output maximum, every call asks for it, None = adapter default
 
 
 class ProvidersConfig:
@@ -90,7 +91,7 @@ class ProvidersConfig:
         for alias, m in data["models"].items():
             self.models[alias] = ModelSpec(alias, m["provider"], m["id"], m.get("price_in"), m.get("price_out"),
                                            m.get("fallback"), bool(m.get("fallback_thinking", False)),
-                                           m.get("price_cache_read"), m.get("price_cache_write"))
+                                           m.get("price_cache_read"), m.get("price_cache_write"), m.get("max_output_tokens"))
         self.roles: Dict[str, Union[str, List[str]]] = data["roles"]
         self.agreement: Dict[str, Any] = {**_DEFAULTS["agreement"], **(data.get("agreement") or {})}
         self.budget_caps: Dict[str, Any] = {**_DEFAULTS["budget_caps"], **(data.get("budget_caps") or {})}
@@ -166,6 +167,9 @@ def load_providers_config(path: Optional[Path] = None) -> ProvidersConfig:
         for pk in ("price_in", "price_out", "price_cache_read", "price_cache_write"):
             if not _num_or_none(m.get(pk)):
                 raise L10nError(f"{path}: models.{alias}.{pk} must be a number >= 0 or null (USD per 1M tokens)")
+        mo = m.get("max_output_tokens")
+        if mo is not None and (not isinstance(mo, int) or isinstance(mo, bool) or mo < 1):
+            raise L10nError(f"{path}: models.{alias}.max_output_tokens must be a whole number >= 1 (the model's own output maximum)")
         fb = m.get("fallback")
         if fb is not None:
             if fb not in data["models"] or fb == alias:
@@ -352,6 +356,8 @@ class Router:
         options: Dict[str, Any] = {}
         if spec.provider == "deepseek":
             options["thinking"] = self._thinking(spec, role, force_thinking)
+        if spec.max_output_tokens:
+            options["max_output_tokens"] = spec.max_output_tokens
         kwargs: Dict[str, Any] = {"api_key": str(self.env.get(pconf["env_key"], "")).strip(), "endpoint": pconf["endpoint"],
                                   "rps": float(pconf["rps"]), "options": options}
         if self.transport is not None:

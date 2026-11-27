@@ -136,12 +136,12 @@ class HttpAdapterTests(unittest.TestCase):
         self.assertEqual(req["body"]["messages"], [{"role": "user", "content": "USER"}])
         self.assertNotIn("cache_control", json.dumps(req["body"]["messages"]))   # the per batch user turn is never marked
         self.assertNotIn("temperature", req["body"])                       # current Claude models reject sampling parameters
-        self.assertEqual(req["body"]["max_tokens"], 16000)                  # room for thinking, a larger request keeps its own value
+        self.assertEqual(req["body"]["max_tokens"], 128000)                 # the model's own maximum, haiku was cut at 16000 live
         thinking_reply = {"content": [{"type": "thinking", "thinking": "", "signature": "x"}, {"type": "text", "text": "{\"ok\": true}"}],
                           "usage": {"input_tokens": 12, "output_tokens": 40}}
         p2, t2, _ = self._make("anthropic", [(200, thinking_reply, {})], model="claude-opus-5-5")
         res2 = p2.complete("SYS", "USER", max_tokens=32000)
-        self.assertEqual(t2.requests[0]["body"]["max_tokens"], 32000)
+        self.assertEqual(t2.requests[0]["body"]["max_tokens"], 128000)
         self.assertEqual(res2.text, "{\"ok\": true}")                     # thinking blocks are skipped
         self.assertEqual((res.text, res.input_tokens, res.output_tokens, res.model), ("{\"ok\": true}", 12, 3, "claude-haiku-5-5"))
         self.assertNotIn("secret", repr(p))
@@ -207,21 +207,36 @@ class HttpAdapterTests(unittest.TestCase):
         p2, t2, _ = self._make("deepseek", [(200, DEEPSEEK_OK, {})], options={"thinking": False})
         p2.complete("s", "u")
         self.assertEqual(t2.requests[0]["body"]["thinking"], {"type": "disabled"})
-        self.assertEqual(req["body"]["max_tokens"], 32000)   # thinking counts against the limit, v4-pro filled 16000 live
+        self.assertEqual(req["body"]["max_tokens"], 393216)   # the API's own maximum, thinking counts against it
 
-    def test_every_adapter_leaves_room_for_thinking(self):
-        for name, reply, field, floor in (("anthropic", ANTHROPIC_OK, ("max_tokens",), 16000), ("deepseek", DEEPSEEK_OK, ("max_tokens",), 32000),
-                                          ("google", GOOGLE_OK, ("generationConfig", "maxOutputTokens"), 32000)):  # gemini-4-carbon hit 16000 live
-            p, t, _ = self._make(name, [(200, reply, {}), (200, reply, {})])
+    def test_every_call_asks_for_the_models_own_maximum(self):
+        # fixed floors of 16000 and 32000 cut Gemini, DeepSeek and claude-haiku-5-5 in live runs
+        for name, reply, field, top in (("anthropic", ANTHROPIC_OK, ("max_tokens",), 128000), ("deepseek", DEEPSEEK_OK, ("max_tokens",), 393216),
+                                        ("google", GOOGLE_OK, ("generationConfig", "maxOutputTokens"), 1000000)):
+            p, t, _ = self._make(name, [(200, reply, {}), (200, reply, {}), (200, reply, {})])
             p.complete("s", "u", max_tokens=1024)
             p.complete("s", "u", max_tokens=40000)
+            p.options["max_output_tokens"] = 64000            # what the config names for a model wins
+            p.complete("s", "u", max_tokens=1024)
             got = []
             for r in t.requests:
                 v = r["body"]
                 for f in field:
                     v = v[f]
                 got.append(v)
-            self.assertEqual(got, [floor, 40000], name)
+            self.assertEqual(got, [top, top, 64000], name)
+
+    def test_config_max_output_tokens(self):
+        cfg = load_providers_config()
+        self.assertEqual({s.provider: s.max_output_tokens for s in cfg.models.values()},
+                         {"anthropic": 128000, "google": 1000000, "deepseek": 393216})
+        router = Router(cfg, env={"ANTHROPIC_API_KEY": "a", "GOOGLE_API_KEY": "g", "DEEPSEEK_API_KEY": "d"})
+        self.assertEqual(router.for_role("pass2")._impl.options["max_output_tokens"], 128000)
+        with TempDir() as td:
+            data = json.loads((SCRIPTS / "providers.config.json").read_text(encoding="utf-8"))
+            data["models"]["haiku"]["max_output_tokens"] = "lots"
+            with self.assertRaises(L10nError):
+                load_providers_config(write_json(td / "p.json", data))
 
     def test_bundled_config_runs_mechanical_deepseek_roles_without_thinking(self):
         cfg = load_providers_config()

@@ -8,8 +8,8 @@ body {systemInstruction: {parts: [{text}]}, contents: [{role: "user", parts: [{t
 The key travels in the x-goog-api-key header, as in Google's own examples. That works for the classic
 project keys and for the auth keys AI Studio creates since May 2026, and keeps the key out of URLs.
 Gemini 4 models think before they answer and the thoughts count against maxOutputTokens, so every request
-asks for at least GOOGLE_MIN_MAX_TOKENS. In the first live calibration gemini-4-carbon hit a 16000 ceiling
-on a 40 line batch, so Gemini gets twice the shared floor. Thought parts are skipped when the reply is read.
+asks for the model's own output maximum (GOOGLE_MAX_OUTPUT unless the config names one). Gemini 4 accepts any
+value and caps it itself, checked live up to 10000000. Thought parts are skipped when the reply is read.
 """
 
 from __future__ import annotations
@@ -17,9 +17,7 @@ from __future__ import annotations
 import urllib.parse
 from typing import Any, Dict, Optional, Tuple
 
-from .base import MIN_MAX_TOKENS, HttpProvider, ProviderError
-
-GOOGLE_MIN_MAX_TOKENS = 2 * MIN_MAX_TOKENS  # 32000, Gemini accepts up to 65536
+from .base import GOOGLE_MAX_OUTPUT, HttpProvider, ProviderError
 
 
 class GoogleProvider(HttpProvider):
@@ -38,7 +36,7 @@ class GoogleProvider(HttpProvider):
         return {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
-            "generationConfig": {"temperature": float(temperature), "maxOutputTokens": max(int(max_tokens), GOOGLE_MIN_MAX_TOKENS),
+            "generationConfig": {"temperature": float(temperature), "maxOutputTokens": self.max_output(GOOGLE_MAX_OUTPUT),
                                  "responseMimeType": "application/json" if json_mode else "text/plain"},
         }
 

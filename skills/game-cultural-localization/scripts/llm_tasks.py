@@ -34,6 +34,10 @@ from providers import envelope, extract_json  # noqa: E402
 from providers.base import ProviderError  # noqa: E402
 
 KEYED_ATTEMPTS = 3  # one call and up to two re-asks for missing ids, an empty or broken reply counts as a failed attempt
+# Items still unanswered after every attempt are split in halves and asked again, at most twice (40, 20, 10).
+# A long batch can make a model think until its reply is cut at the output limit, smaller halves fit. A
+# provider error on the last attempt is not split, an outage must not fan out into many small calls.
+SPLIT_DEPTH = 2
 
 T = TypeVar("T")
 
@@ -161,15 +165,17 @@ def system_for(task: str, locale: str, template: Optional[str] = None) -> str:
 
 def _call_keyed(provider: Any, system: str, task: str, base_payload: Dict[str, Any], items: List[Dict[str, Any]],
                 list_field: str, reply_field: str, id_field: str, accept: Callable[[Dict[str, Any]], bool],
-                max_tokens: int) -> Dict[str, Dict[str, Any]]:
+                max_tokens: int, split_depth: int = SPLIT_DEPTH) -> Dict[str, Dict[str, Any]]:
     """Call, re-ask for missing ids up to KEYED_ATTEMPTS in total, return id -> reply item.
 
     A provider error that survived the transport retries (for example a 200 reply without choices)
     and a reply that is not JSON both count as a failed attempt instead of ending the whole run.
+    Items still missing after that are asked again in two halves (SPLIT_DEPTH levels at most).
     """
     got: Dict[str, Dict[str, Any]] = {}
     pending = items
     last_error = ""
+    provider_failed = False
     for _attempt in range(KEYED_ATTEMPTS):
         payload = dict(base_payload)
         payload["task"] = task
@@ -178,17 +184,27 @@ def _call_keyed(provider: Any, system: str, task: str, base_payload: Dict[str, A
             res = provider.complete(system, envelope(INSTRUCTIONS[task], payload), max_tokens=max_tokens, json_mode=True)
         except ProviderError as exc:
             last_error = str(exc)
+            provider_failed = True
             continue
+        provider_failed = False
         try:
             data = extract_json(res.text)
         except L10nError:
             data = {}
+            last_error = (f"reply is not valid JSON after {getattr(res, 'output_tokens', '?')} output tokens, "
+                          "a reply cut off at the output limit looks like this")
         for item in (data.get(reply_field) or []) if isinstance(data, dict) else []:
             if isinstance(item, dict) and str(item.get(id_field)) in {str(p[id_field]) for p in pending} and accept(item):
                 got[str(item[id_field])] = item
         pending = [p for p in pending if str(p[id_field]) not in got]
         if not pending:
             return got
+    if not provider_failed and split_depth > 0 and len(pending) > 1:
+        mid = len(pending) // 2
+        for half in (pending[:mid], pending[mid:]):
+            got.update(_call_keyed(provider, system, task, base_payload, half, list_field, reply_field, id_field, accept,
+                                   max_tokens, split_depth - 1))
+        return got
     model = getattr(provider, "model", "?")
     raise L10nError(f"{task}: model {model} returned no valid answer for {len(pending)} item(s), first ids "
                     + ", ".join(str(p[id_field]) for p in pending[:5]) + (f" (last error: {last_error})" if last_error else ""))

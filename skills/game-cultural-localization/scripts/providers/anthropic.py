@@ -6,8 +6,11 @@ body     {model, system: [{type: "text", text, cache_control}], messages: [{role
 
 Current Claude models reject sampling parameters (a 'temperature' returns HTTP 400), so none is sent.
 They also think before they answer (Opus 5.5 always, Sonnet and Haiku 5.5 adaptively) and the thinking
-counts against max_tokens, so every request asks for at least MIN_MAX_TOKENS. Only generated tokens are
-billed, the higher ceiling costs nothing by itself. Thinking blocks are skipped, only text blocks are read.
+counts against max_tokens, so every request asks for the model's own output maximum (ANTHROPIC_MAX_OUTPUT,
+128000 for the Claude 5.5 models as the API states it, unless the config names one). Only generated tokens are
+billed, the ceiling costs nothing by itself. With the context map claude-haiku-5-5 thought for about 15800
+tokens on a batch of long letters and its JSON was cut at a 16000 ceiling three times in a row. Thinking blocks
+are skipped, only text blocks are read.
 
 Prompt caching is opt-in at Anthropic (checked live, no marker means no cache). The system prompt (critic or
 Pass 2 prompt with warm-up and few-shots, about 4300 tokens) is the same for every batch of a run, so it goes
@@ -21,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Tuple
 
-from .base import JSON_ONLY_HINT, MIN_MAX_TOKENS, HttpProvider, ProviderError
+from .base import ANTHROPIC_MAX_OUTPUT, JSON_ONLY_HINT, HttpProvider, ProviderError
 
 ANTHROPIC_VERSION = "2023-06-01"
 
@@ -37,7 +40,7 @@ class AnthropicProvider(HttpProvider):
     def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> Dict[str, Any]:
         sys_text = system + ("\n\n" + JSON_ONLY_HINT if json_mode else "")
         return {"model": self.model, "system": [{"type": "text", "text": sys_text, "cache_control": {"type": "ephemeral"}}],
-                "messages": [{"role": "user", "content": user}], "max_tokens": max(int(max_tokens), MIN_MAX_TOKENS)}
+                "messages": [{"role": "user", "content": user}], "max_tokens": self.max_output(ANTHROPIC_MAX_OUTPUT)}
 
     def _parse(self, data: Dict[str, Any]) -> Tuple[Any, ...]:
         blocks = data.get("content")

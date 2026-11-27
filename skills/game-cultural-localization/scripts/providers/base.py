@@ -34,10 +34,15 @@ RATE_LIMIT_CAP_S = 120.0
 _RETRY_DELAY = re.compile(r'"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"')
 DEFAULT_TIMEOUT_S = 600.0   # a long JSON answer after thinking can take minutes, 10 minutes like the vendor SDKs
 # Current models of all three families think before they answer and the thinking counts against the output
-# limit. Every adapter asks for at least this many tokens so a batch answer is never cut off. Only generated
-# tokens are billed, the ceiling itself costs nothing. Checked live: Claude, DeepSeek (up to 131072) and
-# Gemini (up to 65536) accept it.
-MIN_MAX_TOKENS = 16000
+# limit. Every call asks for the model's own output maximum (max_output_tokens in providers.config.json, else
+# the adapter default), whatever max_tokens the caller passes, so a reply is never cut while a model thinks.
+# Only generated tokens are billed, the ceiling itself costs nothing. Fixed floors of 16000 and 32000 cut
+# Gemini, DeepSeek and finally claude-haiku-5-5 (about 15800 thinking tokens on 40 long letters) in live runs.
+# Measured live on 2026-11-27: Claude 5.5 models 128000 and DeepSeek 393216 (the API states both when asked
+# for more), Gemini 4 accepts any value and caps it at its own maximum.
+ANTHROPIC_MAX_OUTPUT = 128000
+DEEPSEEK_MAX_OUTPUT = 393216
+GOOGLE_MAX_OUTPUT = 1000000
 PAYLOAD_SEP = "\n---\n"     # user prompt = instruction + PAYLOAD_SEP + JSON payload
 OFFLINE_ENV = "GCL_OFFLINE"  # "1" refuses every network call (tests set it as a safety net)
 
@@ -321,6 +326,11 @@ class HttpProvider:
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(model={self.model!r})"  # never shows the key
+
+    def max_output(self, default: int) -> int:
+        """The model's own output maximum: max_output_tokens of the config, else the adapter default."""
+        value = self.options.get("max_output_tokens")
+        return int(value) if value else int(default)
 
     # subclass hooks ------------------------------------------------------- #
     def _url(self) -> str:

@@ -144,6 +144,39 @@ class EvaluateTests(unittest.TestCase):
             pairwise_choices(always, [{"id": "p1", "a": "x", "b": "y"}], "tr-TR")
         self.assertEqual(always.calls, KEYED_ATTEMPTS)
         self.assertIn("no choices", str(ctx.exception))
+        outage = Flaky(99)                                                  # a provider outage is never split into small calls
+        with self.assertRaises(L10nError):
+            pairwise_choices(outage, [{"id": f"p{i}", "a": "x", "b": "y"} for i in range(8)], "tr-TR")
+        self.assertEqual(outage.calls, KEYED_ATTEMPTS)
+
+    def test_a_batch_cut_at_the_output_limit_is_split(self):
+        # live, claude-haiku-5-5 thought ~15800 tokens on 40 long letters and its JSON was cut at the 16000 ceiling three times
+        from llm_tasks import KEYED_ATTEMPTS, score_entries
+        from providers import ChatResult
+        from l10n_common import L10nError
+
+        class Verbose:
+            model = "verbose"
+
+            def __init__(self, fits: int) -> None:
+                self.fits, self.calls = fits, 0
+
+            def complete(self, system, user, **kw):
+                self.calls += 1
+                entries = json.loads(user.split("\n---\n", 1)[1])["entries"]
+                text = json.dumps({"votes": [{"key": e["key"], "score": 4, "issue_type": "translationese", "reason": "r", "suggested": "s"} for e in entries]})
+                return ChatResult(text if len(entries) <= self.fits else text[:len(text) // 3], 1, 16000, "verbose", 1)
+
+        entries = [{"key": f"e{i:02d}", "target": f"Uzun mektup {i}"} for i in range(40)]
+        ok = Verbose(10)
+        votes = score_entries(ok, entries, "tr-TR", batch_size=40)
+        self.assertEqual(sorted(votes), [e["key"] for e in entries])
+        self.assertEqual(ok.calls, KEYED_ATTEMPTS + 2 * KEYED_ATTEMPTS + 4)   # 40 fails, 2 x 20 fail, 4 x 10 answer
+        never = Verbose(0)
+        with self.assertRaises(L10nError) as ctx:
+            score_entries(never, entries, "tr-TR", batch_size=40)
+        self.assertIn("output limit", str(ctx.exception))
+        self.assertEqual(never.calls, KEYED_ATTEMPTS * 3)                 # 40, its first 20, their first 10, then it gives up at once
 
     def test_failed_model_keeps_the_others_and_resumes(self):
         from unittest import mock
