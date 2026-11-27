@@ -283,14 +283,27 @@ def _google_inlined(data: Dict[str, Any]) -> Optional[List[Any]]:
     return None
 
 
+GOOGLE_BATCH_MAX_OUTPUT = 65536  # checked live 2026-11-27, a batch request above it is refused (no decoding continuation)
+
+
 class GoogleBatchBackend(_Backend):
-    """Gemini Batch Mode with inline requests (the whole job under 20 MB)."""
+    """Gemini Batch Mode with inline requests (the whole job under 20 MB).
+
+    A real time call asks for the model's own output maximum, a batch request may ask for 65536 tokens at most.
+    The first live job was refused with HTTP 400 ("Decoding continuation is not supported for batch requests").
+    """
 
     max_bytes = 18_000_000
 
+    def _request(self, it: _Pending) -> Dict[str, Any]:
+        body = self.provider._body(it.system, it.user, it.temperature, it.max_tokens, it.json_mode)
+        gen = body.get("generationConfig")
+        if isinstance(gen, dict) and int(gen.get("maxOutputTokens") or 0) > GOOGLE_BATCH_MAX_OUTPUT:
+            gen["maxOutputTokens"] = GOOGLE_BATCH_MAX_OUTPUT
+        return body
+
     def submit(self, items: Sequence[_Pending]) -> Dict[str, Any]:
-        reqs = [{"request": self.provider._body(it.system, it.user, it.temperature, it.max_tokens, it.json_mode), "metadata": {"key": it.cid}}
-                for it in items]
+        reqs = [{"request": self._request(it), "metadata": {"key": it.cid}} for it in items]
         model = urllib.parse.quote(self.model, safe="-._")
         url = f"{self.provider.endpoint.rstrip('/')}/models/{model}:batchGenerateContent"
         data = self._post(url, {"batch": {"displayName": f"gcl-{items[0].cid}-{len(items)}", "inputConfig": {"requests": {"requests": reqs}}}})

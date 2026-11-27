@@ -343,6 +343,12 @@ class GoogleBatchTests(unittest.TestCase):
                 state["polls"] += 1
                 if state["polls"] < 2:
                     return 200, {"name": "batches/abc", "metadata": {"state": "JOB_STATE_RUNNING"}}
+                if shape == "live":  # what Gemini Batch Mode returned on 2026-11-27
+                    items = [reply(r, True) for r in state["reqs"]]
+                    return 200, {"name": "batches/abc", "done": True,
+                                 "metadata": {"state": "BATCH_STATE_SUCCEEDED", "output": {"inlinedResponses": {"inlinedResponses": items}},
+                                              "batchStats": {"requestCount": "3", "successfulRequestCount": "3"}},
+                                 "response": {"inlinedResponses": {"inlinedResponses": items}}}
                 if shape == "reference":
                     items = [reply(r, True) for r in state["reqs"]]
                     return 200, {"name": "batches/abc", "done": True, "metadata": {"state": "BATCH_STATE_SUCCEEDED"},
@@ -353,7 +359,7 @@ class GoogleBatchTests(unittest.TestCase):
         return handle
 
     def test_both_documented_result_shapes_are_read(self):
-        for shape in ("reference", "guide"):
+        for shape in ("live", "reference", "guide"):
             with self.subTest(shape=shape):
                 http = Http(self._handler(shape))
                 col = collector(self._backend(http))
@@ -364,6 +370,8 @@ class GoogleBatchTests(unittest.TestCase):
                 req = post["batch"]["inputConfig"]["requests"]["requests"][0]
                 self.assertEqual(req["request"]["systemInstruction"]["parts"][0]["text"], "SYS")
                 self.assertEqual(req["request"]["generationConfig"]["responseMimeType"], "application/json")
+                # a batch request may ask for 65536 output tokens at most, the real time maximum is refused live
+                self.assertEqual(req["request"]["generationConfig"]["maxOutputTokens"], 65536)
                 self.assertIn("key", req["metadata"])
 
     def test_a_failed_job_fails_its_callers(self):
