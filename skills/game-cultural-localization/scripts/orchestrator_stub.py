@@ -342,8 +342,13 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
                       ph_style: str = "auto", tag_style: str = "auto", batch_size: int = 50, fonts: Optional[List[Path]] = None,
                       langpack_dir: Optional[Path] = None, tm_path: Optional[Path] = None, deliberation: bool = True,
                       budget_caps: bool = True, candidates: int = 3, seed: int = 1234, workers: int = 1,
-                      context_map: Optional[Path] = None, resume: bool = True, gate: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                      context_map: Optional[Path] = None, resume: bool = True, gate: Optional[Dict[str, Any]] = None,
+                      draft_field: Optional[str] = None) -> Dict[str, Any]:
     """Phase 0-3 with the multi-family jury. Returns {'passed', 'flow', 'summary', 'log', 'finals', 'batches', 'halted', ...}.
+
+    draft_field names a column of the input that already holds a translation (a machine translation, an older
+    version). Pass 1 keeps it as it is and translates only the rows where it is empty, the jury judges the draft and
+    Pass 2 rewrites only the lines the jury flags, so the change reports show the real corrections and nothing else.
 
     workers > 1 sends model calls in parallel inside Pass 1, the jury and Pass 2, the result does not change.
     context_map is CONTEXT_MAP.md of the game. Pass 1 and Pass 2 read it with the locale appendix and the full
@@ -364,6 +369,8 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
     rows = [Row(r.key, r.dst, "", r.meta) for r in load_table(input_path, src_field, src_field, key_field, target_only=True)]
     if not rows:
         raise L10nError(f"{input_path}: no rows to localize")
+    if draft_field and not any(str(r.meta.get(draft_field) or "").strip() for r in rows):
+        raise L10nError(f"{input_path}: no row holds a draft in the column '{draft_field}'")
     state = PipelineState(locale, workdir, src_field, src_field, key_field, ph_style, tag_style)
     state.gate = dict(gate or {})
     phase0_preflight(state, rows, fonts or [])
@@ -424,8 +431,14 @@ def run_jury_pipeline(input_path: Path, locale: str, workdir: Path, router: Any,
                 if ctx is not None and ctx.line(r.key, writer=True):
                     pr["context"] = ctx.line(r.key, writer=True)
                 payload_rows.append(pr)
-            targets = translate_rows(router.for_role("pass1"), payload_rows, locale, task="pass1", system=pass1_system, memo=memo,
-                                     extra={"placeholder_style": ph_style, "tag_style": tag_style}, workers=workers)
+            drafts = {r.key: str(r.meta.get(draft_field) or "") for r in batch if str(r.meta.get(draft_field) or "").strip()} if draft_field else {}
+            todo = [pr for pr in payload_rows if pr["key"] not in drafts]
+            targets = dict(drafts)  # a draft is judged as it is, only the rows without one are translated
+            if todo:
+                targets.update(translate_rows(router.for_role("pass1"), todo, locale, task="pass1", system=pass1_system, memo=memo,
+                                              extra={"placeholder_style": ph_style, "tag_style": tag_style}, workers=workers))
+            if draft_field:
+                state.say(f"Phase 1: batch {n:02d} keeps {len(drafts)} drafts of '{draft_field}' as they are, translates {len(todo)} empty rows")
             p1 = workdir / f"pass1_batch_{n:02d}.json"
             p1_rows = [{"key": r.key, "category": r.meta.get("category", ""), "speaker": r.meta.get("speaker", ""),
                         src_field: r.src, locale: targets[r.key]} for r in batch]
@@ -533,6 +546,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--langpack-dir", default=None, help="Root of the language packs (default: the skill's langpack/)")
     ap.add_argument("--tm", default=None, help="Translation memory (tm.py SQLite) for Pass 1 RAG and jury evidence")
     ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md of the game (Phase 0 step 0), with line_notes.json and CONTEXT_MAP.<locale>.md next to it")
+    ap.add_argument("--draft-field", default=None, help="Input column that already holds a translation (a machine translation). Pass 1 keeps it, "
+                                                         "the jury judges it and Pass 2 corrects only the flagged lines")
     ap.add_argument("--no-deliberation", action="store_true", help="Leave J3 disagreements unresolved")
     ap.add_argument("--no-resume", action="store_true", help=f"Ignore the finished model batches kept in <workdir>/{RESUME_FILE} and call every model again")
     ap.add_argument("--no-budget-caps", action="store_true", help="Do not stop at the J2 or J3 escalation cap")
@@ -573,7 +588,7 @@ def main() -> int:
             tm_path=Path(args.tm) if args.tm else None, deliberation=not args.no_deliberation, budget_caps=not args.no_budget_caps,
             candidates=args.candidates, seed=args.seed, workers=args.workers,
             context_map=Path(args.context_map or cfg["context_map"]) if (args.context_map or cfg.get("context_map")) else None,
-            resume=not args.no_resume, gate=gate)
+            resume=not args.no_resume, gate=gate, draft_field=args.draft_field)
         exit_code = EXIT_OK if result["passed"] else EXIT_FINDINGS
         text = "\n".join([f"Orchestrator run (jury flow, {'dry run' if args.dry_run else 'live'}):"] + ["  " + l for l in result["log"]]
                          + [f"  NOTE: {n}" for n in result["notes"]] + [f"  Exit code: {exit_code}"])

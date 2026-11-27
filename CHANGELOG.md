@@ -4,6 +4,10 @@ All notable changes to this plugin are documented here. The version number lives
 
 ## [Unreleased]
 
+### Added
+- Language packs for Russian and German (`langpack/ru-RU/`, `langpack/de-DE/`), built from the volunteer translations of open source games and tools, no professional reference, so they are estimated. `sources.manifest.json` lists the Russian files of every source next to the German ones (17 files, each checked to exist). Russian keeps 17896 lines after the filters, German 18183, the Godot editor and Pixelorama lines ship (MIT), the GPL corpora stay on the building machine.
+- Review mode for an existing translation. `orchestrator_stub.py --draft-field <column>` keeps the translation a game already has (a machine translation, an older version) as the Pass 1 text and translates only the rows where it is empty. The jury judges the draft and Pass 2 corrects only the lines it flags, so the change reports show the real corrections and a good line stays as the game has it. Before, Pass 1 always translated again from the English source and threw the draft away.
+
 ## [3.0.0] 2026-11-27
 
 A major version, because existing setups change. The context map is the mandatory first step and Phase 0 stops without it, no term is locked in a list any more (Law 5 is now Context Decides Every Word), jurors read an English view of the map and answer the everyday word check in a vote with a new field, and the batch caches of earlier versions are not reused. The Turkish pack is now calibrated without the leak and marked estimated.

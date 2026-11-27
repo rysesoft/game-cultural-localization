@@ -30,6 +30,32 @@ SCENARIO = {"scores": [{"key": "DLG_1", "contains": "[tr-TR]", "tier": "J1", "sc
 
 
 class JuryFlowTests(unittest.TestCase):
+    def test_review_mode_judges_the_existing_translation(self):
+        # the game already holds a machine translation, the system checks it and corrects only what the jury flags
+        src = [dict(SOURCE[0], mt="İlerlemeni kaydet"), dict(SOURCE[1], mt="Zamanını al, çocuk. Jeneratör bu gece hiçbir yere gitmiyor."),
+               dict(SOURCE[2], mt="")]
+        sc = {"scores": [{"key": "DLG_1", "contains": "Zamanını al", "score": 3, "issue_type": "translationese", "reason": "English word order"}],
+              "pass2": SCENARIO["pass2"], "picks": SCENARIO["picks"]}
+        with TempDir() as td:
+            code, out, err = run_cli("orchestrator_stub.py", "--dry-run", "--locale", "tr-TR", "--input", str(write_json(td / "src.json", src)),
+                                     "--workdir", str(td / "w"), "--draft-field", "mt", "--fake-scenario", str(write_json(td / "sc.json", sc)),
+                                     "--no-budget-caps", "--langpack-dir", str(td / "np"), "--json", env_extra=NO_KEYS)
+            self.assertEqual(code, 0, err + out)
+            self.assertIn("keeps 2 drafts of 'mt' as they are, translates 1 empty rows", out)
+            w = td / "w"
+            p1 = {r["key"]: r["tr-TR"] for r in json.loads((w / "pass1_batch_01.json").read_text(encoding="utf-8"))}
+            self.assertEqual(p1, {"BTN_SAVE": "İlerlemeni kaydet", "DLG_1": src[1]["mt"], "TIP_1": "[tr-TR] Press <b>X</b> to use {0}"})
+            pass1_calls = [json.loads(l) for l in (w / "budget.jsonl").read_text(encoding="utf-8").splitlines() if json.loads(l)["role"] == "pass1"]
+            self.assertEqual(len(pass1_calls), 1)                              # only the row without a draft is translated
+            final = {r["key"]: r["tr-TR"] for r in json.loads((w / "final_batch_01.json").read_text(encoding="utf-8"))}
+            self.assertEqual((final["BTN_SAVE"], final["DLG_1"]), ("İlerlemeni kaydet", "Acele etme evlat, jeneratör bu gece hiçbir yere kaçmıyor."))
+            rep = json.loads((w / "changes_tr-TR_01.json").read_text(encoding="utf-8"))
+            self.assertEqual([(l["key"], l["old"]) for l in rep["lines"]], [("DLG_1", src[1]["mt"])])   # the draft is the old line
+            code, _, err = run_cli("orchestrator_stub.py", "--dry-run", "--locale", "tr-TR", "--input", str(td / "src.json"),
+                                   "--workdir", str(td / "w2"), "--draft-field", "nope", "--langpack-dir", str(td / "np"), env_extra=NO_KEYS)
+            self.assertEqual(code, 2)
+            self.assertIn("no row holds a draft in the column 'nope'", err)
+
     def test_dry_run_end_to_end(self):
         with TempDir() as td:
             src = write_json(td / "src.json", SOURCE)

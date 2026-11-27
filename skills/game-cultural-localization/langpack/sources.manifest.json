@@ -19,7 +19,8 @@
       "format": "po",
       "files": [
         {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/godotengine/godot/4.3-stable/editor/translations/editor/tr.po", "sha256": null},
-        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/godotengine/godot/4.3-stable/editor/translations/editor/de.po", "sha256": null}
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/godotengine/godot/4.3-stable/editor/translations/editor/de.po", "sha256": null},
+        {"locale": "ru-RU", "url": "https://raw.githubusercontent.com/godotengine/godot/4.3-stable/editor/translations/editor/ru.po", "sha256": null}
       ]
     },
     {
@@ -35,7 +36,8 @@
       "format": "po",
       "files": [
         {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/Orama-Interactive/Pixelorama/v1.0.5/Translations/tr_TR.po", "sha256": null},
-        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/Orama-Interactive/Pixelorama/v1.0.5/Translations/de_DE.po", "sha256": null}
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/Orama-Interactive/Pixelorama/v1.0.5/Translations/de_DE.po", "sha256": null},
+        {"locale": "ru-RU", "url": "https://raw.githubusercontent.com/Orama-Interactive/Pixelorama/v1.0.5/Translations/ru_RU.po", "sha256": null}
       ]
     },
     {
@@ -53,7 +55,9 @@
         {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth-lib/tr.po", "sha256": null},
         {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth/tr.po", "sha256": null},
         {"locale": "de-DE", "url": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth-lib/de.po", "sha256": null},
-        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth/de.po", "sha256": null}
+        {"locale": "ru-RU", "url": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth-lib/ru.po", "sha256": null},
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth/de.po", "sha256": null},
+        {"locale": "ru-RU", "url": "https://raw.githubusercontent.com/wesnoth/wesnoth/1.18.4/po/wesnoth/ru.po", "sha256": null}
       ]
     },
     {
@@ -69,7 +73,9 @@
       "format": "po",
       "files": [
         {"locale": "de-DE", "url": "https://raw.githubusercontent.com/0ad/0ad/A26/binaries/data/mods/public/l10n/de.public-gui-ingame.po", "sha256": null},
-        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/0ad/0ad/A26/binaries/data/mods/public/l10n/de.public-tutorials.po", "sha256": null}
+        {"locale": "ru-RU", "url": "https://raw.githubusercontent.com/0ad/0ad/A26/binaries/data/mods/public/l10n/ru.public-gui-ingame.po", "sha256": null},
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/0ad/0ad/A26/binaries/data/mods/public/l10n/de.public-tutorials.po", "sha256": null},
+        {"locale": "ru-RU", "url": "https://raw.githubusercontent.com/0ad/0ad/A26/binaries/data/mods/public/l10n/ru.public-tutorials.po", "sha256": null}
       ]
     },
     {
@@ -87,6 +93,8 @@
         {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/Anuken/Mindustry/v146/core/assets/bundles/bundle_tr.properties", "sha256": null,
          "en_url": "https://raw.githubusercontent.com/Anuken/Mindustry/v146/core/assets/bundles/bundle.properties", "en_sha256": null},
         {"locale": "de-DE", "url": "https://raw.githubusercontent.com/Anuken/Mindustry/v146/core/assets/bundles/bundle_de.properties", "sha256": null,
+         "en_url": "https://raw.githubusercontent.com/Anuken/Mindustry/v146/core/assets/bundles/bundle.properties", "en_sha256": null},
+        {"locale": "ru-RU", "url": "https://raw.githubusercontent.com/Anuken/Mindustry/v146/core/assets/bundles/bundle_ru.properties", "sha256": null,
          "en_url": "https://raw.githubusercontent.com/Anuken/Mindustry/v146/core/assets/bundles/bundle.properties", "en_sha256": null}
       ]
     },
@@ -105,6 +113,8 @@
         {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/OpenTTD/OpenTTD/14.1/src/lang/turkish.txt", "sha256": null,
          "en_url": "https://raw.githubusercontent.com/OpenTTD/OpenTTD/14.1/src/lang/english.txt", "en_sha256": null},
         {"locale": "de-DE", "url": "https://raw.githubusercontent.com/OpenTTD/OpenTTD/14.1/src/lang/german.txt", "sha256": null,
+         "en_url": "https://raw.githubusercontent.com/OpenTTD/OpenTTD/14.1/src/lang/english.txt", "en_sha256": null},
+        {"locale": "ru-RU", "url": "https://raw.githubusercontent.com/OpenTTD/OpenTTD/14.1/src/lang/russian.txt", "sha256": null,
          "en_url": "https://raw.githubusercontent.com/OpenTTD/OpenTTD/14.1/src/lang/english.txt", "en_sha256": null}
       ]
     },
@@ -126,7 +136,11 @@
          "en_url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/en/common.ftl", "en_sha256": null},
         {"locale": "de-DE", "url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/de/main.ftl", "sha256": null,
          "en_url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/en/main.ftl", "en_sha256": null},
+        {"locale": "ru-RU", "url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/ru/main.ftl", "sha256": null,
+         "en_url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/en/main.ftl", "en_sha256": null},
         {"locale": "de-DE", "url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/de/common.ftl", "sha256": null,
+         "en_url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/en/common.ftl", "en_sha256": null},
+        {"locale": "ru-RU", "url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/ru/common.ftl", "sha256": null,
          "en_url": "https://gitlab.com/veloren/veloren/-/raw/v0.17.0/assets/voxygen/i18n/en/common.ftl", "en_sha256": null}
       ]
     },
@@ -143,7 +157,8 @@
       "format": "po",
       "files": [
         {"locale": "tr-TR", "url": "https://gitlab.gnome.org/GNOME/gnome-chess/-/raw/48.0/po/tr.po", "sha256": null},
-        {"locale": "de-DE", "url": "https://gitlab.gnome.org/GNOME/gnome-chess/-/raw/48.0/po/de.po", "sha256": null}
+        {"locale": "de-DE", "url": "https://gitlab.gnome.org/GNOME/gnome-chess/-/raw/48.0/po/de.po", "sha256": null},
+        {"locale": "ru-RU", "url": "https://gitlab.gnome.org/GNOME/gnome-chess/-/raw/48.0/po/ru.po", "sha256": null}
       ]
     },
     {
@@ -159,7 +174,8 @@
       "format": "po",
       "files": [
         {"locale": "tr-TR", "url": "https://raw.githubusercontent.com/LibreOffice/translations/libreoffice-24-8/source/tr/sc/messages.po", "sha256": null},
-        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/LibreOffice/translations/libreoffice-24-8/source/de/sc/messages.po", "sha256": null}
+        {"locale": "de-DE", "url": "https://raw.githubusercontent.com/LibreOffice/translations/libreoffice-24-8/source/de/sc/messages.po", "sha256": null},
+        {"locale": "ru-RU", "url": "https://raw.githubusercontent.com/LibreOffice/translations/libreoffice-24-8/source/ru/sc/messages.po", "sha256": null}
       ]
     },
     {
@@ -181,10 +197,15 @@
         {"locale": "tr-TR", "url": "https://websvn.kde.org/trunk/l10n-kf6/tr/messages/ksudoku/ksudoku.po?view=co&pathrev=1753957", "sha256": null},
         {"locale": "tr-TR", "url": "https://websvn.kde.org/trunk/l10n-kf6/tr/messages/kbounce/kbounce.po?view=co&pathrev=1753957", "sha256": null},
         {"locale": "de-DE", "url": "https://websvn.kde.org/trunk/l10n-kf6/de/messages/kpat/kpat.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "ru-RU", "url": "https://websvn.kde.org/trunk/l10n-kf6/ru/messages/kpat/kpat.po?view=co&pathrev=1753957", "sha256": null},
         {"locale": "de-DE", "url": "https://websvn.kde.org/trunk/l10n-kf6/de/messages/kmines/kmines.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "ru-RU", "url": "https://websvn.kde.org/trunk/l10n-kf6/ru/messages/kmines/kmines.po?view=co&pathrev=1753957", "sha256": null},
         {"locale": "de-DE", "url": "https://websvn.kde.org/trunk/l10n-kf6/de/messages/knavalbattle/knavalbattle.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "ru-RU", "url": "https://websvn.kde.org/trunk/l10n-kf6/ru/messages/knavalbattle/knavalbattle.po?view=co&pathrev=1753957", "sha256": null},
         {"locale": "de-DE", "url": "https://websvn.kde.org/trunk/l10n-kf6/de/messages/ksudoku/ksudoku.po?view=co&pathrev=1753957", "sha256": null},
-        {"locale": "de-DE", "url": "https://websvn.kde.org/trunk/l10n-kf6/de/messages/kbounce/kbounce.po?view=co&pathrev=1753957", "sha256": null}
+        {"locale": "ru-RU", "url": "https://websvn.kde.org/trunk/l10n-kf6/ru/messages/ksudoku/ksudoku.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "de-DE", "url": "https://websvn.kde.org/trunk/l10n-kf6/de/messages/kbounce/kbounce.po?view=co&pathrev=1753957", "sha256": null},
+        {"locale": "ru-RU", "url": "https://websvn.kde.org/trunk/l10n-kf6/ru/messages/kbounce/kbounce.po?view=co&pathrev=1753957", "sha256": null}
       ]
     }
   ]
