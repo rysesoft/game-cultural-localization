@@ -40,6 +40,39 @@ class WorkflowTemplateTests(unittest.TestCase):
         self.assertIsNotNone(tree)
         self.assertFalse((SCRIPTS / "localization_pipeline_template.py").exists())
 
+    def test_prompts_follow_the_context_map_first_rule(self):
+        # the template runs on the Antigravity runtime, here a fake runtime records every prompt it sends
+        import asyncio
+        prompts: list = []
+
+        async def agent(prompt, **kw):
+            prompts.append((kw.get("role", ""), prompt))
+            return {"ok": True, "file": "x", "errors": []}
+
+        async def parallel(items, fn):
+            return [await fn(b) for b in items]
+        env = {"args": {"locale": "tr-TR", "batches": ["01"], "scratch_dir": "loc_work", "plugin_dir": "P"},
+               "agent": agent, "parallel": parallel, "pipeline": parallel, "phase": lambda *a: None, "log": lambda *a: None}
+        code = compile(self.PATH.read_text(encoding="utf-8"), str(self.PATH), "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+        coro = eval(code, env)
+        if coro is not None:
+            asyncio.run(coro)
+        by_role = {role: p for role, p in prompts}
+        everything = " ".join(p for _, p in prompts).lower()
+        self.assertNotRegex(everything, r"locked (glossary|terminolog|term)")    # no term is ever locked in a list
+        self.assertIn("no term is locked in a list", everything)
+        pre = by_role["tr-TR pre-flight"]
+        self.assertLess(pre.index("loc_work/context/CONTEXT_MAP.md exists"), pre.index("Validate"))   # the map check comes first
+        pass1 = by_role["tr-TR Pass-1 Culturalizer 01"]
+        for part in ("loc_work/context/CONTEXT_MAP.md", "loc_work/context/CONTEXT_MAP.tr-TR.md", "loc_work/context/line_notes.json"):
+            self.assertIn(part, pass1)
+        critic = by_role["tr-TR Blind Critic 01"]
+        self.assertIn("loc_work/context/CONTEXT_MAP.md", critic)
+        self.assertIn("never loc_work/context/CONTEXT_MAP.tr-TR.md", critic)    # the appendix would hand the critic the answer key
+        self.assertIn("player_action", critic)
+        self.assertIn("CONTEXT_MAP.tr-TR.md", by_role["tr-TR Pass-2 Editor 01"])
+        self.assertIn("--context-cols category,speaker,archetype", by_role["tr-TR blind-slice builder"])
+
 
 class OrchestratorTests(unittest.TestCase):
     def test_dry_run_passes_and_is_deterministic(self):

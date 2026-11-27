@@ -625,8 +625,10 @@ Not a standalone Python module, it uses the workflow DSL with top-level `await`.
 
 ```
 /run-workflow Run skills/game-cultural-localization/scripts/localization_pipeline_template.workflow.py
-   with args {"locale": "de-DE", "scratch_dir": "loc_work", "batches": ["01", "02"], "plugin_dir": "<plugin path>", "fonts": [], "placeholder_style": "unity", "tag_style": "tmp"}
+   with args {"locale": "de-DE", "scratch_dir": "loc_work", "batches": ["01", "02"], "plugin_dir": "<plugin path>", "fonts": [], "placeholder_style": "unity", "tag_style": "tmp", "context_map": "loc_work/context/CONTEXT_MAP.md"}
 ```
+
+`context_map` defaults to `<scratch_dir>/context/CONTEXT_MAP.md`. Phase 0 stops at once when the map is missing, nothing is translated or judged before it exists. Pass 1 and Pass 2 read the map, the locale appendix `CONTEXT_MAP.<locale>.md` and the line notes, and choose every word for the place of the line, no term is locked in a list. The blind critic reads the slice (with `archetype`), the map and the neutral fields of the line notes, never the appendix.
 
 Phase 0 pre-flight, Phase 1 Pass 1 (`game-culturalizer`, parallel per batch, failed batches retried one by one), Phase 2 `make_blind_slice`, `native-ear-critic`, `validate_critique` and Pass 2, Phase 3 gate (`lqa_linter --fail-on-error`, `ui_expansion_checker --fail-on-high`, `font_glyph_scanner`). The template drives the single critic flow, the multi-family jury runs through `orchestrator_stub.py --dry-run` or `--live`.
 

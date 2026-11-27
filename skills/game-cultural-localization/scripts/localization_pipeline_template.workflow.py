@@ -2,7 +2,8 @@
 
 HOW TO RUN (Antigravity only):
     /run-workflow Run skills/game-cultural-localization/scripts/localization_pipeline_template.workflow.py
-    with args {"locale": "de-DE", "scratch_dir": "loc_work", "batches": ["01", "02"], "plugin_dir": "<plugin path>"}
+    with args {"locale": "de-DE", "scratch_dir": "loc_work", "batches": ["01", "02"], "plugin_dir": "<plugin path>",
+               "context_map": "loc_work/context/CONTEXT_MAP.md"}
 
 This file uses the Antigravity workflow DSL documented at
 https://antigravity.google/docs/dynamic-workflows : the runtime injects
@@ -12,7 +13,8 @@ tests compile it with ast.PyCF_ALLOW_TOP_LEVEL_AWAIT).  For an API-independent
 orchestration that runs with plain Python, see orchestrator_stub.py.
 
 Phases (canonical numbering, see references/methodology_and_qa.md):
-  Phase 0  Pre-flight: locale validation, <LOCALE>_BIBLE.md + transcreation ledger, font scan
+  Phase 0  Pre-flight: the context map must exist (context-cartographer, step 0), locale validation,
+           <LOCALE>_BIBLE.md + transcreation ledger, font scan
   Phase 1  Clean-room culturalization (game-culturalizer, Pass 1) per batch
   Phase 2  make_blind_slice -> blind native-ear critique -> validate_critique -> Pass-2 rewrite
   Phase 3  Automated LQA gate: lqa_linter --fail-on-error, ui_expansion_checker --fail-on-high, font_glyph_scanner
@@ -33,6 +35,12 @@ PLUGIN = (args.get("plugin_dir") or ".").rstrip("/\\")
 SCRIPTS = f"{PLUGIN}/skills/game-cultural-localization/scripts"
 REFS = f"{PLUGIN}/skills/game-cultural-localization/references"
 BIBLE = f"{SCRATCH}/{LOCALE}_BIBLE.md"
+# Context decides every word. The map of the game comes first, no term is ever locked in a list.
+CONTEXT_MAP = (args.get("context_map") or f"{SCRATCH}/context/CONTEXT_MAP.md").replace("\\", "/")
+CONTEXT_DIR = os.path.dirname(CONTEXT_MAP) or "."
+LINE_NOTES = f"{CONTEXT_DIR}/line_notes.json"                 # per key notes of the context scouts
+APPENDIX = f"{CONTEXT_DIR}/CONTEXT_MAP.{LOCALE}.md"            # choices of an existing translation, writers only
+NEUTRAL_FIELDS = "screen, element, player_action, inserted, limit, speaker, listener and register_hint"
 FONTS = list(args.get("fonts") or [])          # optional: .ttf/.otf/.ttc or TMP .asset paths
 PH_STYLE = args.get("placeholder_style") or "auto"   # unity | unreal | godot | icu | printf | python | auto
 TAG_STYLE = args.get("tag_style") or "auto"          # tmp | html | bbcode | auto
@@ -57,18 +65,25 @@ def batch_prompt(step, b):
     """Prompts are tool-agnostic: they describe files to read/write, not editor tool names."""
     if step == "pass1":
         return (
-            f"Activate the game-cultural-localization skill. Read {REFS}/{LOCALE}.md (including its Golden Voice "
-            f"Anchors A1-A5) and {BIBLE}. Translate the clean-room batch {SCRATCH}/in_batch_{b}.json into natural, "
-            f"everyday spoken {LOCALE} and write {SCRATCH}/pass1_batch_{b}.json with the same keys and a '{LOCALE}' "
-            f"target field. Preserve every placeholder ({PH_STYLE} style), rich-text tag ({TAG_STYLE} style), "
-            f"leading/trailing space and locked glossary term. Finish with ok=true and the output file path, or "
-            f"ok=false and the list of errors."
+            f"Activate the game-cultural-localization skill. Read the context map {CONTEXT_MAP} first, then "
+            f"{APPENDIX} if it exists, then {REFS}/{LOCALE}.md (including its Golden Voice Anchors A1-A5) and {BIBLE}. "
+            f"For every key read its note in {LINE_NOTES}, it tells where the game shows the line, what the player is "
+            f"doing, what the code inserts next to it, the room it has, who speaks and who listens. Translate the "
+            f"clean-room batch {SCRATCH}/in_batch_{b}.json into natural, everyday spoken {LOCALE} and write "
+            f"{SCRATCH}/pass1_batch_{b}.json with the same keys and a '{LOCALE}' target field. Choose every word for the "
+            f"place where the game shows the line. No term is locked in a list, the same source word may need different "
+            f"words in different places. Spell proper names as the context map names them. Preserve every placeholder "
+            f"({PH_STYLE} style), rich-text tag ({TAG_STYLE} style) and leading or trailing space. Finish with ok=true and "
+            f"the output file path, or ok=false and the list of errors."
         )
     if step == "critique":
         return (
             f"You are the blind native-ear critic for {LOCALE}. Read ONLY {SCRATCH}/blind_{LOCALE}_{b}.json "
-            f"(a target-only slice: key, category/speaker, target) and {REFS}/{LOCALE}.md. Do NOT open any other "
-            f"file. Read every target aloud as a native player and score naturalness 1-5. Write "
+            f"(a target-only slice with key, category, speaker, archetype and target), the context map {CONTEXT_MAP}, "
+            f"the fields {NEUTRAL_FIELDS} of these keys in {LINE_NOTES} and {REFS}/{LOCALE}.md. Do NOT open any other "
+            f"file, never {APPENDIX} and never a source table. The map never quotes source lines, so you stay blind to "
+            f"the source wording. Judge every line for the place where the game shows it, and check that it still reads "
+            f"right with what the code inserts next to it. Read every target aloud as a native player and score naturalness 1-5. Write "
             f"{SCRATCH}/critique_{LOCALE}_{b}.json using exactly this schema: {{\"locale\", \"source_file\", "
             f"\"entries\": [{{\"key\", \"score\", \"issue_type\", \"reason\", \"suggested\"}}], "
             f"\"summary\": {{\"total\", \"flagged\", \"critical\"}}}} with only score<5 entries; issue_type is one of "
@@ -77,10 +92,12 @@ def batch_prompt(step, b):
         )
     if step == "pass2":
         return (
-            f"Activate the game-cultural-localization skill. Read {BIBLE}, {SCRATCH}/pass1_batch_{b}.json and the "
+            f"Activate the game-cultural-localization skill. Read the context map {CONTEXT_MAP}, {APPENDIX} if it exists, "
+            f"{BIBLE}, the notes of these keys in {LINE_NOTES}, {SCRATCH}/pass1_batch_{b}.json and the "
             f"validated critique {SCRATCH}/critique_{LOCALE}_{b}.json. Apply every valid native-ear improvement "
-            f"while preserving 100% of locked glossary terms, placeholders, rich-text tags, leading/trailing spaces "
-            f"and punctuation rules; reject suggestions that rename items/buttons without source evidence. Write "
+            f"while preserving 100% of placeholders, rich-text tags, leading and trailing spaces and punctuation rules. "
+            f"Keep names and terms as the context map and the appendix describe them for the place of each line, and "
+            f"reject suggestions that rename items or buttons without evidence from the map or the source. Write "
             f"{SCRATCH}/final_batch_{b}.json. Finish with ok=true and the file path."
         )
     raise ValueError(step)
@@ -117,10 +134,14 @@ async def run_batches(step, type_name, role):
 phase(f"Phase 0: {LOCALE} pre-flight (bible, ledger, fonts)")
 preflight = await agent(
     prompt=(
-        f"Activate the game-cultural-localization skill. Validate that '{LOCALE}' is one of the 15 supported locales "
+        f"Activate the game-cultural-localization skill. First check that the context map {CONTEXT_MAP} exists. If it "
+        f"does not, stop at once with ok=false and the error 'context map missing, run context-cartographer (Phase 0 "
+        f"step 0) before any translation', nothing is translated or judged before the map exists. "
+        f"Validate that '{LOCALE}' is one of the 15 supported locales "
         f"(run: python {SCRIPTS}/lqa_linter.py --version and python {SCRIPTS}/lqa_linter.py --help). "
-        f"If {BIBLE} does not exist, create it from {REFS}/{LOCALE}.md and {REFS}/transcreation_ledger_guide.md: "
-        f"locked terminology (collision pairs such as Contract vs Order), per-archetype register (A1 Mentor, A2 Rival, "
+        f"If {BIBLE} does not exist, create it from {CONTEXT_MAP}, {APPENDIX} if it exists, {REFS}/{LOCALE}.md and "
+        f"{REFS}/transcreation_ledger_guide.md: terminology decisions taken from the context map, each tied to the place "
+        f"it applies to (collision pairs such as Contract vs Order), never a locked list, per-archetype register (A1 Mentor, A2 Rival, "
         f"A3 Rookie, A4 Scientist, A5 Antagonist), player-gender neutrality strategy, and the transcreation ledger. "
         + (f"Then run: python {SCRIPTS}/font_glyph_scanner.py --input {SCRATCH}/in_batch_{BATCHES[0]}.json --dst-field en "
            + " ".join(f"--font \"{f}\"" for f in FONTS) + " and record the result. " if FONTS else "")
@@ -145,7 +166,7 @@ phase(f"Phase 2: {LOCALE} blind native-ear critique + Pass-2 rewrite")
 slices = await agent(
     prompt=shell_prompt(
         [f"python {SCRIPTS}/make_blind_slice.py {SCRATCH}/pass1_batch_{b}.json --locale {LOCALE} --target-col {LOCALE} "
-         f"--context-cols category,speaker --out {SCRATCH}/blind_{LOCALE}_{b}.json" for b in BATCHES],
+         f"--context-cols category,speaker,archetype --out {SCRATCH}/blind_{LOCALE}_{b}.json" for b in BATCHES],
         [f"{SCRATCH}/blind_{LOCALE}_{b}.json" for b in BATCHES],
     ),
     schema=RESULT_SCHEMA, role=f"{LOCALE} blind-slice builder", type_name="game-culturalizer",
