@@ -32,7 +32,7 @@ BACKOFF_CAP_S = 30.0
 RATE_LIMIT_BASE_S = 15.0    # 15, 30, 60, 120 seconds unless the server names a delay
 RATE_LIMIT_CAP_S = 120.0
 _RETRY_DELAY = re.compile(r'"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"')
-DEFAULT_TIMEOUT_S = 600.0   # a long JSON answer after thinking can take minutes, 10 minutes like the vendor SDKs
+DEFAULT_TIMEOUT_S = 600.0   # timeout of each socket read, 10 minutes like the vendor SDKs (a streamed reply never idles that long)
 # Current models of all three families think before they answer and the thinking counts against the output
 # limit. Every call asks for the model's own output maximum (max_output_tokens in providers.config.json, else
 # the adapter default), whatever max_tokens the caller passes, so a reply is never cut while a model thinks.
@@ -77,6 +77,10 @@ class ProviderError(L10nError):
 
 class ModelNotFoundError(ProviderError):
     """The API reported that the model id does not exist; the router switches to the configured fallback."""
+
+
+class StreamInterrupted(ProviderError):
+    """A streamed reply broke off (an error event, a cut event or no end event). post_json retries it like a 5xx."""
 
 
 class MissingKeyError(L10nError):
@@ -254,13 +258,54 @@ def is_model_not_found(status: int, body_text: str) -> bool:
     return status in (400, 422) and bool(_NOT_FOUND_RE.search(body_text))
 
 
+def json_object(text: str, label: str) -> Dict[str, Any]:
+    """The reply body parsed as one JSON object, else a ProviderError."""
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        raise ProviderError(f"{label}: response is not JSON: {text[:200]!r}")
+    if not isinstance(data, dict):
+        raise ProviderError(f"{label}: response must be a JSON object")
+    return data
+
+
+def sse_events(text: str, label: str = "provider") -> List[Dict[str, Any]]:
+    """The JSON data of every event of a Server-Sent Events body, in order. Comments and pings without data are skipped."""
+    events: List[Dict[str, Any]] = []
+    data: List[str] = []
+
+    def flush() -> None:
+        if not data:
+            return
+        try:
+            item = json.loads("\n".join(data))
+        except json.JSONDecodeError:
+            raise StreamInterrupted(f"{label}: a stream event is not JSON: {data[0][:120]!r}")
+        if isinstance(item, dict):
+            events.append(item)
+        data.clear()
+
+    for line in text.splitlines():
+        if not line:
+            flush()
+            continue
+        if line.startswith(":"):
+            continue
+        field, _, value = line.partition(":")
+        if field == "data":
+            data.append(value[1:] if value.startswith(" ") else value)
+    flush()
+    return events
+
+
 def post_json(url: str, headers: Dict[str, str], payload: Dict[str, Any], *, transport: Transport,
               sleep: Callable[[float], None] = time.sleep, timeout: float = DEFAULT_TIMEOUT_S,
               max_attempts: int = MAX_ATTEMPTS, label: str = "provider", before_attempt: Optional[Callable[[], Any]] = None,
-              secrets: Sequence[str] = ()) -> Dict[str, Any]:
+              secrets: Sequence[str] = (), decode: Optional[Callable[[str, Dict[str, str]], Dict[str, Any]]] = None) -> Dict[str, Any]:
     """POST a JSON payload with retry on 429 / 5xx / network errors (exponential backoff, at most max_attempts).
 
-    `secrets` (the API key) are scrubbed from every error message.
+    `decode(text, headers)` turns a 2xx body into the reply dict (a streaming adapter assembles its events there),
+    a StreamInterrupted it raises is retried like a 5xx. `secrets` (the API key) are scrubbed from every error message.
     """
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     last = "no attempt made"
@@ -278,13 +323,15 @@ def post_json(url: str, headers: Dict[str, str], payload: Dict[str, Any], *, tra
             continue
         text = raw.decode("utf-8", "replace")
         if 200 <= status < 300:
+            if decode is None:
+                return json_object(text, label)
             try:
-                data = json.loads(text)
-            except json.JSONDecodeError:
-                raise ProviderError(f"{label}: response is not JSON: {text[:200]!r}")
-            if not isinstance(data, dict):
-                raise ProviderError(f"{label}: response must be a JSON object")
-            return data
+                return decode(text, hdrs)
+            except StreamInterrupted as exc:
+                last = redact(str(exc), secrets)
+                if attempt < max_attempts - 1:
+                    sleep(backoff_delay(attempt))
+                continue
         snippet = redact(text[:300].replace("\n", " "), secrets)
         if is_model_not_found(status, text):
             raise ModelNotFoundError(f"{label}: model not found (HTTP {status}): {snippet}")
@@ -342,6 +389,10 @@ class HttpProvider:
     def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> Dict[str, Any]:
         raise NotImplementedError
 
+    def _decode(self, text: str, headers: Dict[str, str]) -> Dict[str, Any]:
+        """The 2xx reply body as a dict. A streaming adapter assembles its event stream here."""
+        return json_object(text, f"{self.name}/{self.model}")
+
     def _parse(self, data: Dict[str, Any]) -> Tuple[Any, ...]:
         """(text, input_tokens, output_tokens) or (text, input_tokens, output_tokens, cache_read, cache_write)."""
         raise NotImplementedError
@@ -354,7 +405,7 @@ class HttpProvider:
         data = post_json(self._url(), self._headers(), self._body(system, user, temperature, max_tokens, json_mode),
                          transport=self._transport, sleep=self._sleep, timeout=self._timeout,
                          max_attempts=self._max_attempts, label=f"{self.name}/{self.model}", before_attempt=self._limiter.wait,
-                         secrets=(self._key,))
+                         secrets=(self._key,), decode=self._decode)
         parsed = self._parse(data)
         text, tin, tout = parsed[:3]
         cread, cwrite = (int(parsed[3] or 0), int(parsed[4] or 0)) if len(parsed) >= 5 else (0, 0)

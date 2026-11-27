@@ -13,9 +13,11 @@ At J3 an agreeing tier (spread <= 1) settles the line with its minimum score (3 
 <= 2 -> critical). A J3 disagreement goes to the deliberation round (deliberate.py) when it is
 available, otherwise the line is 'unresolved' and reaches the developer with three rationales.
 
-Budget caps (providers.config.json budget_caps): when more than 30 % of the batch would go to J2,
-or more than 10 % to J3, the run stops and writes a report. The problem then lies in Pass 1 or
-in the prompt, not in single lines.
+Budget caps (providers.config.json budget_caps): when more than 30 % of the judged lines of the run
+would go to J2, or more than 10 % to J3, the run stops and writes a report. The count runs across
+batches (EscalationTally), a cap stops only after min_judged (100) judged lines with min_escalated (10)
+lines over it, and only when the current batch sends lines to that tier. The problem then lies in
+Pass 1 or in the prompt, not in single lines.
 
 Evidence per line: ban list hits (lqa_linter rules on the target), translation memory neighbours
 (when a TM is attached) and, for lines that reach J3, the back-translation signal (needs the

@@ -53,6 +53,30 @@ class ScriptedTransport:
 
 
 ANTHROPIC_OK = {"content": [{"type": "text", "text": "{\"ok\": true}"}], "usage": {"input_tokens": 12, "output_tokens": 3}}
+
+
+def sse(*events: Dict[str, Any]) -> bytes:
+    """A Server-Sent Events body the way the Messages API streams it."""
+    return "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in events).encode("utf-8")
+
+
+STREAM_START = {"type": "message_start", "message": {"id": "msg_1", "type": "message", "role": "assistant", "model": "claude-haiku-5-5",
+                                                     "content": [], "stop_reason": None,
+                                                     "usage": {"input_tokens": 38, "cache_creation_input_tokens": 0,
+                                                               "cache_read_input_tokens": 4336, "output_tokens": 1}}}
+STREAM_BODY = (
+    {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": ""}},
+    {"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "the second line is"}},
+    {"type": "content_block_stop", "index": 0},
+    {"type": "content_block_start", "index": 1, "content_block": {"type": "text", "text": ""}},
+    {"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "{\"ok\""}},
+    {"type": "ping"},
+    {"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": ": true}"}},
+    {"type": "content_block_stop", "index": 1},
+    {"type": "message_delta", "delta": {"stop_reason": "end_turn", "stop_sequence": None}, "usage": {"output_tokens": 57}},
+)
+ANTHROPIC_STREAM = sse(STREAM_START, *STREAM_BODY, {"type": "message_stop"})
+SSE_HEADERS = {"content-type": "text/event-stream; charset=utf-8"}
 GOOGLE_OK = {"candidates": [{"content": {"parts": [{"text": "merhaba"}]}}], "usageMetadata": {"promptTokenCount": 9, "candidatesTokenCount": 2, "thoughtsTokenCount": 5}}
 DEEPSEEK_OK = {"choices": [{"message": {"content": "hallo"}}], "usage": {"prompt_tokens": 7, "completion_tokens": 4}}
 
@@ -137,6 +161,7 @@ class HttpAdapterTests(unittest.TestCase):
         self.assertNotIn("cache_control", json.dumps(req["body"]["messages"]))   # the per batch user turn is never marked
         self.assertNotIn("temperature", req["body"])                       # current Claude models reject sampling parameters
         self.assertEqual(req["body"]["max_tokens"], 128000)                 # the model's own maximum, haiku was cut at 16000 live
+        self.assertIs(req["body"]["stream"], True)                          # streamed, a silent 128000 token reply can outlast the read timeout
         thinking_reply = {"content": [{"type": "thinking", "thinking": "", "signature": "x"}, {"type": "text", "text": "{\"ok\": true}"}],
                           "usage": {"input_tokens": 12, "output_tokens": 40}}
         p2, t2, _ = self._make("anthropic", [(200, thinking_reply, {})], model="claude-opus-5-5")
@@ -145,6 +170,32 @@ class HttpAdapterTests(unittest.TestCase):
         self.assertEqual(res2.text, "{\"ok\": true}")                     # thinking blocks are skipped
         self.assertEqual((res.text, res.input_tokens, res.output_tokens, res.model), ("{\"ok\": true}", 12, 3, "claude-haiku-5-5"))
         self.assertNotIn("secret", repr(p))
+
+    def test_anthropic_stream_is_assembled(self):
+        p, _, _ = self._make("anthropic", [(200, ANTHROPIC_STREAM, SSE_HEADERS)], model="claude-haiku-5-5")
+        res = p.complete("SYS", "USER", json_mode=True)
+        self.assertEqual(res.text, "{\"ok\": true}")                       # text deltas joined, the thinking block skipped
+        self.assertEqual((res.input_tokens, res.cache_read_tokens, res.cache_write_tokens, res.output_tokens), (4374, 4336, 0, 57))
+        # a keep-alive comment, CRLF line ends and no content-type header change nothing
+        body = (b": keep-alive\r\n\r\n" + ANTHROPIC_STREAM.replace(b"\n", b"\r\n"))
+        p2, _, _ = self._make("anthropic", [(200, body, {})], model="claude-haiku-5-5")
+        self.assertEqual(p2.complete("S", "U").text, "{\"ok\": true}")
+
+    def test_broken_anthropic_stream_is_retried(self):
+        overloaded = sse(STREAM_START, STREAM_BODY[0], {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}})
+        no_stop = sse(STREAM_START, *STREAM_BODY)                           # the connection closed before message_stop
+        cut = ANTHROPIC_STREAM[:-40]                                        # the last event is cut in the middle
+        p, t, sleeps = self._make("anthropic", [(200, overloaded, SSE_HEADERS), (200, no_stop, SSE_HEADERS), (200, cut, SSE_HEADERS),
+                                                (200, ANTHROPIC_STREAM, SSE_HEADERS)])
+        self.assertEqual(p.complete("s", "u").output_tokens, 57)
+        self.assertEqual(len(t.requests), 4)
+        self.assertEqual([s for s in sleeps if s >= 1.0], [1.0, 2.0, 4.0])
+        p, t, _ = self._make("anthropic", [(200, overloaded, SSE_HEADERS)])
+        with self.assertRaises(ProviderError) as ctx:
+            p.complete("s", "u")
+        self.assertEqual(len(t.requests), 5)
+        self.assertIn("overloaded_error", str(ctx.exception))
+        self.assertIn("5 attempts", str(ctx.exception))
 
     def test_prompt_cache_usage_is_read(self):
         # Anthropic reports the uncached remainder in input_tokens, the adapter adds the cached parts back
@@ -335,9 +386,16 @@ class _MockApi(BaseHTTPRequestHandler):
             self.send_header("Retry-After", "0")
             self.end_headers()
             return
-        if self.path.startswith("/anthropic"):
-            out = ANTHROPIC_OK
-        elif self.path.startswith("/google"):
+        if self.path.startswith("/anthropic"):            # streamed, the body ends when the server closes the connection
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.end_headers()
+            for event in ANTHROPIC_STREAM.split(b"\n\n"):
+                if event.strip():
+                    self.wfile.write(event + b"\n\n")
+                    self.wfile.flush()
+            return
+        if self.path.startswith("/google"):
             out = GOOGLE_OK
         else:
             out = DEEPSEEK_OK
@@ -373,11 +431,13 @@ class UrllibIntegrationTests(unittest.TestCase):
             a = get_provider("anthropic", "claude-haiku-5-5", api_key="k1", endpoint=self.base + "/anthropic", rps=1000)
             g = get_provider("google", "gemini-4-neon", api_key="k2", endpoint=self.base + "/google", rps=1000)
             d = get_provider("deepseek", "deepseek-flash", api_key="k3", endpoint=self.base + "/deepseek", rps=1000)
-            self.assertEqual(a.complete("s", "u").input_tokens, 12)   # first call gets a 429 and is retried
+            res = a.complete("s", "u")                                  # first call gets a 429 and is retried
+            self.assertEqual((res.text, res.input_tokens, res.output_tokens), ("{\"ok\": true}", 4374, 57))   # read from the stream
             self.assertEqual(g.complete("s", "u").text, "merhaba")
             self.assertEqual(d.complete("s", "u").text, "hallo")
         paths = [s["path"] for s in _MockApi.seen]
         self.assertEqual(paths[0], paths[1])  # retried request
+        self.assertIs(_MockApi.seen[1]["body"]["stream"], True)
         self.assertIn("/google/models/gemini-4-neon:generateContent", paths)
         google_req = next(s for s in _MockApi.seen if s["path"].startswith("/google/"))
         self.assertEqual(google_req["headers"]["x-goog-api-key"], "k2")
