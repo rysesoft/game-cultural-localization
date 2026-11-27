@@ -53,85 +53,108 @@
   "calibration": {
     "gate": {
       "pairwise_min": 0.85,
-      "passed": true
+      "passed": false
     },
     "secondary": {
       "native_mean_min": 4.5,
       "robot_mean_max": 3.0,
       "passed": false
     },
-    "pairs": 400,
+    "pairs": 385,
     "members": [
       {
         "tier": "J1",
         "model": "claude-haiku-5-5",
-        "pairwise_accuracy": 0.8575,
-        "native_mean": 4.655,
-        "robot_mean": 3.54
+        "pairwise_accuracy": 0.8338,
+        "pairwise_short": 0.7474,
+        "pairwise_long": 0.9215,
+        "native_mean": 4.613,
+        "robot_mean": 3.6597
       },
       {
         "tier": "J1",
         "model": "deepseek-flash",
-        "pairwise_accuracy": 0.9425,
-        "native_mean": 4.6975,
-        "robot_mean": 3.2475
+        "pairwise_accuracy": 0.8883,
+        "pairwise_short": 0.8454,
+        "pairwise_long": 0.9319,
+        "native_mean": 4.6623,
+        "robot_mean": 3.4494
       },
       {
         "tier": "J1",
         "model": "gemini-4-hydrogen",
-        "pairwise_accuracy": 0.98,
-        "native_mean": 4.9275,
-        "robot_mean": 3.075
+        "pairwise_accuracy": 0.9429,
+        "pairwise_short": 0.9072,
+        "pairwise_long": 0.9791,
+        "native_mean": 4.8571,
+        "robot_mean": 3.2623
       },
       {
         "tier": "J2",
         "model": "claude-sonnet-5-5",
-        "pairwise_accuracy": 0.925,
-        "native_mean": 4.495,
-        "robot_mean": 3.1475
+        "pairwise_accuracy": 0.8571,
+        "pairwise_short": 0.7732,
+        "pairwise_long": 0.9424,
+        "native_mean": 4.5377,
+        "robot_mean": 3.374
       },
       {
         "tier": "J2",
         "model": "deepseek-v4-pro",
-        "pairwise_accuracy": 0.9125,
-        "native_mean": 4.88,
-        "robot_mean": 3.575
+        "pairwise_accuracy": 0.8519,
+        "pairwise_short": 0.7784,
+        "pairwise_long": 0.9267,
+        "native_mean": 4.8519,
+        "robot_mean": 3.839
       },
       {
         "tier": "J2",
         "model": "gemini-4-neon",
-        "pairwise_accuracy": 0.9725,
-        "native_mean": 4.975,
-        "robot_mean": 2.9425
+        "pairwise_accuracy": 0.9455,
+        "pairwise_short": 0.9021,
+        "pairwise_long": 0.9895,
+        "native_mean": 4.8987,
+        "robot_mean": 3.1169
       },
       {
         "tier": "J3",
         "model": "claude-opus-5-5",
-        "pairwise_accuracy": 0.975,
-        "native_mean": 4.935,
-        "robot_mean": 3.15
+        "pairwise_accuracy": 0.9273,
+        "pairwise_short": 0.8969,
+        "pairwise_long": 0.9581,
+        "native_mean": 4.8104,
+        "robot_mean": 3.2935
       },
       {
         "tier": "J3",
         "model": "deepseek-v4-pro",
-        "pairwise_accuracy": 0.9125,
-        "native_mean": 4.88,
-        "robot_mean": 3.575
+        "pairwise_accuracy": 0.8519,
+        "pairwise_short": 0.7784,
+        "pairwise_long": 0.9267,
+        "native_mean": 4.8519,
+        "robot_mean": 3.839
       },
       {
         "tier": "J3",
         "model": "gemini-4-carbon",
-        "pairwise_accuracy": 0.9775,
-        "native_mean": 4.9625,
-        "robot_mean": 2.775
+        "pairwise_accuracy": 0.9481,
+        "pairwise_short": 0.9175,
+        "pairwise_long": 0.9791,
+        "native_mean": 4.8675,
+        "robot_mean": 2.974
       }
     ],
-    "inter_family_kappa": 0.7403,
-    "intra_family_kappa": 0.7995,
+    "dropped_mixed_robots": 15,
+    "short_pairs": 194,
+    "inter_family_kappa": 0.6969,
+    "intra_family_kappa": 0.7594,
     "langpack_version": "tr-TR-b76ccb27e084",
     "source": "contrastive.json",
     "context_map": "CONTEXT_MAP.md",
-    "context_lines": 400
+    "context_lines": 385,
+    "context_view": "jury (CONTEXT_MAP.jury.md, line_notes.jury.json, English, checked with build_context_map.py --check-leak)",
+    "jury_instruction": "before the everyday word check, the pairwise gate does not use that instruction",
+    "native_lines": "the studio lines before its 28 edits of 2026-11-27, which touch 11 of the measured pairs"
   },
   "native_review": {
     "done": false
