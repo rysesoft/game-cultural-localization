@@ -56,7 +56,7 @@ Dördüncü sütun paketin ulaşmak istediği sonuç. Sayfanın geri kalanı ora
 
 `langpack/tr-TR/` eklentiyle birlikte gelir. Isınma derleminde 7054 satır var. Bunların yaklaşık 1400'ü bir Rysesoft oyununun profesyonel Türkçe çevirisinden, geri kalanı Godot editörü ve Pixelorama çevirilerinden (MIT) geliyor. Wesnoth, OpenTTD ve KDE gibi copyleft derlemler paketi yalnızca onu kuran makinede besler, hiçbir zaman dağıtılmaz. Stüdyo referansı her filtre sezgisinden üstün tutulur. Bir kural profesyonel çeviriyi sürekli işaretliyorsa kural daraltılır, satır pakette kalır.
 
-Sıradaki kilometre taşı, jürinin bu referansa karşı canlı kalibrasyonu. Kalibrasyon geçilene kadar raporlar Türkçeyi tahmini olarak işaretler. Diğer diller paketlerini `build_language_pack.py` ile kurar. `key`, `en`, `<locale>`, `category` ve `speaker` sütunlarından oluşan bir stüdyo referans tablosu o dilin ölçülmüş seviyeye çıkmasının yolunu açar.
+Jüri bu referansa karşı canlı kalibrasyonu bağlam haritasıyla geçti. 400 çiftte dokuz koltuğun her biri stüdyonun satırını yüzde 86 ile 98 arasında seçti, haritadan önce dört koltuk 0.85 eşiğinin altındaydı. Raporlar Türkçeyi ölçülmüş olarak işaretler. Diğer diller paketlerini `build_language_pack.py` ile kurar. `key`, `en`, `<locale>`, `category` ve `speaker` sütunlarından oluşan bir stüdyo referans tablosu o dilin ölçülmüş seviyeye çıkmasının yolunu açar.
 
 **Anahtarsız deneyin.** Her araç `--dry-run` ile çevrimdışı çalışır. Akışın tamamını görmek için bu komutu `skills/game-cultural-localization/` klasöründen çalıştırın.
 

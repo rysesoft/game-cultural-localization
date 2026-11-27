@@ -50,7 +50,89 @@
       "dialogue_formal"
     ]
   },
-  "calibration": null,
+  "calibration": {
+    "gate": {
+      "pairwise_min": 0.85,
+      "passed": true
+    },
+    "secondary": {
+      "native_mean_min": 4.5,
+      "robot_mean_max": 3.0,
+      "passed": false
+    },
+    "pairs": 400,
+    "members": [
+      {
+        "tier": "J1",
+        "model": "claude-haiku-5-5",
+        "pairwise_accuracy": 0.8575,
+        "native_mean": 4.655,
+        "robot_mean": 3.54
+      },
+      {
+        "tier": "J1",
+        "model": "deepseek-flash",
+        "pairwise_accuracy": 0.9425,
+        "native_mean": 4.6975,
+        "robot_mean": 3.2475
+      },
+      {
+        "tier": "J1",
+        "model": "gemini-4-hydrogen",
+        "pairwise_accuracy": 0.98,
+        "native_mean": 4.9275,
+        "robot_mean": 3.075
+      },
+      {
+        "tier": "J2",
+        "model": "claude-sonnet-5-5",
+        "pairwise_accuracy": 0.925,
+        "native_mean": 4.495,
+        "robot_mean": 3.1475
+      },
+      {
+        "tier": "J2",
+        "model": "deepseek-v4-pro",
+        "pairwise_accuracy": 0.9125,
+        "native_mean": 4.88,
+        "robot_mean": 3.575
+      },
+      {
+        "tier": "J2",
+        "model": "gemini-4-neon",
+        "pairwise_accuracy": 0.9725,
+        "native_mean": 4.975,
+        "robot_mean": 2.9425
+      },
+      {
+        "tier": "J3",
+        "model": "claude-opus-5-5",
+        "pairwise_accuracy": 0.975,
+        "native_mean": 4.935,
+        "robot_mean": 3.15
+      },
+      {
+        "tier": "J3",
+        "model": "deepseek-v4-pro",
+        "pairwise_accuracy": 0.9125,
+        "native_mean": 4.88,
+        "robot_mean": 3.575
+      },
+      {
+        "tier": "J3",
+        "model": "gemini-4-carbon",
+        "pairwise_accuracy": 0.9775,
+        "native_mean": 4.9625,
+        "robot_mean": 2.775
+      }
+    ],
+    "inter_family_kappa": 0.7403,
+    "intra_family_kappa": 0.7995,
+    "langpack_version": "tr-TR-b76ccb27e084",
+    "source": "contrastive.json",
+    "context_map": "CONTEXT_MAP.md",
+    "context_lines": 400
+  },
   "native_review": {
     "done": false
   },
