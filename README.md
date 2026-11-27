@@ -209,6 +209,7 @@ Issue types are `translationese`, `register`, `tense`, `regional_leak`, `gender_
 ```
 plugin.json                 Antigravity manifest (version lives here)
 README.md, README_TR.md     this page in English and in Turkish
+AGENTS.md, CLAUDE.md        first read for AI agents (where to start, rules that are never optional)
 rules/AGENTS.md             always on rules, also usable as AGENTS.md or CLAUDE.md content
 agents/                     game-culturalizer.md, native-ear-critic.md
 skills/game-cultural-localization/

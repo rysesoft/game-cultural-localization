@@ -209,6 +209,7 @@ Sorun türleri `translationese`, `register`, `tense`, `regional_leak`, `gender_l
 ```
 plugin.json                 Antigravity manifesti (sürüm numarası burada)
 README.md, README_TR.md     bu sayfanın İngilizcesi ve Türkçesi
+AGENTS.md, CLAUDE.md        yapay zekâ ajanlarının ilk okuduğu rehber (nereden başlanır, hiç esnemeyen kurallar)
 rules/AGENTS.md             her zaman açık kurallar, AGENTS.md ya da CLAUDE.md içeriği olarak da kullanılır
 agents/                     game-culturalizer.md, native-ear-critic.md
 skills/game-cultural-localization/

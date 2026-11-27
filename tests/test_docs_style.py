@@ -14,6 +14,8 @@ import l10n_common  # noqa: E402
 import text_style  # noqa: E402
 
 STYLED_DOCS = (
+    ROOT / "AGENTS.md",
+    ROOT / "CLAUDE.md",
     ROOT / "README.md",
     ROOT / "README_TR.md",
     ROOT / "CHANGELOG.md",
@@ -85,6 +87,21 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("](./README.md)", tr)
         self.assertIn("## Çok Aileli Jüri (2.2)", tr)
         self.assertEqual(re.findall(r"```(\w*)", en), re.findall(r"```(\w*)", tr), "code blocks differ")
+
+    def test_agent_guide_is_the_first_read(self):
+        guide = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        claude = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        self.assertIn("\n@AGENTS.md", claude)                        # Claude Code imports the shared guide
+        job_a = guide.split("### A.")[1].split("### B.")[0]
+        steps = re.findall(r"(?m)^(\d)\. (.*)$", job_a)
+        self.assertIn("SKILL.md", steps[0][1])
+        self.assertIn("Context map first", steps[1][1])              # the map is the first real step
+        for word in ("context-cartographer", "Opus", "context-scout", "Sonnet", "ask the user"):
+            self.assertIn(word, steps[1][1])
+        for rule in ("Context decides every word", "Ask, do not guess", "API keys", "Tests never call a real API", "House punctuation style"):
+            self.assertIn(rule, guide)
+        for target in re.findall(r"\]\(\./([^)#]+)\)", guide):            # every link of the guide resolves
+            self.assertTrue((ROOT / target).exists(), target)
 
     def test_every_test_module_is_listed(self):
         listing = (TESTS_DIR / "README.md").read_text(encoding="utf-8")
