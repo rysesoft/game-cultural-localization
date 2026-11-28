@@ -2,6 +2,17 @@
 
 All notable changes to this plugin are documented here. The version number lives in `plugin.json` and `scripts/l10n_common.py`.
 
+## [3.4.0] 2026-11-28
+
+Complete SOLID, OOP, AOP and Clean Code extraction of all remaining core tool logic into `skills/game-cultural-localization/scripts/gcl/` with a hard 260 line facade cap on outer CLI entrypoints.
+
+### Changed
+- Added immutable domain aggregates `BlindEntry`, `CandidateSet` and `LineVerdict` (`gcl.domain.verdict_models`) paired with `VerdictRepository` and `JsonVerdictRepository` (`gcl.infrastructure.persistence.verdict_repo`).
+- Added `RateLimitAspect`, `RetryBackoffAspect` and `BatchCoalesceAspect` in `gcl.aspects.transport_aspects` plus `ItemMemoTaskAspect` in `gcl.aspects.task_chain` wired into `KeyedBatchTask`.
+- Extracted `font_glyph_scanner.py`, `report_changes.py`, `eval_critic.py`, `build_language_pack.py`, `orchestrator_stub.py` and `build_context_map.py` into `gcl.infrastructure.fonts`, `gcl.infrastructure.corpora`, `gcl.infrastructure.unity_scan`, `gcl.application.reporting`, `gcl.application.evaluation`, `gcl.application.langpack`, `gcl.application.context` and `gcl.composition` wiring modules.
+- Replaced subprocess font gate invocation in `orchestrator_stub` Phase 3 with in process `DefaultFontScannerAdapter` via `ServiceContainer.font_scanner`.
+- Enforced `MAX_FACADE_LINES = 260` across all outer `scripts/*.py` CLI facades in `scripts/dev/verify_architecture.py`.
+
 ## [3.3.0] 2026-11-28
 
 Native Python 3.15 language and standard library modernization across all `scripts/`, `gcl/` and `tests/` modules, zero external dependencies.

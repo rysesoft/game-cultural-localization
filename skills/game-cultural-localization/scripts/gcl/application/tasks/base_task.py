@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from gcl.aspects.task_chain import run_batches_with_aspects
+from gcl.aspects.task_chain import ItemMemoTaskAspect, run_batches_with_aspects
 from gcl.domain.envelope_codec import envelope, extract_json, salvage_keyed_items
 from gcl.domain.errors import L10nError, PermanentProviderError, ProviderError
 from gcl.ports.storage import MemoRepository
@@ -108,44 +108,15 @@ class KeyedBatchTask(ABC):
         """Projection stored inside item level memo key; override when payloads omit fields."""
         return item
 
-    def _partition_item_memo(
-        self, item_memo: MemoRepository | None, tag: Any, items: Sequence[Any], cfg: dict[str, Any],
-    ) -> tuple[dict[str, Any], list[Any], dict[str, str]]:
-        if item_memo is None:
-            return {}, list(items), {}
-        cached: dict[str, Any] = {}
-        pending: list[Any] = []
-        key_map: dict[str, str] = {}
-        id_field = self.item_id_field
-        for it in items:
-            iid = str(it[id_field])
-            ckey = item_memo.make_key(tag, iid, self.item_cache_value(it, cfg))
-            hit = item_memo.get(ckey)
-            if hit is not None:
-                cached[iid] = hit
-            else:
-                pending.append(it)
-                key_map[iid] = ckey
-        return cached, pending, key_map
-
-    @staticmethod
-    def _store_item_memo(item_memo: MemoRepository, key_map: dict[str, str], fresh: dict[str, Any]) -> None:
-        to_write = {key_map[k]: v for k, v in fresh.items() if k in key_map}
-        if not to_write:
-            return
-        if hasattr(item_memo, "put_many"):
-            item_memo.put_many(to_write)
-        else:
-            for ck, val in to_write.items():
-                item_memo.put(ck, val)
-
     def execute(self, provider: Any, items: Sequence[Any], locale: str, opts: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Run Template Method pipeline across batches via run_batches_with_aspects and item_memo."""
+        """Run Template Method pipeline across batches via run_batches_with_aspects and ItemMemoTaskAspect."""
         cfg = dict(opts or {})
         sys_prompt = self.build_system(locale, cfg)
         tag = self.cache_tag(provider, sys_prompt, locale, cfg)
-        item_memo: MemoRepository | None = cfg.get("item_memo")
-        cached, pending_items, key_map = self._partition_item_memo(item_memo, tag, items, cfg)
+        item_aspect = ItemMemoTaskAspect(
+            cfg.get("item_memo"), id_field=self.item_id_field, project_fn=lambda it: self.item_cache_value(it, cfg),
+        )
+        cached, pending_items, key_map = item_aspect.partition(tag, items)
         if not pending_items:
             return cached
         batches = self.make_batches(pending_items, cfg)
@@ -159,8 +130,7 @@ class KeyedBatchTask(ABC):
             tag=tag,
             prime=primes(provider),
         )
-        if item_memo is not None and fresh:
-            self._store_item_memo(item_memo, key_map, fresh)
+        item_aspect.store(key_map, fresh)
         if not cached:
             return fresh
         merged = {**cached, **fresh}

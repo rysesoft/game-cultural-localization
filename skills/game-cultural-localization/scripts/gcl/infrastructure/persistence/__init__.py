@@ -6,6 +6,7 @@ from .sqlite_tm import (
     CANDIDATE_POOL, DEFAULT_MIN_SIMILARITY, DEFAULT_TOP, MAX_QUERY_GRAMS, SCHEMA, STATUSES,
     SqliteTMRepository, TranslationMemory, dice, normalize, trigrams,
 )
+from .verdict_repo import JsonVerdictRepository
 
 __all__ = [
     "AtomicJsonMemoRepository",
@@ -14,6 +15,7 @@ __all__ = [
     "CANDIDATE_POOL",
     "DEFAULT_MIN_SIMILARITY",
     "DEFAULT_TOP",
+    "JsonVerdictRepository",
     "MAX_QUERY_GRAMS",
     "SCHEMA",
     "STATUSES",

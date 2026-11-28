@@ -44,6 +44,7 @@ HARDCODED_VENDORS = {"anthropic", "google", "deepseek"}
 MAX_FILE_LINES = 350
 MAX_FUNC_LINES = 65
 MAX_PARAMS = 7
+MAX_FACADE_LINES = 260
 
 _FORBIDDEN_CHARS = (";", "–", "—")
 _FENCE_RE = re.compile(r"^(```|~~~).*?^\1[ \t]*$", re.MULTILINE | re.DOTALL)
@@ -173,6 +174,17 @@ def _check_python_315_compliance() -> list[str]:
     return issues
 
 
+def _check_facades() -> list[str]:
+    issues: list[str] = []
+    for path in sorted(SCRIPTS_ROOT.glob("*.py")):
+        if path.name.endswith(".workflow.py"):
+            continue
+        lines = len(path.read_text(encoding="utf-8-sig").splitlines())
+        if lines > MAX_FACADE_LINES:
+            issues.append(f"{path.relative_to(REPO_ROOT).as_posix()}: {lines} lines exceeds facade limit {MAX_FACADE_LINES}")
+    return issues
+
+
 def verify(check_nav: bool = True) -> list[str]:
     errors: list[str] = []
     edges: dict[str, set[str]] = {}
@@ -215,6 +227,7 @@ def verify(check_nav: bool = True) -> list[str]:
                         errors.append(f"{rel}:{node.lineno}: hardcoded vendor literal {node.value!r} breaks OCP")
         for cyc in _find_cycles(edges):
             errors.append(f"cyclic import detected: {cyc}")
+    errors.extend(_check_facades())
     errors.extend(_check_python_315_compliance())
     doc_files: list[Path] = []
     if DOCS_ARCH.is_dir():

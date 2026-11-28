@@ -20,21 +20,22 @@ Allowed dependency directions inside `gcl/` (arrows point to what a layer may im
 1. **Strategy and Registry** in `gcl.infrastructure.formats`, `gcl.infrastructure.tokens` and `gcl.infrastructure.providers.vendor_registry` (zero format or vendor `if/elif` chains in core code)
 2. **Template Method** in `gcl.application.tasks.base_task.KeyedBatchTask` (single batch loop, item level memo partitioning, truncated JSON salvage and split logic shared by all tasks)
 3. **Chain of Responsibility** in `gcl.application.jury.escalation_chain` and `gcl.application.gates.lint_chain`
-4. **Decorator and Interceptor (AOP)** in `gcl.aspects.call_chain` and `gcl.aspects.task_chain` (including `ThinkingEffortAspect`)
-5. **Adapter** in `gcl.infrastructure.providers.adapters` and `gcl.infrastructure.persistence.context_views` (typed `RawVendorReply` eliminates tuple mismatch bugs)
+4. **Decorator and Interceptor (AOP)** in `gcl.aspects.call_chain`, `gcl.aspects.transport_aspects` (`RateLimitAspect`, `RetryBackoffAspect`, `BatchCoalesceAspect`) and `gcl.aspects.task_chain` (`MemoizationTaskAspect`, `ItemMemoTaskAspect`, `ThinkingEffortAspect`)
+5. **Adapter** in `gcl.infrastructure.providers.adapters`, `gcl.infrastructure.fonts.scanner_adapter` (`DefaultFontScannerAdapter`) and `gcl.infrastructure.persistence.context_views` (typed `RawVendorReply` eliminates tuple mismatch bugs)
 6. **Abstract Factory and Builder** in `gcl.infrastructure.providers.factory` and `gcl.application.pipeline.builder`
 7. **State** in `gcl.domain.line_state` (immutable line lifecycle transitions with accurate change counts)
 8. **Specification** in `gcl.domain.specifications` (composable boolean rules for jury agreement, `CleanLightPassSpec`, everyday word cap and lint filtering)
-9. **Interface Segregation** in `gcl.ports.context` (`BlindContextView` vs `WriterContextView`)
+9. **Interface Segregation** in `gcl.ports.context` (`BlindContextView` vs `WriterContextView`) and immutable domain aggregates in `gcl.domain.verdict_models` (`BlindEntry`, `CandidateSet`, `LineVerdict`)
 10. **Observer / Event Bus** in `gcl.aspects.event_bus` (decoupled `budget.jsonl` and stage telemetry)
-11. **Repository** in `gcl.infrastructure.persistence` (`AtomicJsonMemoRepository`, `SqliteTMRepository`)
-12. **Facade** in top level `scripts/*.py` CLI entrypoints
+11. **Repository** in `gcl.infrastructure.persistence` (`AtomicJsonMemoRepository`, `SqliteTMRepository`, `JsonVerdictRepository`)
+12. **Facade** in top level `scripts/*.py` CLI entrypoints (strictly `260` lines or fewer outside `.workflow.py`)
 13. **Flyweight Compactor and Context Deduplication** in `gcl.domain.prompt_compactor` and `gcl.application.pipeline.dedup`
 
 ## 3. Clean Code and Contract Limits
 
 - Every non `__init__.py` module in `scripts/gcl/` declares `__layer__`, `__pattern__` and `__owns__` at module top level
 - Maximum `350` physical lines per file inside `scripts/gcl/`
+- Maximum `260` physical lines per outer `scripts/*.py` CLI facade excluding `.workflow.py`
 - Maximum `65` lines per function or method inside `scripts/gcl/`
 - Maximum `7` parameters per function or method (excluding `self` and `cls`)
 - Zero `sys.path.insert` calls inside `scripts/gcl/`

@@ -41,6 +41,50 @@ class MemoizationTaskAspect:
         return wrapped
 
 
+class ItemMemoTaskAspect:
+    """Partitions and atomically persists individual keyed items across batch sizes."""
+
+    def __init__(
+        self,
+        memo: MemoRepository | None,
+        *,
+        id_field: str = "key",
+        project_fn: Callable[[Any], Any] | None = None,
+    ) -> None:
+        self._memo = memo
+        self._id_field = id_field
+        self._project_fn = project_fn or (lambda item: item)
+
+    def partition(self, tag: Any, items: Sequence[Any]) -> tuple[dict[str, Any], list[Any], dict[str, str]]:
+        if self._memo is None:
+            return {}, list(items), {}
+        cached: dict[str, Any] = {}
+        pending: list[Any] = []
+        key_map: dict[str, str] = {}
+        for it in items:
+            iid = str(it[self._id_field])
+            ckey = self._memo.make_key(tag, iid, self._project_fn(it))
+            hit = self._memo.get(ckey)
+            if hit is not None:
+                cached[iid] = hit
+            else:
+                pending.append(it)
+                key_map[iid] = ckey
+        return cached, pending, key_map
+
+    def store(self, key_map: dict[str, str], fresh: dict[str, Any]) -> None:
+        if self._memo is None or not key_map or not fresh:
+            return
+        to_write = {key_map[k]: v for k, v in fresh.items() if k in key_map}
+        if not to_write:
+            return
+        if hasattr(self._memo, "put_many"):
+            self._memo.put_many(to_write)
+        else:
+            for ck, val in to_write.items():
+                self._memo.put(ck, val)
+
+
 def run_batches_with_aspects[T](
     batches: Sequence[T],
     fn: Callable[[T], dict[str, Any]],

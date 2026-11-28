@@ -1,7 +1,10 @@
 """Persistence ports for memoization and translation memory repositories."""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
+
+from gcl.domain.verdict_models import LineVerdict
 
 __layer__ = "ports"
 __pattern__ = "Repository Ports"
@@ -60,3 +63,12 @@ class TMWriter(Protocol):
     """Write port for storing approved or candidate segments."""
 
     def store_segment(self, segment: TMSegment) -> str: ...
+
+
+@runtime_checkable
+class VerdictRepository(Protocol):
+    """Persistence port for saving and hydrating jury batch verdict documents."""
+
+    def save_batch(self, path: Path, doc: dict[str, Any]) -> dict[str, Any]: ...
+
+    def load_batch(self, path: Path) -> tuple[dict[str, Any], list[LineVerdict]]: ...
