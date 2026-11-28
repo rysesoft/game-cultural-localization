@@ -23,7 +23,7 @@ __layer__ = "infrastructure"
 __pattern__ = "Template HTTP Transport"
 __owns__ = "urllib GET/POST execution, SSE event assembly and retry loop"
 
-DEFAULT_TIMEOUT_S = 600.0
+DEFAULT_TIMEOUT_S = 180.0
 ANTHROPIC_MAX_OUTPUT = 128000
 DEEPSEEK_MAX_OUTPUT = 393216
 GOOGLE_MAX_OUTPUT = 65536

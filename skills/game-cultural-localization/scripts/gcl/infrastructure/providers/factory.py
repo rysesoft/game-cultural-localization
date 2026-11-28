@@ -181,6 +181,8 @@ class Router:
             kwargs["transport"] = self.transport
         if self.sleep is not None:
             kwargs["sleep"] = self.sleep
+        if pconf.get("timeout_s") is not None:
+            kwargs["timeout"] = float(pconf["timeout_s"])
         return self._registry.create(spec.provider, spec.id, **kwargs)
 
     def _batch_wrap(self, spec: ModelSpec, impl: Any) -> Any:

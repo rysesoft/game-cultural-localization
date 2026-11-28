@@ -147,10 +147,67 @@ class FontContextAndFacadeCapTests(unittest.TestCase):
     def test_facade_line_cap_and_v34_lockstep(self) -> None:
         self.assertEqual(va.MAX_FACADE_LINES, 260)
         plugin = json.loads((lc.SCRIPTS_DIR.parents[2] / "plugin.json").read_text(encoding="utf-8"))
-        self.assertEqual(plugin["version"], "3.4.0")
-        self.assertEqual(lc.__version__, "3.4.0")
+        self.assertEqual(plugin["version"], "3.4.1")
+        self.assertEqual(lc.__version__, "3.4.1")
         for path in sorted(SCRIPTS.glob("*.py")):
             if path.name.endswith(".workflow.py"):
                 continue
             lines = len(path.read_text(encoding="utf-8-sig").splitlines())
             self.assertLessEqual(lines, 260, f"{path.name} has {lines} lines > 260")
+
+    def test_v341_live_benchmark_improvements(self) -> None:
+        import lqa_linter
+        import orchestrator_stub as orch
+        from gcl.application.pipeline import send_ban_hit_lines_to_pass2
+        from gcl.application.rewrite import Pass2Tournament, TournamentOptions
+        from gcl.infrastructure.fonts.scanner_adapter import DefaultFontScannerAdapter
+        from gcl.infrastructure.providers.http_transport import DEFAULT_TIMEOUT_S
+        from providers import FakeScenario, Router, load_providers_config
+
+        self.assertEqual(DEFAULT_TIMEOUT_S, 180.0)
+        cfg = load_providers_config()
+        self.assertEqual(cfg.providers["google"]["effort"]["J3"], "medium")
+        self.assertIn("J3", cfg.providers["google"].get("flex_exclude_roles", []))
+        router = Router(cfg, dry_run=False, flex=True, env={"ANTHROPIC_API_KEY": "a", "GOOGLE_API_KEY": "g", "DEEPSEEK_API_KEY": "d"})
+        j1_google = next(m.provider for m in router.jury("J1") if m.family == "google")
+        j3_google = next(m.provider for m in router.jury("J3") if m.family == "google")
+        self.assertEqual(j1_google._impl.options.get("service_tier"), "flex")
+        self.assertNotIn("service_tier", j3_google._impl.options)
+
+        res = {"verdicts": [{"key": "OWNED", "score": 5, "status": "pass", "rationales": [], "evidence": {
+            "ban_hits": [{"rule": "TR-SAHIPSIN", "severity": "WARN", "message": "prefer sende zaten var"}],
+        }}], "stats": {"status": {"pass": 1, "rewrite_light": 0, "rewrite": 0}}}
+        self.assertEqual(send_ban_hit_lines_to_pass2(res), 1)
+        self.assertEqual((res["verdicts"][0]["status"], res["verdicts"][0]["score"]), ("rewrite_light", 4))
+
+        tr_rules = lqa_linter.load_rules("tr-TR")
+        opts = lqa_linter.LintOptions(locale="tr-TR", check_untranslated=False)
+        self.assertEqual([f for f in lqa_linter.lint_rows([lc.Row("k", "", "Enerjin çok düşük!", {})], tr_rules, opts) if f.code == "TR-COK-DUSUK"], [])
+
+        container = ServiceContainer()
+        sc = {
+            "pass2": [{"key": "C", "candidates": ["Ilk aday", "Ikinci aday", "Ucuncu aday"]}],
+            "picks": [{"contains": "Ucuncu", "family": "google", "prefer": "Ucuncu aday"}, {"contains": "Ilk", "prefer": "Ilk aday"}],
+            "scores": [
+                {"contains": "Ilk aday", "tier": "J1", "family": "anthropic", "score": 3, "reason": "r"},
+                {"contains": "Ilk aday", "tier": "J1", "family": "deepseek", "score": 4, "reason": "r"},
+                {"contains": "Ilk aday", "tier": "J1", "family": "google", "score": 3, "reason": "r"},
+            ],
+        }
+        tour_router = Router(cfg, dry_run=True, scenario=FakeScenario(sc))
+        t_out = Pass2Tournament(container.critique_validator, container.parity).run(
+            [{"key": "C", "final_tier": "J3", "score": 3, "status": "rewrite", "votes": [], "rationales": ["calque"], "evidence": {"ban_hits": []}}],
+            {"C": {"en": "Source line", "target": "Bozuk eski", "category": "dialogue", "register": "dialogue_casual"}},
+            "tr-TR", tour_router, TournamentOptions(pass2_system="P2", pick_system="PK"),
+        )
+        self.assertEqual((t_out["lines"][0]["valid"], t_out["lines"][0]["new"]), (True, "Ucuncu aday"))
+
+        with TempDir() as td:
+            final = td / "final_batch_01.json"
+            final.write_text(json.dumps([{"key": "K", "en": "Hi", "tr-TR": "Çeviri"}]), encoding="utf-8")
+            state = orch.PipelineState("tr-TR", td, "en", "tr-TR", "key", "auto", "auto")
+            self.assertIsInstance(DefaultFontScannerAdapter().scan(final, "tr-TR", "tr-TR", [FIXTURES / "Bebas Dyn SDF.asset"]), dict)
+            gate = orch.phase3_gate(state, [final], [FIXTURES / "Bebas Dyn SDF.asset"])
+            self.assertTrue(gate["passed"])
+            self.assertEqual(gate["missing_glyphs"], 0)
+            self.assertGreater(gate.get("lenient_missing_glyphs", 0), 0)

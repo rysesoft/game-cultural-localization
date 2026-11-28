@@ -3,7 +3,7 @@
 __layer__ = "domain"
 __pattern__ = "Domain Exceptions"
 __owns__ = "exit codes, version string and core exception hierarchy"
-__version__ = "3.4.0"
+__version__ = "3.4.1"
 MIN_PYTHON = (3, 15)
 
 EXIT_OK = 0

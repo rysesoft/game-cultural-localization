@@ -251,6 +251,11 @@ class LocalizationPipelineBuilder:
         broken = send_broken_lines_to_pass2(res, targets, src_by_key, opts.ph_style, opts.tag_style, self._h.parity)
         if broken:
             env.state.say(f"Phase 2: batch {n:02d} {broken} lines break placeholder or tag parity with the source, sent to Pass 2")
+        if opts.clean_light_pass:
+            from .stages import send_ban_hit_lines_to_pass2
+            banned = send_ban_hit_lines_to_pass2(res)
+            if banned:
+                env.state.say(f"Phase 2: batch {n:02d} {banned} lines matched locale ban rules, sent to Pass 2")
         vpath = env.workdir / f"verdicts_{tag}.json"
         verdict_doc = write_verdict_doc(vpath, env.locale, p1.name, info, res, env.router.notes)
         st = res["stats"]["status"]

@@ -271,20 +271,27 @@ def run_phase3_gate(
         counts = json.loads(raw)
         for key in ("errors", "warnings", "high", "warn"):
             summary[key] += int(counts[key])
-    missing, wide = set(), set()
+    missing, lenient_missing, wide = set(), set(), set()
     if fonts:
         for f in finals:
             try:
                 scan = CONTAINER.font_scanner.scan(f, state.locale, state.locale, list(fonts))
             except L10nError as exc:
                 raise L10nError(f"font scan failed: {exc}") from exc
-            missing |= {m["codepoint"] for m in scan.get("missing", [])}
+            cps = {m["codepoint"] for m in scan.get("missing", [])}
+            if scan.get("lenient"):
+                lenient_missing |= cps
+            else:
+                missing |= cps
             wide |= {m["codepoint"] for m in scan.get("full_width", [])}
     summary["missing_glyphs"] = len(missing)
+    if lenient_missing:
+        summary["lenient_missing_glyphs"] = len(lenient_missing)
     summary["full_width_fallbacks"] = len(wide)
     summary["passed"] = (
         summary["errors"] == 0 and summary["high"] == 0 and summary["missing_glyphs"] == 0
-        and summary["full_width_fallbacks"] == 0 and not (state.gate.get("fail_on_warn") and summary["warnings"])
+        and summary["full_width_fallbacks"] == 0
+        and not (state.gate.get("fail_on_warn") and (summary["warnings"] or lenient_missing))
     )
     if not fonts:
         state.say("Phase 3: no --font given, the glyph scan did not run, the gate says nothing about missing glyphs")

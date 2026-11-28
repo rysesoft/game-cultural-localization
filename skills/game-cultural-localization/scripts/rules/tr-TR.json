@@ -115,7 +115,7 @@
     {
       "id": "TR-COK-DUSUK",
       "severity": "WARN",
-      "pattern": "\\b(?:kondisyonun|dayanıklılığın|enerjin|canın)\\s+çok\\s+düşük\\b",
+      "pattern": "\\b(?:kondisyonun|dayanıklılığın)\\s+çok\\s+düşük\\b",
       "flags": "i",
       "message": "Literal 'X is too low': prefer 'nefesin tükendi / enerjin yetmiyor'",
       "examples": {
@@ -123,7 +123,8 @@
           "Kondisyonun çok düşük!"
         ],
         "nomatch": [
-          "Nefesin tükendi!"
+          "Nefesin tükendi!",
+          "Enerjin çok düşük!"
         ]
       }
     },

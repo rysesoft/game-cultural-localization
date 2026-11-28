@@ -2,6 +2,16 @@
 
 All notable changes to this plugin are documented here. The version number lives in `plugin.json` and `scripts/l10n_common.py`.
 
+## [3.4.1] 2026-11-28
+
+Live benchmark hardening across `J3` thinking calibration, lenient font gates, Pass 2 recheck confirmation and locale ban hit routing.
+
+### Changed
+- Set Google `J3` and `deliberate` effort to `medium` with `flex_exclude_roles` excluding both from `--flex`, and lowered default HTTP timeout (`DEFAULT_TIMEOUT_S`) to `180` seconds with per provider `timeout_s` config support.
+- Respected `lenient` dynamic TMP font scans inside `run_phase3_gate` so dynamic atlases warn unless `--strict` or `fail_on_warn` is enabled while static missing glyphs keep failing.
+- Added `recheck_confirmed` and `pick_runner_up` in `gcl.application.rewrite.recheck_policy` so severe lines (`score <= 3` or parity repaired) pass recheck on `2/3` majority and rejected picks fall back to voted runner up candidates before keeping broken originals.
+- Added `send_ban_hit_lines_to_pass2` for `[5, 5, 5]` lines with locale `ban_hits`, forwarded ban hit rationales into Pass 2 prompts and narrowed `TR-COK-DUSUK` in `rules/tr-TR.json` so natural `"Enerjin çok düşük!"` stays clean.
+
 ## [3.4.0] 2026-11-28
 
 Complete SOLID, OOP, AOP and Clean Code extraction of all remaining core tool logic into `skills/game-cultural-localization/scripts/gcl/` with a hard 260 line facade cap on outer CLI entrypoints.

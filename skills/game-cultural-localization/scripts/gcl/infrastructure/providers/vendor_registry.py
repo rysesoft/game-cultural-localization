@@ -112,7 +112,8 @@ class VendorRegistry:
     ) -> dict[str, Any]:
         desc = self._vendors.get(spec.provider)
         out = desc.options_builder(spec, provider_conf, role, force_thinking) if (desc and desc.options_builder is not None) else _base_options(spec)
-        if flex and desc and desc.supports_flex and "service_tier" not in out:
+        excluded = set(provider_conf.get("flex_exclude_roles") or ())
+        if flex and desc and desc.supports_flex and role not in excluded and "service_tier" not in out:
             out["service_tier"] = "flex"
         return out
 

@@ -5,6 +5,7 @@ from pathlib import Path
 from collections.abc import Callable, Sequence
 from typing import Any
 
+from gcl.domain.house_style import sanitize_prose
 from gcl.domain.models import Row
 from gcl.ports.context import WriterContextView
 from gcl.ports.formats import TokenParityPort
@@ -40,6 +41,28 @@ def send_broken_lines_to_pass2(
             v["status"], v["score"] = "rewrite", min(int(v.get("score", 3)), 3)
         sent += 1
     return sent
+
+
+def send_ban_hit_lines_to_pass2(res: dict[str, Any]) -> int:
+    """Promote passing [5, 5, 5] lines with locale rule ban hits into Pass 2 rewrite."""
+    counts = res["stats"].get("status", {})
+    promoted = 0
+    for v in res["verdicts"]:
+        hits = v.get("evidence", {}).get("ban_hits") or ()
+        if v.get("status") != "pass" or not hits:
+            continue
+        is_err = any(str(b.get("severity", "")).upper() == "ERR" for b in hits)
+        new_status = "rewrite" if is_err else "rewrite_light"
+        new_score = 3 if is_err else 4
+        b0 = hits[0]
+        note = sanitize_prose(f"locale rule {b0.get('rule', '')} ({b0.get('message', '')})")
+        v["rationales"] = ([note] if note else []) + [r for r in v.get("rationales", []) if r]
+        counts["pass"] = max(0, counts.get("pass", 1) - 1)
+        counts[new_status] = counts.get(new_status, 0) + 1
+        v["status"] = new_status
+        v["score"] = min(int(v.get("score", new_score)), new_score)
+        promoted += 1
+    return promoted
 
 
 def build_pass1_payload_rows(

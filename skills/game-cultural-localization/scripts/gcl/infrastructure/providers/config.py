@@ -119,6 +119,12 @@ def _validate_provider_entry(name: str, p: Any, path: Path, reg: VendorRegistry)
     stier = p.get("service_tier")
     if stier is not None and (not isinstance(stier, str) or stier.lower() not in _SERVICE_TIERS):
         raise L10nError(f"{path}: providers.{name}.service_tier must be standard, flex or priority")
+    fex = p.get("flex_exclude_roles")
+    if fex is not None and (not isinstance(fex, list) or not all(isinstance(r, str) and r.strip() for r in fex)):
+        raise L10nError(f"{path}: providers.{name}.flex_exclude_roles must be a list of non-empty role names")
+    tmo = p.get("timeout_s")
+    if tmo is not None and (not isinstance(tmo, (int, float)) or isinstance(tmo, bool) or tmo <= 0):
+        raise L10nError(f"{path}: providers.{name}.timeout_s must be a number > 0")
     batch = p.get("batch")
     if batch is not None:
         if not reg.has_batch(name):

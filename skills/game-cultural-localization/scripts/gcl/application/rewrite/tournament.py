@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from gcl.application.jury.policy import classify
+from gcl.application.rewrite.recheck_policy import pick_runner_up, recheck_confirmed
 from gcl.application.tasks.concrete_tasks import pass2_candidates, pick_candidates, score_entries
 from gcl.application.tasks.prompts import ISSUE_TYPES
 from gcl.domain.errors import L10nError
@@ -63,6 +64,7 @@ class _TournamentSelection:
     rows: Sequence[dict[str, Any]]
     states: dict[str, LineState]
     entries: list[dict[str, Any]]
+    valid_ranks: dict[str, list[int]]
 
 
 def final_votes(verdict: dict[str, Any]) -> list[dict[str, Any]]:
@@ -118,10 +120,12 @@ class Pass2Tournament:
         for v in todo:
             s = sources[v["key"]]
             fv = final_votes(v)
+            ban_notes = [f"rule {b.get('rule')}: {b.get('message')}" for b in (v.get("evidence", {}).get("ban_hits") or ()) if b.get("message")]
+            raw_rats = list(v.get("rationales", [])) + [n for n in ban_notes if n not in v.get("rationales", ())]
             row: dict[str, Any] = {
                 "key": v["key"], "source": s["en"], "target": s["target"],
                 **{k: s[k] for k in CONTEXT_FIELDS if s.get(k)},
-                "rationales": [r for r in v.get("rationales", []) if r],
+                "rationales": [r for r in raw_rats if r],
                 "suggestions": [x.get("suggested") for x in fv if x.get("suggested")],
                 "suggested": next((x.get("suggested") for x in fv if x.get("suggested")), ""),
                 "tm": [{"target": t.get("dst", ""), "category": t.get("category", "")} for t in (v.get("evidence", {}).get("tm_neighbors") or [])[:3]],
@@ -204,23 +208,16 @@ class Pass2Tournament:
         return [(m, pick(m)) for m in pickers]
 
     def _select_winners(
-        self,
-        todo: Sequence[dict[str, Any]],
-        rows: Sequence[dict[str, Any]],
-        cands: dict[str, list[str]],
-        id_maps: dict[str, dict[str, int]],
-        picks: Sequence[tuple[Any, dict[str, str]]],
-        locale: str,
-        opts: TournamentOptions,
+        self, todo: Sequence[dict[str, Any]], rows: Sequence[dict[str, Any]], cands: dict[str, list[str]],
+        id_maps: dict[str, dict[str, int]], picks: Sequence[tuple[Any, dict[str, str]]], locale: str, opts: TournamentOptions,
     ) -> _TournamentSelection:
-        lines: list[dict[str, Any]] = []
-        entries: list[dict[str, Any]] = []
-        states: dict[str, LineState] = {}
+        lines, entries, states, valid_ranks = [], [], {}, {}
         for v, r in zip(todo, rows):
             key, texts, id_map = r["key"], cands[r["key"]], id_maps[r["key"]]
             votes = Counter(id_map[p[key]] for _m, p in picks)
             ranking = sorted(range(len(texts)), key=lambda i: (-votes.get(i, 0), i))
-            chosen, problems_all, entry = self._pick_valid(v, r, texts, ranking, locale, opts)
+            chosen, valid_ids, problems_all, entry = self._pick_valid(v, r, texts, ranking, locale, opts)
+            valid_ranks[key] = valid_ids
             state0 = FlaggedForRewriteState(key, r["source"], r["target"], r["target"], str(v.get("status")))
             states[key] = state0.accept_rewrite(texts[chosen]) if (chosen is not None and texts[chosen] != r["target"]) else state0.keep_original(tuple(problems_all))
             if entry is not None and texts[chosen] != r["target"]:  # type: ignore[index]
@@ -234,20 +231,23 @@ class Pass2Tournament:
                 "chosen": chosen, "valid": chosen is not None, "problems": problems_all,
                 "kept_by_pick": chosen is not None and texts[chosen] == r["target"], "selected_by": "J1 blind pick",
             })
-        return _TournamentSelection(lines, rows, states, entries)
+        return _TournamentSelection(lines, rows, states, entries, valid_ranks)
 
     def _pick_valid(
         self, v: dict[str, Any], r: dict[str, Any], texts: Sequence[str], ranking: Sequence[int], locale: str, opts: TournamentOptions,
-    ) -> tuple[int | None, list[str], dict[str, Any] | None]:
+    ) -> tuple[int | None, list[int], list[str], dict[str, Any] | None]:
         key = r["key"]
         old_broken = self._parity.parity_problems(r["source"], r["target"], opts.ph_style, opts.tag_style)
         problems_all: list[str] = []
+        chosen: int | None = None
+        chosen_entry: dict[str, Any] | None = None
+        valid_ids: list[int] = []
+        reason = sanitize_prose((v.get("rationales") or ["jury flagged the line"])[0] or "jury flagged the line") or "jury flagged the line"
         for idx in ranking:
             if texts[idx] == r["target"]:
-                if idx == ranking[0] and not old_broken:
-                    return idx, problems_all, None
+                if idx == ranking[0] and not old_broken and chosen is None:
+                    return idx, [idx], problems_all, None
                 continue
-            reason = sanitize_prose((v.get("rationales") or ["jury flagged the line"])[0] or "jury flagged the line") or "jury flagged the line"
             entry = {"key": key, "score": min(int(v.get("score", 4)), 4), "issue_type": main_issue(v), "reason": reason, "suggested": texts[idx]}
             probs = self._validator.validate_single(
                 locale=locale, source_file=opts.source_file, entry=entry,
@@ -255,17 +255,48 @@ class Pass2Tournament:
                 ph_style=opts.ph_style, tag_style=opts.tag_style,
             )
             if not probs:
-                return idx, problems_all, entry
-            problems_all.extend(f"{texts[idx]!r}: {p}" for p in probs)
-        return None, problems_all, None
+                valid_ids.append(idx)
+                if chosen is None:
+                    chosen, chosen_entry = idx, entry
+            elif chosen is None:
+                problems_all.extend(f"{texts[idx]!r}: {p}" for p in probs)
+        return chosen, valid_ids, problems_all, chosen_entry
+
+    def _score_view(
+        self, pairs: Sequence[tuple[dict[str, Any], dict[str, Any]]], router: Any, locale: str, pk_sys: str, opts: TournamentOptions,
+    ) -> tuple[list[Any], list[dict[str, dict[str, Any]]]]:
+        members = _jury_tier(router, "J1", "recheck")
+        bctx = opts.blind_context
+        view = [
+            {"key": l["key"], "target": text_override if (text_override := l.get("_probe_text")) is not None else l["new"],
+             **{k: r[k] for k in CONTEXT_FIELDS if r.get(k)},
+             **({"context": bctx.line_fields(l["key"])} if bctx is not None and bctx.line_fields(l["key"]) else {})}
+            for l, r in pairs
+        ]
+        extra = self._task_extra(opts)
+        rescore = lambda m: self._score_fn(m.provider, view, locale, tier="J1", system=pk_sys, workers=opts.workers, memo=opts.memo, **extra)
+        if int(opts.workers) > 1 and len(members) > 1:
+            with ThreadPoolExecutor(max_workers=len(members)) as ex:
+                return members, list(ex.map(rescore, members))
+        return members, [rescore(m) for m in members]
+
+    def _retry_runner_ups(
+        self, failed: Sequence[tuple[dict[str, Any], dict[str, Any], list[int], bool]],
+        sel: _TournamentSelection, router: Any, locale: str, pk_sys: str, opts: TournamentOptions,
+    ) -> set[str]:
+        candidates = [
+            (l, r, ru, ob) for l, r, _got, ob in failed
+            if (ru := pick_runner_up(l, sel.valid_ranks.get(l["key"], ()), ob)) is not None
+        ]
+        for l, _r, ru, _ob in candidates:
+            l["_probe_text"] = l["candidates"][ru]
+        scores_ru = self._score_view([(l, r) for l, r, _ru, _ob in candidates], router, locale, pk_sys, opts)[1] if candidates else []
+        agreement = {k: int(x) for k, x in router.config.agreement.items()}
+        from gcl.application.rewrite.recheck_policy import apply_runner_up_outcomes
+        return apply_runner_up_outcomes(candidates, failed, scores_ru, agreement, sel.entries, sel.states)
 
     def _run_recheck(
-        self,
-        sel: _TournamentSelection,
-        router: Any,
-        locale: str,
-        pk_sys: str,
-        opts: TournamentOptions,
+        self, sel: _TournamentSelection, router: Any, locale: str, pk_sys: str, opts: TournamentOptions,
     ) -> list[dict[str, Any]]:
         recheck = [(l, r) for l, r in zip(sel.lines, sel.rows) if l["valid"] and l["new"] != l["old"]]
         if not recheck:
@@ -280,29 +311,16 @@ class Pass2Tournament:
                 pending_recheck.append((l, r))
         if not pending_recheck:
             return sel.entries
-        bctx = opts.blind_context
-        view = [
-            {"key": l["key"], "target": l["new"], **{k: r[k] for k in CONTEXT_FIELDS if r.get(k)},
-             **({"context": bctx.line_fields(l["key"])} if bctx is not None and bctx.line_fields(l["key"]) else {})}
-            for l, r in pending_recheck
-        ]
+        scores = self._score_view(pending_recheck, router, locale, pk_sys, opts)[1]
         agreement = {k: int(x) for k, x in router.config.agreement.items()}
-        extra = self._task_extra(opts)
-        rescore = lambda m: self._score_fn(m.provider, view, locale, tier="J1", system=pk_sys, workers=opts.workers, memo=opts.memo, **extra)
-        if int(opts.workers) > 1 and len(members) > 1:
-            with ThreadPoolExecutor(max_workers=len(members)) as ex:
-                scores = list(ex.map(rescore, members))
-        else:
-            scores = [rescore(m) for m in members]
-        unconfirmed = set()
+        failed = []
         for l, r in pending_recheck:
             got = [s[l["key"]]["score"] for s in scores]
             l["recheck"] = got
-            if classify(got, agreement) != "pass":
-                unconfirmed.add(l["key"])
-                msg = f"J1 did not confirm the rewrite (scores {got}), the old line stays"
-                l.update(valid=False, new=l["old"], problems=l["problems"] + [msg])
-                sel.states[l["key"]] = FlaggedForRewriteState(l["key"], r["source"], l["old"], l["old"], str(l.get("status"))).keep_original((msg,))
+            old_broken = bool(self._parity.parity_problems(r["source"], l["old"], opts.ph_style, opts.tag_style))
+            if not recheck_confirmed(got, agreement, int(l.get("score") or 4), old_broken):
+                failed.append((l, r, got, old_broken))
+        unconfirmed = self._retry_runner_ups(failed, sel, router, locale, pk_sys, opts) if failed else set()
         return [e for e in sel.entries if e["key"] not in unconfirmed]
 
 
