@@ -15,12 +15,14 @@ This repository is the **Game Cultural Localization** plugin. It turns machine o
 
 ### B. Working on the plugin itself
 
-1. Read [CHANGELOG.md](./CHANGELOG.md) (newest entries first) and [scripts/CLI_REFERENCE.md](./skills/game-cultural-localization/scripts/CLI_REFERENCE.md).
-2. Run the tests before and after every change, on the oldest and a current Python.
+1. Read [CHANGELOG.md](./CHANGELOG.md) (newest entries first), [architecture memory](./docs/architecture/ARCHITECTURE_MEMORY.md), [navigation map](./docs/architecture/NAVIGATION.md) and [scripts/CLI_REFERENCE.md](./skills/game-cultural-localization/scripts/CLI_REFERENCE.md).
+2. Inside `skills/game-cultural-localization/scripts/gcl/`, also follow [gcl/AGENTS.md](./skills/game-cultural-localization/scripts/gcl/AGENTS.md). Keep layer imports downward only, never add third party packages and regenerate `NAVIGATION.md` after structural edits with `python skills/game-cultural-localization/scripts/dev/sync_navigation.py`.
+3. Run the architecture verifier and the tests before and after every change, on the oldest and a current Python.
    ```bash
-   python -m unittest discover tests
+   python skills/game-cultural-localization/scripts/dev/verify_architecture.py
+   python -B -m unittest discover tests
    ```
-3. Follow the rules below, then add the change to `CHANGELOG.md` under `[Unreleased]`.
+4. Follow the rules below, then add the change to `CHANGELOG.md` under `[Unreleased]`.
 
 ## Rules that are never optional
 
@@ -39,16 +41,18 @@ This repository is the **Game Cultural Localization** plugin. It turns machine o
 
 ```
 AGENTS.md, CLAUDE.md        this guide for AI agents
+.agents/hooks.json          lifecycle hooks keeping architecture memory and navigation in sync
+docs/architecture/          ARCHITECTURE_MEMORY.md, NAVIGATION.md and adr/ decisions
 README.md, README_TR.md     the project page for people, in English and in Turkish
 rules/AGENTS.md             always on rules for the projects that use the plugin
 agents/                     context-cartographer, context-scout, game-culturalizer, native-ear-critic
 skills/game-cultural-localization/
   SKILL.md                  entry point of the skill, archetypes, the 8 laws, minimal instructions
   references/               15 locale playbooks, methodology_and_qa.md, transcreation_ledger_guide.md
-  scripts/                  CLI tools, providers/ and providers.config.json (models, roles, jury tiers), rules/<locale>.json
+  scripts/                  CLI facades, gcl/ layered core, dev/ architecture checks, providers.config.json, rules/
   prompts/                  native critic and Pass 2 prompts for 15 locales, literal.md
   langpack/                 sources.manifest.json and the built language packs (local/ never leaves the machine)
-tests/                      python -m unittest discover tests
+tests/                      python -B -m unittest discover tests
 loc_work/                   per project working files, never committed
 ```
 

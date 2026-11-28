@@ -1,198 +1,61 @@
 #!/usr/bin/env python3
-"""J3 deliberation round for lines the strongest jury tier disagrees on (brief A5).
-
-1. The three J3 members have voted (their first votes come from jury.py).
-2. Each member is shown the other two scores and reasons WITHOUT model or family names
-   (labelled juror A and juror B, names scrubbed from the reason text), plus the mechanical
-   evidence package. Ban list hits, the three closest approved translation memory lines
-   (target text only) and the back-translation signal for long dialogue.
-3. Each member votes once more.
-4. Majority decides (two equal scores). Three different scores leave the line 'unresolved',
-   it goes to the developer with the three rationales.
-
-As a CLI it takes a jury verdict file and the blind slice, deliberates every J3 disagreement
-still marked 'unresolved' and rewrites the verdicts (in place unless --out is given).
-
-Usage:
-  python deliberate.py verdicts_tr-TR_01.json --slice blind_tr-TR_01.json --locale tr-TR [--dry-run]
-
-Exit codes: 0 no line left unresolved, 1 at least one line stays unresolved, 2 usage or input error.
-Python 3.9+, standard library only.
-"""
-
+"""J3 deliberation round CLI facade delegating to gcl.application.jury.deliberation."""
 from __future__ import annotations
 
 import argparse
 import json
 import re
 import sys
-from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from l10n_common import (  # noqa: E402
-    EXIT_FINDINGS, EXIT_OK, L10nError, add_common_args, add_input_argument, apply_config, emit_report, load_json_data,
-    normalize_locale, resolve_input, run_main, __version__,
-)
 from build_context_map import load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR  # noqa: E402
-from jury import build_system_prompt, juror_view, load_blind_slice, status_for  # noqa: E402
-from llm_tasks import add_model_args, default_budget_path, everyday_rule, make_router, revote, revote_many  # noqa: E402
+from gcl.application.jury.deliberation import (  # noqa: E402
+    GENERIC_NAMES, LABELS, anonymize, decide, decide_line, deliberate_line as _deliberate_line,
+    deliberate_lines as _deliberate_lines, deliberate_verdicts, evidence_package, make_deliberator,
+    name_scrubber, revote_payload,
+)
+from gcl.application.jury.policy import juror_view, status_for  # noqa: E402
+from gcl.infrastructure.persistence.context_views import BlindContextAdapter  # noqa: E402
+from jury import build_system_prompt, load_blind_slice  # noqa: E402
+from l10n_common import (  # noqa: E402
+    EXIT_FINDINGS, EXIT_OK, L10nError, add_common_args, add_input_argument, apply_config, emit_report,
+    load_json_data, normalize_locale, resolve_input, run_main, __version__,
+)
+from llm_tasks import add_model_args, default_budget_path, make_router  # noqa: E402
 
 TOOL = "deliberate"
-LABELS = ("A", "B")
-GENERIC_NAMES = ("anthropic", "claude", "haiku", "sonnet", "opus", "google", "gemini", "hydrogen", "neon", "carbon",
-                 "deepseek", "openai", "gpt", "llama", "mistral", "qwen", "v4 pro", "v4 flash", "v4-pro", "v4-flash", "v4.1 flash",
-                 "v4.1-flash", "flash", "pro")
 
 
-def name_scrubber(config: Any) -> "re.Pattern[str]":
-    """Regex matching every model id, alias and family name of the config plus common vendor names."""
-    names = set(GENERIC_NAMES)
-    for spec in config.models.values():
-        names.update({spec.alias.lower(), spec.id.lower(), spec.provider.lower()})
-    alts = sorted(names, key=len, reverse=True)
-    return re.compile(r"(?<![\w-])(" + "|".join(re.escape(n) for n in alts) + r")(?![\w-])", re.IGNORECASE)
+def deliberate_line(
+    entry: Dict[str, Any],
+    j3_votes: Sequence[Dict[str, Any]],
+    evidence: Dict[str, Any],
+    members: Sequence[Any],
+    locale: str,
+    system: str,
+    scrub: "re.Pattern[str]",
+    critical_max: int = 2,
+) -> Dict[str, Any]:
+    """Backward compatible wrapper forwarding explicit critical_max to gcl.application.jury.deliberation."""
+    return _deliberate_line(entry, j3_votes, evidence, members, locale, system, scrub, critical_max=critical_max)
 
 
-def anonymize(text: str, scrub: "re.Pattern[str]") -> str:
-    """Replace model and vendor names in a rationale with 'another juror'."""
-    out = scrub.sub("another juror", text or "")
-    return re.sub(r"another juror(?:[\s-]+another juror)+", "another juror", out)
-
-
-def evidence_package(evidence: Dict[str, Any]) -> Dict[str, Any]:
-    """What jurors may see of the evidence: rule hits, three approved TM target lines, calque signal (no source text)."""
-    tm = [n for n in evidence.get("tm_neighbors", []) if n.get("status", "approved") == "approved"][:3]
-    rt = evidence.get("roundtrip") or {}
-    return {"ban_hits": [{"rule": b.get("rule"), "message": b.get("message")} for b in evidence.get("ban_hits", [])],
-            "tm_neighbors": [{"target": n.get("dst", n.get("target", "")), "category": n.get("category", ""), "similarity": n.get("similarity")} for n in tm],
-            "roundtrip": {k: rt[k] for k in ("applied", "calque_score", "suspect") if k in rt}}
-
-
-def decide(scores: Sequence[int]) -> Optional[int]:
-    """Majority score (at least two equal votes), else None."""
-    score, count = Counter(scores).most_common(1)[0]
-    return score if count >= 2 else None
-
-
-def revote_payload(entry: Dict[str, Any], by_member: Dict[int, Dict[str, Any]], member_index: int, package: Dict[str, Any],
-                   scrub: "re.Pattern[str]") -> Dict[str, Any]:
-    """What one member sees in the re-vote of a line, its own first vote and the two others without names."""
-    own = by_member.get(member_index)
-    if own is None:
-        raise L10nError(f"deliberation for '{entry['key']}': no first J3 vote of member {member_index}")
-    view = juror_view(entry)
-    others = [by_member[i] for i in sorted(by_member) if i != member_index]
-    return {"key": entry["key"], "target": view["target"], "context": {k: v for k, v in view.items() if k not in ("key", "target")},
-            "own": {k: own[k] for k in ("score", "issue_type", "reason", "suggested")},
-            "others": [{"juror": LABELS[i], "score": o["score"], "issue_type": o["issue_type"], "reason": anonymize(o["reason"], scrub),
-                        "suggested": o.get("suggested", "")} for i, o in enumerate(others)],
-            "evidence": package}
-
-
-def decide_line(by_member: Dict[int, Dict[str, Any]], revotes: List[Dict[str, Any]], critical_max: int = 2) -> Dict[str, Any]:
-    """The outcome of a re-vote round for one line. Returns {score, status, rationales, revotes, deliberation}."""
-    everyday_rule(revotes)  # the everyday word check keeps its weight in the re-vote
-    scores = [v["score"] for v in revotes]
-    majority = decide(scores)
-    first = [by_member[i]["score"] for i in sorted(by_member)]
-    info = {"first": first, "revote": scores, "majority": majority}
-    if majority is None:
-        return {"score": min(scores), "status": "unresolved", "rationales": [v["reason"] for v in revotes], "revotes": revotes, "deliberation": info}
-    if min(scores) <= critical_max < majority:
-        # one juror still calls the line broken after the round, a majority does not overrule that, the developer decides.
-        # A single critical vote sends a line from J1 straight to J3, the last tier must not be laxer than the first.
-        info["critical_holdout"] = True
-        return {"score": min(scores), "status": "unresolved", "rationales": [v["reason"] for v in revotes], "revotes": revotes, "deliberation": info}
-    return {"score": majority, "status": status_for(majority), "rationales": [v["reason"] for v in revotes], "revotes": revotes, "deliberation": info}
-
-
-def deliberate_line(entry: Dict[str, Any], j3_votes: Sequence[Dict[str, Any]], evidence: Dict[str, Any], members: Sequence[Any],
-                    locale: str, system: str, scrub: "re.Pattern[str]", critical_max: int = 2) -> Dict[str, Any]:
-    """Run one re-vote round for a line, one call per member. Returns {score, status, rationales, revotes, deliberation}."""
-    by_member = {int(v["member"]): v for v in j3_votes}
-    package = evidence_package(evidence)
-    revotes: List[Dict[str, Any]] = []
-    for m in members:
-        v = revote(m.provider, revote_payload(entry, by_member, m.index, package, scrub), locale, system=system)
-        revotes.append({"key": entry["key"], "tier": "deliberation", "member": m.index, "family": m.family, "model": m.provider.model, **v})
-    return decide_line(by_member, revotes, critical_max)
-
-
-def deliberate_lines(items: Sequence[Tuple[Dict[str, Any], Sequence[Dict[str, Any]], Dict[str, Any]]], members: Sequence[Any],
-                     locale: str, system: str, scrub: "re.Pattern[str]", critical_max: int = 2, workers: int = 1,
-                     memo: Any = None) -> Dict[str, Dict[str, Any]]:
-    """The re-vote round of many disputed lines at once. items are (entry, first J3 votes, evidence).
-
-    Each member re-votes every line in a few calls (revote_many) instead of one call per line, the members run side by
-    side when workers > 1. The outcome of every line is the same as deliberate_line gives. Returns key -> outcome.
-    """
-    if not items:
-        return {}
-    firsts = {e["key"]: {int(v["member"]): v for v in votes} for e, votes, _ev in items}
-    payloads = {m.index: [revote_payload(e, firsts[e["key"]], m.index, evidence_package(ev), scrub) for e, _v, ev in items] for m in members}
-
-    def member_votes(m: Any) -> Dict[str, Dict[str, Any]]:
-        return revote_many(m.provider, payloads[m.index], locale, system=system, workers=workers, memo=memo)
-    if int(workers) > 1 and len(members) > 1:
-        with ThreadPoolExecutor(max_workers=len(members)) as ex:
-            got = dict(zip([m.index for m in members], ex.map(member_votes, members)))
-    else:
-        got = {m.index: member_votes(m) for m in members}
-    out: Dict[str, Dict[str, Any]] = {}
-    for e, _votes, _ev in items:
-        k = e["key"]
-        revotes = [{"key": k, "tier": "deliberation", "member": m.index, "family": m.family, "model": m.provider.model, **got[m.index][k]}
-                   for m in members]
-        out[k] = decide_line(firsts[k], revotes, critical_max)
-    return out
-
-
-def make_deliberator(router: Any, locale: str, system: str) -> Any:
-    """Callable for jury.run_jury(deliberator=...), one line per call. Its `many(items, workers, memo)` re-votes many lines at once."""
-    members = router.jury("J3")
-    scrub = name_scrubber(router.config)
-    critical_max = int(router.config.agreement.get("critical_max", 2))
-
-    def run(entry: Dict[str, Any], j3_votes: List[Dict[str, Any]], evidence: Dict[str, Any]) -> Dict[str, Any]:
-        return deliberate_line(entry, j3_votes, evidence, members, locale, system, scrub, critical_max)
-
-    def many(items: Sequence[Tuple[Dict[str, Any], Sequence[Dict[str, Any]], Dict[str, Any]]], workers: int = 1,
-             memo: Any = None) -> Dict[str, Dict[str, Any]]:
-        return deliberate_lines(items, members, locale, system, scrub, critical_max, workers, memo)
-    run.many = many  # type: ignore[attr-defined]
-    return run
-
-
-def deliberate_verdicts(doc: Dict[str, Any], entries: Iterable[Dict[str, Any]], router: Any, locale: str, system: str) -> Dict[str, int]:
-    """Deliberate every J3 'unresolved' verdict of a jury verdict document in place; returns counts."""
-    by_key = {e["key"]: e for e in entries}
-    run = make_deliberator(router, locale, system)
-    counts = {"deliberated": 0, "resolved": 0, "unresolved": 0}
-    todo = [v for v in doc.get("verdicts", []) if v.get("status") == "unresolved" and v.get("final_tier") == "J3"]
-    for v in todo:
-        if v["key"] not in by_key:
-            raise L10nError(f"verdict '{v['key']}' is not in the blind slice")
-    outcomes = run.many([(by_key[v["key"]], [x for x in v.get("votes", []) if x.get("tier") == "J3"], v.get("evidence", {})) for v in todo])
-    for v in todo:
-        res = outcomes[v["key"]]
-        v["votes"] = list(v.get("votes", [])) + res["revotes"]
-        v.update({"final_tier": "deliberation", "score": res["score"], "status": res["status"], "rationales": res["rationales"],
-                  "deliberation": res["deliberation"]})
-        counts["deliberated"] += 1
-        counts["resolved" if res["status"] != "unresolved" else "unresolved"] += 1
-    if counts["deliberated"]:
-        statuses = ("pass", "rewrite_light", "rewrite", "critical", "unresolved")
-        stats = doc.setdefault("stats", {})
-        stats["status"] = {s: sum(1 for v in doc["verdicts"] if v["status"] == s) for s in statuses}
-        stats.setdefault("final_tier", {})["deliberation"] = sum(1 for v in doc["verdicts"] if v["final_tier"] == "deliberation")
-        stats["final_tier"]["J3"] = sum(1 for v in doc["verdicts"] if v["final_tier"] == "J3")
-        stats["deliberation"] = counts
-    return counts
+def deliberate_lines(
+    items: Sequence[Tuple[Dict[str, Any], Sequence[Dict[str, Any]], Dict[str, Any]]],
+    members: Sequence[Any],
+    locale: str,
+    system: str,
+    scrub: "re.Pattern[str]",
+    critical_max: int = 2,
+    workers: int = 1,
+    memo: Any = None,
+) -> Dict[str, Dict[str, Any]]:
+    """Backward compatible wrapper forwarding explicit parameters to gcl.application.jury.deliberation."""
+    return _deliberate_lines(items, members, locale, system, scrub, critical_max=critical_max, workers=workers, memo=memo)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -225,24 +88,25 @@ def main() -> int:
     router = make_router(args, ["J3"], default_budget_path(out))
     pack_dir = (Path(args.langpack_dir) if args.langpack_dir else LANGPACK_DIR) / locale
     system, _info = build_system_prompt(locale, entries, pack_dir, warmup=not args.no_warmup, warmup_count=40, shots=6, seed=args.seed)
-    if args.context_map:  # as in jury.py, the map and the neutral line fields, never the locale appendix
-        ctx = load_context(Path(args.context_map), locale)
-        ctx.enrich(entries)
-        system = ctx.system(system)
+    if args.context_map:
+        ctx = BlindContextAdapter(load_context(Path(args.context_map), locale))
+        ctx.enrich_entries(entries)
+        system = ctx.build_system(system)
     counts = deliberate_verdicts(doc, entries, router, locale, system)
     doc["notes"] = list(doc.get("notes", [])) + [n for n in router.notes if n not in doc.get("notes", [])]
     out.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     remaining = sum(1 for v in doc["verdicts"] if v["status"] == "unresolved")
     exit_code = EXIT_FINDINGS if remaining else EXIT_OK
-    lines = [f"Deliberation {locale}: {counts['deliberated']} J3 disagreement(s), {counts['resolved']} settled by majority, "
-             f"{counts['unresolved']} still unresolved -> {out}"]
+    lines = [
+        f"Deliberation {locale}: {counts['deliberated']} J3 disagreement(s), {counts['resolved']} settled by majority, "
+        f"{counts['unresolved']} still unresolved -> {out}",
+    ]
     for v in doc["verdicts"]:
         if v.get("final_tier") == "deliberation":
             d = v["deliberation"]
             lines.append(f"  {v['key']}: first {d['first']} revote {d['revote']} -> {v['status']}")
     lines.append(f"  Exit code: {exit_code}")
-    payload = {"tool": TOOL, "version": __version__, "out": str(out), "counts": counts, "unresolved": remaining,
-               "notes": router.notes, "exit_code": exit_code}
+    payload = {"tool": TOOL, "version": __version__, "out": str(out), "counts": counts, "unresolved": remaining, "notes": router.notes, "exit_code": exit_code}
     emit_report("\n".join(lines), payload, args.json, args.output)
     return exit_code
 

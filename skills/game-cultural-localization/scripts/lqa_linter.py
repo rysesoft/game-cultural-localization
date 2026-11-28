@@ -1,310 +1,36 @@
 #!/usr/bin/env python3
-"""Multi-language anti-translationese & technical LQA linter (15 locales).
-
-Checks every target string for:
-  * [EMPTY] / [FUZZY] / [PLURAL_FORMS] / [UNTRANSLATED] completeness problems
-  * [ENCODING] U+FFFD, mojibake, control characters
-  * [PLACEHOLDER] parity for unity / unreal / godot / icu / printf / python styles
-  * [RICH_TAG] parity + open/close structure for TMP / HTML / BBCode tags
-  * [LEADING_SPACE] / [TRAILING_SPACE] / [TRAILING_NEWLINE] (with --strict-whitespace)
-  * [FORBIDDEN_CHAR] / [SPACED_HYPHEN] project punctuation bans
-  * [GLOSSARY] locked-term consistency (--glossary termbase.csv)
-  * [<locale>:<RULE-ID>] data-driven locale rules from scripts/rules/<locale>.json
-    (+ scripts/rules/custom/*.json and any --rules <dir>)
-
-Input: JSON (list or map), CSV / TSV (delimiter sniffed), gettext PO, Unity
-Localization StringTable .asset.  Exit codes: 0 clean, 1 findings
-(ERR, or WARN with --fail-on-warn), 2 usage / input error.
-Python 3.9+, standard library only.
-"""
-
+"""Multi-language LQA linter CLI facade delegating to gcl.application.gates and gcl.infrastructure."""
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
-import unicodedata
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from gcl.application.gates import LintOptions, ROW_CONTEXTS, RULE_CONTEXTS, Rule, row_contexts, rule_applies  # noqa: E402
+from gcl.application.gates.lint_chain import _CONTROL_RE, _MOJIBAKE_RE, lint_rows as _lint_rows  # noqa: E402
+from gcl.domain.models import Finding  # noqa: E402
+from gcl.infrastructure.formats.lint_rules_io import (  # noqa: E402
+    _FLAG_MAP, _compile_rule_file, compile_rule_files, load_rules,
+)
+from gcl.infrastructure.tokens.parity_adapter import DefaultTokenParityAdapter  # noqa: E402
 from l10n_common import (  # noqa: E402
     CANONICAL_LOCALES, DEFAULT_RULES_DIR, EXIT_FINDINGS, EXIT_OK, PLACEHOLDER_STYLES, PLURAL_FORMS, TAG_STYLES,
-    GlossaryTerm, L10nError, Row, add_common_args, add_input_argument, resolve_input, compare_placeholders, compare_tags, emit_report,
-    extract_placeholders, extract_tags, glossary_violations, load_config, load_glossary, load_json_data,
-    load_table, normalize_locale, pick, run_main, __version__,
+    GlossaryTerm, L10nError, Row, add_common_args, add_input_argument, emit_report, load_config, load_glossary,
+    load_table, normalize_locale, pick, resolve_input, run_main, __version__,
 )
 
 TOOL = "lqa_linter"
-_MOJIBAKE_RE = re.compile(r"[ÃÂ][\u0080-\u00ff]|â€[\u0080-\u00ff\x9d\x9c\x9e\x99]")
-_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-
-
-RULE_CONTEXTS = ("any", "ui", "dialog", "player", "button", "formal")
-ROW_CONTEXTS = ("ui", "dialog", "player", "button", "formal")
-
-
-class Rule(NamedTuple):
-    id: str
-    severity: str
-    regex: re.Pattern
-    message: str
-    context: str        # any | ui | dialog | player | button | formal
-    skip_variants: tuple
-    source: str
-    skip_contexts: tuple = ()   # row contexts where the rule never applies, e.g. ("formal",)
-
-
-class Finding(NamedTuple):
-    severity: str   # ERR | WARN
-    code: str       # PLACEHOLDER, RICH_TAG, <RULE-ID> ...
-    key: str
-    message: str
-    target: str
-
-    def as_dict(self) -> Dict[str, Any]:
-        return {"severity": self.severity, "code": self.code, "key": self.key, "message": self.message, "target": self.target}
-
-
-# --------------------------------------------------------------------------- #
-# Rule loading
-# --------------------------------------------------------------------------- #
-_FLAG_MAP = {"i": re.IGNORECASE, "m": re.MULTILINE, "x": re.VERBOSE, "s": re.DOTALL}
-
-
-def _compile_rule_file(path: Path, locale: str, variant: Optional[str]) -> List[Rule]:
-    data = load_json_data(path)
-    if not isinstance(data, dict) or "rules" not in data:
-        raise L10nError(f"{path}: rule file must be an object with a 'rules' array")
-    file_locale = data.get("locale")
-    if file_locale is not None:
-        try:
-            if normalize_locale(str(file_locale))[0] != locale:
-                return []
-        except L10nError:
-            raise L10nError(f"{path}: unknown 'locale' value {file_locale!r}")
-    rules: List[Rule] = []
-    for idx, raw in enumerate(data["rules"]):
-        if not isinstance(raw, dict):
-            raise L10nError(f"{path}: rule #{idx} is not an object")
-        for req in ("id", "severity", "pattern", "message"):
-            if req not in raw:
-                raise L10nError(f"{path}: rule #{idx} ({raw.get('id', '?')}) is missing '{req}'")
-        sev = str(raw["severity"]).upper()
-        if sev not in ("ERR", "WARN"):
-            raise L10nError(f"{path}: rule {raw['id']} has invalid severity {raw['severity']!r} (ERR|WARN)")
-        flags = 0
-        for ch in str(raw.get("flags", "")):
-            if ch not in _FLAG_MAP:
-                raise L10nError(f"{path}: rule {raw['id']} has unknown flag '{ch}' (i, m, x, s)")
-            flags |= _FLAG_MAP[ch]
-        try:
-            rx = re.compile(str(raw["pattern"]), flags)
-        except re.error as exc:
-            raise L10nError(f"{path}: rule {raw['id']} has an invalid regex: {exc}")
-        ctx = str(raw.get("context", "any"))
-        if ctx not in RULE_CONTEXTS:
-            raise L10nError(f"{path}: rule {raw['id']} has invalid context {ctx!r} ({'|'.join(RULE_CONTEXTS)})")
-        skip = tuple(str(v).lower() for v in raw.get("skip_variants", []) or [])
-        if variant and variant.lower() in skip:
-            continue
-        skip_ctx = raw.get("skip_contexts", []) or []
-        if not isinstance(skip_ctx, list) or any(str(c) not in ROW_CONTEXTS for c in skip_ctx):
-            raise L10nError(f"{path}: rule {raw['id']} has invalid skip_contexts {skip_ctx!r} (list of {'|'.join(ROW_CONTEXTS)})")
-        vsev = raw.get("variant_severity") or {}
-        if not isinstance(vsev, dict):
-            raise L10nError(f"{path}: rule {raw['id']}: 'variant_severity' must be an object like {{\"hk\": \"WARN\"}}")
-        if variant and variant.lower() in {k.lower(): v for k, v in vsev.items()}:
-            sev = str({k.lower(): v for k, v in vsev.items()}[variant.lower()]).upper()
-            if sev not in ("ERR", "WARN"):
-                raise L10nError(f"{path}: rule {raw['id']} variant_severity has invalid severity {sev!r}")
-        rules.append(Rule(str(raw["id"]), sev, rx, str(raw["message"]), ctx, skip, path.name, tuple(str(c) for c in skip_ctx)))
-    return rules
-
-
-def load_rules(locale: str, variant: Optional[str] = None, extra_dirs: Sequence[Path] = (), builtin_dir: Path = DEFAULT_RULES_DIR) -> List[Rule]:
-    """Load built-in rules/<locale>.json, rules/custom/*.json and every *.json in extra_dirs (deterministic order)."""
-    files: List[Path] = []
-    builtin = builtin_dir / f"{locale}.json"
-    if not builtin.is_file():
-        raise L10nError(f"no built-in rule file for locale '{locale}' (expected {builtin})")
-    files.append(builtin)
-    custom_dir = builtin_dir / "custom"
-    if custom_dir.is_dir():
-        files.extend(sorted(p for p in custom_dir.glob("*.json") if p.name != "rules.schema.json"))
-    for d in extra_dirs:
-        d = Path(d)
-        if d.is_file():
-            files.append(d)
-        elif d.is_dir():
-            files.extend(sorted(p for p in d.glob("*.json") if p.name != "rules.schema.json"))
-        else:
-            raise L10nError(f"--rules path does not exist: {d}")
-    rules: List[Rule] = []
-    seen: Dict[str, str] = {}
-    for f in files:
-        for r in _compile_rule_file(f, locale, variant):
-            if r.id in seen:
-                raise L10nError(f"duplicate rule id '{r.id}' in {f.name} (already defined in {seen[r.id]})")
-            seen[r.id] = f.name
-            rules.append(r)
-    return rules
-
-
-# --------------------------------------------------------------------------- #
-# Core lint
-# --------------------------------------------------------------------------- #
-class LintOptions(NamedTuple):
-    locale: str
-    placeholder_style: str = "auto"
-    tag_style: str = "auto"
-    placeholder_regex: Optional[re.Pattern] = None
-    forbid_chars: str = ""
-    forbid_spaced_hyphen: bool = False
-    allow_spaced_hyphen_substr: Sequence[str] = ()
-    strict_whitespace: bool = False
-    glossary: Sequence[GlossaryTerm] = ()
-    glossary_severity: str = "WARN"
-    check_untranslated: bool = True
-
-
-_UI_WORDS = ("ui", "button", "menu", "label", "tooltip", "hud", "toast", "warning", "tab", "badge", "prompt", "keybind")
-_DIALOG_WORDS = ("dialog", "dialogue", "speech", "letter", "story", "npc", "bark", "cutscene", "mail", "news",
-                 "dialogue_casual", "dialogue_formal")
-# formal register, in-world news and encyclopedic lore (codex), where report style is the native voice
-_FORMAL_WORDS = ("formal", "dialogue_formal", "official", "news", "announcement", "press", "lore", "codex", "encyclopedia")
-_FORMAL_KEY_RE = re.compile(r"(?i)(?:^|[_.])(?:codex|lore|news)(?:$|[_.])")
-
-
-def row_contexts(key: str, meta: Dict[str, Any]) -> set:
-    """Derive the context tags of a row from its metadata and key.
-
-    'ui' / 'dialog' come from category/context/type fields; 'button' from a button
-    category or a key containing BTN/BUTTON; 'player' from a truthy 'player' field,
-    an 'audience'/'tags' value containing 'player', or category 'player'; 'formal' from a
-    formal, news or lore category (dialogue_formal, news, codex ...) or a key segment
-    Codex / Lore / News.
-    """
-    tags: set = set()
-    values = []
-    for k in ("category", "context", "type", "ui_type", "speaker_or_ui_type", "audience", "tags"):
-        v = meta.get(k)
-        if isinstance(v, (list, tuple)):
-            values.extend(str(x).lower() for x in v)
-        elif v not in (None, ""):
-            values.append(str(v).lower())
-    for v in values:
-        parts = {p.strip() for p in re.split(r"[,;/|\s]+", v) if p.strip()}
-        if parts & set(_UI_WORDS):
-            tags.add("ui")
-        if parts & set(_DIALOG_WORDS):
-            tags.add("dialog")
-        if "button" in parts:
-            tags.add("button")
-        if "player" in parts:
-            tags.add("player")
-        if parts & set(_FORMAL_WORDS):
-            tags.add("formal")
-    if meta.get("player") in (True, 1, "1", "true", "True", "yes"):
-        tags.add("player")
-    if re.search(r"(?i)(?:^|[_.])(?:btn|button)(?:$|[_.])", key):
-        tags.update({"button", "ui"})
-    if _FORMAL_KEY_RE.search(key):
-        tags.add("formal")
-    return tags
-
-
-def rule_applies(rule: "Rule", contexts: set) -> bool:
-    """skip_contexts win; ui/dialog rules apply unless the row is tagged with the other context; player/button/formal rules need an explicit tag."""
-    if set(rule.skip_contexts) & contexts:
-        return False
-    if rule.context == "any":
-        return True
-    if rule.context in ("player", "button", "formal"):
-        return rule.context in contexts
-    if rule.context == "ui":
-        return "ui" in contexts or "dialog" not in contexts
-    return "dialog" in contexts or "ui" not in contexts
-
-
-def _ignored_rules(meta: Dict[str, Any]) -> set:
-    v = meta.get("lqa_ignore")
-    if not v:
-        return set()
-    if isinstance(v, str):
-        return {x.strip() for x in v.split(",") if x.strip()}
-    return {str(x).strip() for x in v}
+_PARITY = DefaultTokenParityAdapter()
 
 
 def lint_rows(rows: Sequence[Row], rules: Sequence[Rule], opt: LintOptions) -> List[Finding]:
-    """Lint rows and return findings in input order (deterministic)."""
-    findings: List[Finding] = []
-    err = lambda code, key, msg, dst: findings.append(Finding("ERR", code, key, msg, dst))  # noqa: E731
-    warn = lambda code, key, msg, dst: findings.append(Finding("WARN", code, key, msg, dst))  # noqa: E731
-    expected_forms = PLURAL_FORMS.get(opt.locale)
-    for row in rows:
-        key, src, dst, meta = row.key, row.src, row.dst, row.meta
-        if dst.strip() == "":
-            if src.strip() != "" or meta.get("kv_map"):
-                err("EMPTY", key, "target string is empty", dst)
-            continue
-        if meta.get("fuzzy"):
-            warn("FUZZY", key, "PO entry is marked fuzzy (needs review before shipping)", dst)
-        if expected_forms and meta.get("plural_index") == 0 and meta.get("plural_nforms", expected_forms) < expected_forms:
-            warn("PLURAL_FORMS", key, f"only {meta.get('plural_nforms')} plural form(s), {opt.locale} needs {expected_forms}", dst)
-        if "\ufffd" in dst:
-            err("ENCODING", key, "replacement character U+FFFD found (decoding damage)", dst)
-        if _MOJIBAKE_RE.search(dst):
-            err("ENCODING", key, "mojibake sequence (double-encoded UTF-8 such as 'Ã¼' / 'â€™')", dst)
-        if _CONTROL_RE.search(dst):
-            err("CONTROL_CHAR", key, "control character inside the string", dst)
-        for ch in opt.forbid_chars:
-            if ch in dst:
-                err("FORBIDDEN_CHAR", key, f"forbidden character {ch!r}", dst)
-        if opt.forbid_spaced_hyphen and " - " in dst and not any(sub in dst for sub in opt.allow_spaced_hyphen_substr):
-            err("SPACED_HYPHEN", key, "' - ' is forbidden by project rules", dst)
-        if src != "":
-            for problem in compare_placeholders(
-                extract_placeholders(src, opt.placeholder_style, opt.placeholder_regex),
-                extract_placeholders(dst, opt.placeholder_style, opt.placeholder_regex),
-            ):
-                err("PLACEHOLDER", key, problem, dst)
-            for problem in compare_tags(extract_tags(src, opt.tag_style), extract_tags(dst, opt.tag_style)):
-                err("RICH_TAG", key, problem, dst)
-            if opt.strict_whitespace:
-                lead_s = len(src) - len(src.lstrip(" \t\u00a0"))
-                lead_d = len(dst) - len(dst.lstrip(" \t\u00a0"))
-                if lead_s != lead_d:
-                    err("LEADING_SPACE", key, f"leading whitespace src={src[:lead_s]!r} vs dst={dst[:lead_d]!r}", dst)
-                core_s, core_d = src.rstrip("\r\n"), dst.rstrip("\r\n")
-                trail_s = len(core_s) - len(core_s.rstrip(" \t\u00a0"))
-                trail_d = len(core_d) - len(core_d.rstrip(" \t\u00a0"))
-                if trail_s != trail_d:
-                    err("TRAILING_SPACE", key, f"trailing whitespace src={core_s[len(core_s)-trail_s:]!r} vs dst={core_d[len(core_d)-trail_d:]!r}", dst)
-                if (len(src) - len(core_s)) != (len(dst) - len(core_d)):
-                    err("TRAILING_NEWLINE", key, "trailing newline parity differs from source", dst)
-            if opt.check_untranslated and opt.locale != "en" and src.strip() == dst.strip() and re.search(r"[A-Za-z]{3,}", src):
-                warn("UNTRANSLATED", key, "target is identical to the source text", dst)
-            if opt.glossary:
-                for problem in glossary_violations(src, dst, opt.glossary):
-                    findings.append(Finding(opt.glossary_severity, "GLOSSARY", key, problem, dst))
-        contexts = row_contexts(key, meta)
-        ignored = _ignored_rules(meta)
-        for rule in rules:
-            if not rule_applies(rule, contexts):
-                continue
-            if rule.id in ignored:
-                continue
-            if rule.regex.search(dst):
-                findings.append(Finding(rule.severity, rule.id, key, rule.message, dst))
-    return findings
+    """Lint rows via Chain of Responsibility and return findings in input order."""
+    return _lint_rows(rows, rules, opt, _PARITY)
 
-
-# --------------------------------------------------------------------------- #
-# CLI
-# --------------------------------------------------------------------------- #
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog=TOOL, description="Multi-language game culturalization & technical LQA linter (exit 0 clean / 1 findings / 2 usage error)")
@@ -374,25 +100,18 @@ def main() -> int:
     if cfg_rules:
         extra_dirs.append(Path(cfg_rules))
     if args.no_builtin_rules:
-        rules: List[Rule] = []
-        seen: Dict[str, str] = {}
+        custom_files: List[Path] = []
         for d in extra_dirs:
             paths = [d] if d.is_file() else sorted(d.glob("*.json")) if d.is_dir() else []
             if not paths and not d.exists():
                 raise L10nError(f"--rules path does not exist: {d}")
-            for f in paths:
-                for r in _compile_rule_file(f, locale, variant):
-                    if r.id in seen:
-                        raise L10nError(f"duplicate rule id '{r.id}' in {f.name} (already defined in {seen[r.id]})")
-                    seen[r.id] = f.name
-                    rules.append(r)
+            custom_files.extend(paths)
+        rules = compile_rule_files(custom_files, locale, variant)
     else:
         rules = load_rules(locale, variant, extra_dirs)
 
-    glossary: List[GlossaryTerm] = []
     gl_path = pick(args.glossary, cfg, "glossary", None)
-    if gl_path:
-        glossary = load_glossary(Path(gl_path), locale)
+    glossary: List[GlossaryTerm] = load_glossary(Path(gl_path), locale) if gl_path else []
 
     opt = LintOptions(
         locale=locale, placeholder_style=ph_style, tag_style=tag_style, placeholder_regex=ph_regex,

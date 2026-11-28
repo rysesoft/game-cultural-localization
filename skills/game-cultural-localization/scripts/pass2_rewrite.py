@@ -1,64 +1,41 @@
 #!/usr/bin/env python3
-"""Pass 2 with several candidates: the pass2 model writes three versions, the J1 jury picks one blind.
-
-For every verdict that needs work (rewrite_light, rewrite, critical, and unresolved as a proposal)
-  1. the 'pass2' model (prompts/pass2.<locale>.md) gets the English source, the current line, the
-     context, the jury rationales and suggestions and the approved TM neighbours, and writes 3 candidates
-  2. the three J1 members see the candidates and the current line among them (seeded order, ids c1..c4)
-     and the context, never the source, and each picks the most natural one. Most picks wins, a tie goes
-     to the earlier candidate. When the current line wins it stays, a good line is not rewritten for nothing
-  3. the winner is checked with validate_critique (critique schema, placeholder and tag parity with
-     the English source line, also when the jury named a placeholder problem). When it fails the next
-     candidate by votes is tried. When none passes, the old line stays and the line is flagged
-  4. a new winner is scored once more by the three J1 members. Unless they pass it by the agreement rule
-     of the jury, the old line stays and the line is flagged for the developer
-
-Output rewrites_<locale>_<batch>.json
-  {"locale", "source_file", "lines": [{key, en, old, new, status, candidates, picks, chosen, valid, problems}],
-   "critique": {fixed critique schema document of the selected lines}}
-
-Usage:
-  python pass2_rewrite.py verdicts_tr-TR_01.json --source-table pass1_tr-TR_01.json --locale tr-TR [--dry-run]
-
-Exit codes: 0 every flagged line has a validated rewrite, 1 some lines kept their old text
-(no valid candidate), 2 usage or input error.
-Python 3.9+, standard library only.
-"""
-
+"""Pass 2 candidate tournament CLI facade delegating to gcl.application.rewrite."""
 from __future__ import annotations
 
 import argparse
 import json
-import random
 import re
 import sys
-from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from l10n_common import (  # noqa: E402
-    EXIT_FINDINGS, EXIT_OK, PLACEHOLDER_STYLES, TAG_STYLES, L10nError, add_common_args, add_input_argument, emit_report,
-    apply_config, load_json_data, parity_problems, load_table, normalize_locale, resolve_input, run_main, __version__,
-)
-import validate_critique  # noqa: E402
 from build_context_map import ContextPack, load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR, infer_register  # noqa: E402
-from jury import classify  # noqa: E402
-from llm_tasks import ISSUE_TYPES, BatchMemo, add_model_args, default_budget_path, make_router, pass2_candidates, pick_candidates, score_entries  # noqa: E402
+from gcl.application.rewrite import (  # noqa: E402
+    CONTEXT_FIELDS, DEFAULT_STATUSES, TournamentOptions, final_votes, main_issue, run_tournament,
+)
+from gcl.infrastructure.formats.critique_validator import DefaultCritiqueValidatorAdapter  # noqa: E402
+from gcl.infrastructure.persistence.context_views import BlindContextAdapter, WriterContextAdapter  # noqa: E402
+from gcl.infrastructure.tokens.parity_adapter import DefaultTokenParityAdapter  # noqa: E402
+from l10n_common import (  # noqa: E402
+    EXIT_FINDINGS, EXIT_OK, PLACEHOLDER_STYLES, TAG_STYLES, L10nError, add_common_args, add_input_argument,
+    apply_config, emit_report, load_json_data, load_table, normalize_locale, resolve_input, run_main, __version__,
+)
+from llm_tasks import (  # noqa: E402
+    BatchMemo, add_model_args, default_budget_path, make_router, pass2_candidates, pick_candidates, score_entries,
+)
 from prompt_templates import render_contrastive, render_prompt  # noqa: E402
-from text_style import sanitize_prose  # noqa: E402
 from warmup_loader import REGISTERS, load_warmup, render_warmup  # noqa: E402
 
 TOOL = "pass2_rewrite"
-DEFAULT_STATUSES = ("rewrite_light", "rewrite", "critical", "unresolved")
-CONTEXT_FIELDS = ("register", "category", "speaker", "archetype")
+_VALIDATOR = DefaultCritiqueValidatorAdapter()
+_PARITY = DefaultTokenParityAdapter()
 
 
 def load_source_table(path: Path, src_field: str, dst_field: Optional[str], key_field: str, locale: str) -> Dict[str, Dict[str, Any]]:
-    """key -> {en, target, register, category, speaker, archetype} from the Pass 1 table."""
+    """Load source and Pass 1 targets keyed by key."""
     candidates = [dst_field] if dst_field else ["dst", locale, "target"]
     last: Optional[L10nError] = None
     for col in candidates:
@@ -69,151 +46,41 @@ def load_source_table(path: Path, src_field: str, dst_field: Optional[str], key_
             last = exc
     else:
         raise L10nError(f"{path}: no target column (tried {', '.join(str(c) for c in candidates)}), pass --dst-field") from last
-    out = {}
+    out: Dict[str, Dict[str, Any]] = {}
     for r in rows:
         cat = str(r.meta.get("category") or "")
-        out[r.key] = {"en": r.src, "target": r.dst, "category": cat, "speaker": str(r.meta.get("speaker") or ""),
-                      "archetype": str(r.meta.get("archetype") or ""),
-                      "register": str(r.meta.get("register") or "") or infer_register(cat, r.dst, "game")}
+        out[r.key] = {
+            "en": r.src, "target": r.dst, "category": cat,
+            "speaker": str(r.meta.get("speaker") or ""),
+            "archetype": str(r.meta.get("archetype") or ""),
+            "register": str(r.meta.get("register") or "") or infer_register(cat, r.dst, "game"),
+        }
     return out
 
 
-def final_votes(verdict: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Votes of the tier that settled the line."""
-    tier = verdict.get("final_tier")
-    return [v for v in verdict.get("votes", []) if v.get("tier") == tier]
-
-
-def main_issue(verdict: Dict[str, Any]) -> str:
-    """Most common non-'none' issue type of the settling votes (critique schema value)."""
-    types = [v.get("issue_type") for v in final_votes(verdict) if v.get("issue_type") not in (None, "none")]
-    it = Counter(types).most_common(1)[0][0] if types else "other"
-    return it if it in ISSUE_TYPES and it != "none" else "other"
-
-
-def rewrite_lines(verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[str, Any]], locale: str, router: Any, *,
-                  pass2_system: str, pick_system: str, n: int = 3, seed: int = 1234, ph_style: str = "auto",
-                  tag_style: str = "auto", statuses: Sequence[str] = DEFAULT_STATUSES, source_file: str = "",
-                  workers: int = 1, context: Optional[ContextPack] = None, memo: Any = None) -> Dict[str, Any]:
-    """Generate, pick blind, validate. Returns {'lines', 'critique'}.
-
-    workers > 1 sends up to `workers` batches at once and lets the three J1 pickers run side by side.
-    With a context map the writer reads the map, the locale appendix and the full line notes, the blind
-    pickers read the map and the neutral line fields only.
-    """
+def rewrite_lines(
+    verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[str, Any]], locale: str, router: Any, *,
+    pass2_system: str, pick_system: str, n: int = 3, seed: int = 1234, ph_style: str = "auto",
+    tag_style: str = "auto", statuses: Sequence[str] = DEFAULT_STATUSES, source_file: str = "",
+    workers: int = 1, context: Optional[ContextPack] = None, memo: Any = None,
+) -> Dict[str, Any]:
+    """Generate Pass 2 candidates, pick blind with J1, validate and recheck."""
     ctx = context if context is not None and context.text else None
-    if ctx is not None:
-        pass2_system, pick_system = ctx.system(pass2_system, writer=True), ctx.system(pick_system)
-    todo = [v for v in verdicts if v.get("status") in statuses]
-    missing = [v["key"] for v in todo if v["key"] not in sources]
-    if missing:
-        raise L10nError(f"keys missing from the source table: {', '.join(missing[:5])}")
-    rows = []
-    for v in todo:
-        s = sources[v["key"]]
-        fv = final_votes(v)
-        rows.append({"key": v["key"], "source": s["en"], "target": s["target"], **{k: s[k] for k in CONTEXT_FIELDS if s.get(k)},
-                     "rationales": [r for r in v.get("rationales", []) if r],
-                     "suggestions": [x.get("suggested") for x in fv if x.get("suggested")],
-                     "suggested": next((x.get("suggested") for x in fv if x.get("suggested")), ""),
-                     "tm": [{"target": t.get("dst", ""), "category": t.get("category", "")} for t in (v.get("evidence", {}).get("tm_neighbors") or [])[:3]]})
-        odd = list(dict.fromkeys(w for x in fv for w in (x.get("odd_words") or [])))
-        if odd:  # words the jurors found not everyday, the writer replaces them
-            rows[-1]["odd_words"] = odd
-        if ctx is not None and ctx.line(v["key"], writer=True):
-            rows[-1]["context"] = ctx.line(v["key"], writer=True)
-    cands = pass2_candidates(router.for_role("pass2"), rows, locale, n=n, system=pass2_system, workers=workers, memo=memo) if rows else {}
-    rng = random.Random(seed)
-    items: List[Dict[str, Any]] = []
-    id_maps: Dict[str, Dict[str, int]] = {}
-    for r in rows:
-        if r["target"] not in cands[r["key"]]:  # the current line competes with the rewrites
-            cands[r["key"]] = list(cands[r["key"]]) + [r["target"]]
-        texts = cands[r["key"]]
-        order = list(range(len(texts)))
-        rng.shuffle(order)
-        id_maps[r["key"]] = {f"c{i + 1}": idx for i, idx in enumerate(order)}
-        items.append({"key": r["key"], **{k: r[k] for k in CONTEXT_FIELDS if r.get(k)},
-                      **({"context": ctx.line(r["key"])} if ctx is not None and ctx.line(r["key"]) else {}),
-                      "candidates": [{"id": f"c{i + 1}", "text": texts[idx]} for i, idx in enumerate(order)]})
-    picks_by_member: List[Tuple[Any, Dict[str, str]]] = []
-    if items:
-        pickers = router.jury("J1")
-
-        def pick(m: Any) -> Dict[str, str]:
-            return pick_candidates(m.provider, items, locale, system=pick_system, workers=workers, memo=memo)
-        if int(workers) > 1 and len(pickers) > 1:
-            with ThreadPoolExecutor(max_workers=len(pickers)) as ex:
-                picks_by_member = list(zip(pickers, ex.map(pick, pickers)))
-        else:
-            picks_by_member = [(m, pick(m)) for m in pickers]
-    lines: List[Dict[str, Any]] = []
-    entries: List[Dict[str, Any]] = []
-    for v, r in zip(todo, rows):
-        key = r["key"]
-        texts = cands[key]
-        id_map = id_maps[key]
-        votes = Counter(id_map[p[key]] for _m, p in picks_by_member)
-        ranking = sorted(range(len(texts)), key=lambda i: (-votes.get(i, 0), i))
-        chosen, problems_all, entry = None, [], None
-        old_broken = parity_problems(r["source"], r["target"], ph_style, tag_style)
-        for idx in ranking:
-            if texts[idx] == r["target"]:  # the old line stays only when the jurors picked it and it keeps the source's tokens
-                if idx == ranking[0] and not old_broken:
-                    chosen = idx
-                    break
-                continue
-            e = {"key": key, "score": min(int(v.get("score", 4)), 4), "issue_type": main_issue(v),
-                 "reason": sanitize_prose((v.get("rationales") or ["jury flagged the line"])[0] or "jury flagged the line") or "jury flagged the line",
-                 "suggested": texts[idx]}
-            doc = {"locale": locale, "source_file": source_file, "entries": [e],
-                   "summary": {"total": 1, "flagged": 1, "critical": 1 if e["score"] <= 2 else 0}}
-            # placeholders and tags against the source line, also when the jury named a placeholder problem
-            problems = validate_critique.validate(doc, {key: r["target"]}, ph_style, tag_style, locale, sources={key: r["source"]})
-            if not problems:
-                chosen, entry = idx, e
-                break
-            problems_all.extend(f"{texts[idx]!r}: {p}" for p in problems)
-        if entry is not None and texts[chosen] != r["target"]:
-            entries.append(entry)
-        lines.append({"key": key, "en": r["source"], "old": r["target"], "new": texts[chosen] if chosen is not None else r["target"],
-                      "status": v.get("status"), "final_tier": v.get("final_tier"), "score": v.get("score"),
-                      "candidates": texts, "picks": {f"{m.family}:{m.provider.model}": texts[id_map[p[key]]] for m, p in picks_by_member},
-                      "votes_per_candidate": [votes.get(i, 0) for i in range(len(texts))],
-                      "chosen": chosen, "valid": chosen is not None, "problems": problems_all,
-                      "kept_by_pick": chosen is not None and texts[chosen] == r["target"], "selected_by": "J1 blind pick"})
-    # a new winner is judged once more, a rewrite nobody confirmed does not replace the line
-    recheck = [(l, r) for l, r in zip(lines, rows) if l["valid"] and l["new"] != l["old"]]
-    if recheck:
-        view = [{"key": l["key"], "target": l["new"], **{k: r[k] for k in CONTEXT_FIELDS if r.get(k)},
-                 **({"context": ctx.line(l["key"])} if ctx is not None and ctx.line(l["key"]) else {})} for l, r in recheck]
-        agreement = {k: int(x) for k, x in router.config.agreement.items()}
-        members = router.jury("J1")
-
-        def rescore(m: Any) -> Dict[str, Dict[str, Any]]:
-            return score_entries(m.provider, view, locale, tier="J1", system=pick_system, workers=workers, memo=memo)
-        # the three members score side by side, as in the pick. One after another the Lithuanian recheck of 2026-11-27
-        # waited over 20 minutes, most of it on the slowest member alone.
-        if int(workers) > 1 and len(members) > 1:
-            with ThreadPoolExecutor(max_workers=len(members)) as ex:
-                scores = list(ex.map(rescore, members))
-        else:
-            scores = [rescore(m) for m in members]
-        unconfirmed = set()
-        for l, _r in recheck:
-            got = [s[l["key"]]["score"] for s in scores]
-            l["recheck"] = got
-            if classify(got, agreement) != "pass":
-                unconfirmed.add(l["key"])
-                l.update(valid=False, new=l["old"], problems=l["problems"] + [f"J1 did not confirm the rewrite (scores {got}), the old line stays"])
-        entries = [e for e in entries if e["key"] not in unconfirmed]
-    critique = {"locale": locale, "source_file": source_file, "entries": entries,
-                "summary": {"total": len(verdicts), "flagged": len(entries), "critical": sum(1 for e in entries if e["score"] <= 2)}}
-    return {"lines": lines, "critique": critique}
+    opts = TournamentOptions(
+        pass2_system=pass2_system, pick_system=pick_system, n=n, seed=seed,
+        ph_style=ph_style, tag_style=tag_style, statuses=tuple(statuses), source_file=source_file, workers=workers,
+        writer_context=WriterContextAdapter(ctx) if ctx is not None else None,
+        blind_context=BlindContextAdapter(ctx) if ctx is not None else None,
+        memo=memo,
+    )
+    return run_tournament(
+        verdicts, sources, locale, router, opts, _VALIDATOR, _PARITY,
+        pass2_fn=pass2_candidates, pick_fn=pick_candidates, score_fn=score_entries,
+    )
 
 
 def build_systems(locale: str, pack_dir: Path, registers: Sequence[str], *, warmup: bool, seed: int) -> Tuple[str, str]:
-    """(pass2 prompt, critic prompt) with the pack's warm-up and contrastive few-shots."""
+    """Return (pass2 system prompt, critic system prompt) with pack warm-up and few-shots."""
     warm, contrast = "", ""
     if pack_dir.is_dir():
         if warmup and ((pack_dir / "warmup.jsonl").is_file() or (pack_dir / "local" / "warmup.jsonl").is_file()):
@@ -260,8 +127,7 @@ def main() -> int:
     ap = build_parser()
     args = ap.parse_args()
     resolve_input(ap, args)
-    apply_config(args, {"context_map": None, "src_field": "en", "dst_field": None, "key_field": "key",
-                        "placeholder_style": "auto", "tag_style": "auto"})
+    apply_config(args, {"context_map": None, "src_field": "en", "dst_field": None, "key_field": "key", "placeholder_style": "auto", "tag_style": "auto"})
     locale, _v = normalize_locale(args.locale)
     if not 1 <= args.candidates <= 6:
         raise L10nError("--candidates must be between 1 and 6")
@@ -279,13 +145,14 @@ def main() -> int:
     pack_dir = (Path(args.langpack_dir) if args.langpack_dir else LANGPACK_DIR) / locale
     regs = sorted({sources[v["key"]]["register"] for v in doc["verdicts"] if v.get("key") in sources and v.get("status") in statuses})
     pass2_system, pick_system = build_systems(locale, pack_dir, regs, warmup=not args.no_warmup, seed=args.seed)
-    res = rewrite_lines(doc["verdicts"], sources, locale, router, pass2_system=pass2_system, pick_system=pick_system, n=args.candidates,
-                        seed=args.seed, ph_style=args.placeholder_style, tag_style=args.tag_style, statuses=statuses,
-                        source_file=str(doc.get("source_file") or Path(args.source_table).name), workers=args.workers,
-                        context=load_context(Path(args.context_map), locale) if args.context_map else None,
-                        memo=BatchMemo(Path(args.cache)) if args.cache else None)
-    result = {"locale": locale, "source_file": doc.get("source_file"), "verdicts": str(inp), "lines": res["lines"], "critique": res["critique"],
-              "notes": router.notes}
+    res = rewrite_lines(
+        doc["verdicts"], sources, locale, router, pass2_system=pass2_system, pick_system=pick_system, n=args.candidates,
+        seed=args.seed, ph_style=args.placeholder_style, tag_style=args.tag_style, statuses=statuses,
+        source_file=str(doc.get("source_file") or Path(args.source_table).name), workers=args.workers,
+        context=load_context(Path(args.context_map), locale) if args.context_map else None,
+        memo=BatchMemo(Path(args.cache)) if args.cache else None,
+    )
+    result = {"locale": locale, "source_file": doc.get("source_file"), "verdicts": str(inp), "lines": res["lines"], "critique": res["critique"], "notes": router.notes}
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if args.critique_out:
@@ -300,8 +167,7 @@ def main() -> int:
     if invalid:
         lines.append(f"  {len(invalid)} line(s) without a valid candidate kept their old text")
     lines.append(f"  Exit code: {exit_code}")
-    payload = {"tool": TOOL, "version": __version__, "out": str(out), "lines": len(res["lines"]), "invalid": [l["key"] for l in invalid],
-               "notes": router.notes, "exit_code": exit_code}
+    payload = {"tool": TOOL, "version": __version__, "out": str(out), "lines": len(res["lines"]), "invalid": [l["key"] for l in invalid], "notes": router.notes, "exit_code": exit_code}
     emit_report("\n".join(lines), payload, args.json, args.output)
     return exit_code
 

@@ -4,6 +4,14 @@ All notable changes to this plugin are documented here. The version number lives
 
 ## [Unreleased]
 
+### Changed
+- Internal SOLID, OOP, AOP and Clean Code architecture under `skills/game-cultural-localization/scripts/gcl/` (`domain`, `ports`, `aspects`, `application`, `infrastructure`, `composition`), keeping all CLI scripts in `scripts/` as thin backward compatible facades.
+- Added automated architecture governance (`docs/architecture/`, `scripts/dev/verify_architecture.py`, `scripts/dev/sync_navigation.py`, `.agents/hooks.json`) enforcing downward layer imports, zero cycles, juror blindness, OCP vendor registration and Clean Code limits.
+- Exposed `--batch` on `orchestrator_stub.py` to route Anthropic and Google calls through the existing async batch collector.
+
+### Fixed
+- `GoogleProvider.parse_reply` now records `usageMetadata.cachedContentTokenCount` and `thoughtsTokenCount` in `TokenUsage` and `ChatResult.cache_read_tokens`.
+
 ## [3.1.0] 2026-11-27
 
 The cost cuts the studio approved after the first real run, where the plugin reviewed or translated all thirteen languages of a game in one day for 452.98 USD and one provider saw 2696 requests. Batch mode at half the price, fewer and larger calls, cache priming and batched deliberation, a budget report that counts requests, and the fixes that day taught us (gate rules that cried wolf, a font check that did not follow the engine's fallback chain, an AssetTable read as text, empty Pass 1 targets). The devlog `docs/devlog/2026-11-27-v3.1.0.md` tells the story.

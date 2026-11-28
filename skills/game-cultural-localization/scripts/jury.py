@@ -1,104 +1,38 @@
 #!/usr/bin/env python3
-"""Tiered mixed-family jury over a blind slice (J1 -> J2 -> J3), with the agreement rule of the brief (A4).
-
-Every tier has three members from three model families (anthropic, google, deepseek). The
-members read only the blind slice (key, context, target), never the source.
-
-Agreement on the three scores of one tier
-  pass      all scores >= pass_min (4) and max - min <= max_spread (1). Line score = the minimum
-            (5 -> status pass, 4 -> status rewrite_light). Done.
-  escalate  any score <= 3, or a spread of 2 or more -> next tier
-  critical  any score <= critical_max (2) -> straight to J3, whatever the tier
-At J3 an agreeing tier (spread <= 1) settles the line with its minimum score (3 -> rewrite,
-<= 2 -> critical). A J3 disagreement goes to the deliberation round (deliberate.py) when it is
-available, otherwise the line is 'unresolved' and reaches the developer with three rationales.
-
-Budget caps (providers.config.json budget_caps): when more than 30 % of the judged lines of the run
-would go to J2, or more than 10 % to J3, the run stops and writes a report. The count runs across
-batches (EscalationTally), a cap stops only after min_judged (100) judged lines with min_escalated (10)
-lines over it, and only when the current batch sends lines to that tier. The problem then lies in
-Pass 1 or in the prompt, not in single lines.
-
-Evidence per line: ban list hits (lqa_linter rules on the target), translation memory neighbours
-(when a TM is attached) and, for lines that reach J3, the back-translation signal (needs the
-source table, which only the harness reads).
-
-Usage:
-  python jury.py blind_tr-TR_01.json --locale tr-TR [--source-table pass1_tr-TR_01.json] [--no-deliberation] [--dry-run]
-
-Exit codes: 0 every line settled, 1 the budget cap stopped the run or a line is unresolved,
-2 usage or input error (source column in the slice, same family twice in a tier, missing key).
-Python 3.9+, standard library only.
-"""
-
+"""Tiered mixed-family jury CLI facade delegating to gcl.application.jury."""
 from __future__ import annotations
 
 import argparse
 import json
 import re
 import sys
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from l10n_common import (  # noqa: E402
-    EXIT_FINDINGS, EXIT_OK, L10nError, Row, add_common_args, add_input_argument, emit_report, load_json_data, load_table,
-    apply_config, normalize_locale, resolve_input, run_main, __version__,
-)
-import lqa_linter  # noqa: E402
 from build_context_map import load_context  # noqa: E402
 from build_language_pack import LANGPACK_DIR, infer_register  # noqa: E402
-from llm_tasks import BatchMemo, add_model_args, default_budget_path, everyday_rule, make_router, score_entries  # noqa: E402
+from gcl.application.jury import (  # noqa: E402
+    CONTEXT_FIELDS, SOURCE_COLUMNS, STATUSES, TIERS, Deliberator, EscalationTally, _tier_votes, agrees, classify,
+    juror_view, run_jury as _run_jury, status_for,
+)
+from gcl.infrastructure.persistence.context_views import BlindContextAdapter  # noqa: E402
+from llm_tasks import BatchMemo, add_model_args, default_budget_path, make_router, score_entries  # noqa: E402
+from l10n_common import (  # noqa: E402
+    EXIT_FINDINGS, EXIT_OK, L10nError, Row, add_common_args, add_input_argument, apply_config, emit_report,
+    load_json_data, load_table, normalize_locale, resolve_input, run_main, __version__,
+)
+import lqa_linter  # noqa: E402
 from prompt_templates import render_contrastive, render_prompt  # noqa: E402
 from roundtrip_check import load_threshold, roundtrip_evidence  # noqa: E402
 from warmup_loader import REGISTERS, load_warmup, render_warmup  # noqa: E402
 
 TOOL = "jury"
-TIERS = ("J1", "J2", "J3")
-SOURCE_COLUMNS = ("en", "source", "src", "english")
-CONTEXT_FIELDS = ("register", "category", "speaker", "archetype", "context")
-STATUSES = ("pass", "rewrite_light", "rewrite", "critical", "unresolved")
 
-
-# --------------------------------------------------------------------------- #
-# Agreement rule (A4)
-# --------------------------------------------------------------------------- #
-
-def classify(scores: Sequence[int], agreement: Dict[str, int]) -> str:
-    """'pass', 'critical' or 'escalate' for the three scores of one tier."""
-    lo, hi = min(scores), max(scores)
-    if lo <= agreement["critical_max"]:
-        return "critical"
-    if lo >= agreement["pass_min"] and hi - lo <= agreement["max_spread"]:
-        return "pass"
-    return "escalate"
-
-
-def agrees(scores: Sequence[int], agreement: Dict[str, int]) -> bool:
-    """True when the spread is within max_spread (used to settle a line at J3)."""
-    return max(scores) - min(scores) <= agreement["max_spread"]
-
-
-def status_for(score: int) -> str:
-    """Line status from the settled score."""
-    if score >= 5:
-        return "pass"
-    if score == 4:
-        return "rewrite_light"
-    if score == 3:
-        return "rewrite"
-    return "critical"
-
-
-# --------------------------------------------------------------------------- #
-# Inputs
-# --------------------------------------------------------------------------- #
 
 def load_blind_slice(path: Path) -> Tuple[List[Dict[str, Any]], str]:
-    """Entries {key, target, register, context...} of a blind slice; refuses any source column. Returns (entries, source_file)."""
+    """Entries {key, target, register, context...} of a blind slice; refuses any source column."""
     entries: List[Dict[str, Any]] = []
     source_file = path.name
     if path.suffix.lower() == ".json":
@@ -131,17 +65,8 @@ def load_blind_slice(path: Path) -> Tuple[List[Dict[str, Any]], str]:
     return entries, source_file
 
 
-def juror_view(entry: Dict[str, Any]) -> Dict[str, Any]:
-    """What a juror may see: key, target and context fields only."""
-    view = {"key": entry["key"], "target": entry["target"]}
-    for k in CONTEXT_FIELDS:
-        if entry.get(k) not in (None, ""):
-            view[k] = entry[k]
-    return view
-
-
 def ban_hits(entries: Sequence[Dict[str, Any]], locale: str) -> Dict[str, List[Dict[str, str]]]:
-    """Locale rule hits (lqa_linter ban list) per key, target only."""
+    """Locale rule hits per key (target only)."""
     rules = lqa_linter.load_rules(locale)
     ids = {r.id for r in rules}
     rows = [Row(e["key"], "", e["target"], {"category": e.get("category") or e.get("register", "")}) for e in entries]
@@ -152,9 +77,10 @@ def ban_hits(entries: Sequence[Dict[str, Any]], locale: str) -> Dict[str, List[D
     return out
 
 
-def build_system_prompt(locale: str, entries: Sequence[Dict[str, Any]], pack_dir: Optional[Path], *, warmup: bool, warmup_count: int,
-                        shots: int, seed: int) -> Tuple[str, Dict[str, Any]]:
-    """Critic prompt with the pack's seeded warm-up and contrastive few-shots. Returns (prompt, info)."""
+def build_system_prompt(
+    locale: str, entries: Sequence[Dict[str, Any]], pack_dir: Optional[Path], *, warmup: bool, warmup_count: int, shots: int, seed: int,
+) -> Tuple[str, Dict[str, Any]]:
+    """Build critic prompt with language pack warm-up and contrastive few-shots."""
     warm, contrast = "", ""
     info: Dict[str, Any] = {"warmup_lines": 0, "shots": 0, "langpack_version": None}
     if pack_dir is not None and pack_dir.is_dir():
@@ -175,177 +101,18 @@ def build_system_prompt(locale: str, entries: Sequence[Dict[str, Any]], pack_dir
     return render_prompt("critic", locale, warmup=warm, contrastive=contrast), info
 
 
-# --------------------------------------------------------------------------- #
-# Jury run
-# --------------------------------------------------------------------------- #
-Deliberator = Callable[[Dict[str, Any], List[Dict[str, Any]], Dict[str, Any]], Optional[Dict[str, Any]]]
-
-
-@dataclass
-class EscalationTally:
-    """Lines the jury judged so far in a run and how many of them went on to J2 and J3.
-
-    The budget caps read the whole run, not one batch. Measured per batch, one critical line in a short last
-    batch of 3 lines was 33 % and stopped a run of 53 lines where it was 2 %, and 6 critical lines in one batch
-    of 50 stopped a whole game before its other batches started.
-    """
-    lines: int = 0
-    to_j2: int = 0
-    to_j3: int = 0
-
-
-def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], locale: str, system: str, batch_size: Optional[int],
-                workers: int = 1, memo: Any = None) -> Dict[str, List[Dict[str, Any]]]:
-    """Votes of the three members of one tier. With workers > 1 the members run at the same time and each
-    sends up to `workers` batches at once. Votes are appended in member order, the result does not change."""
-    members = router.jury(tier)
-    fams = [m.family for m in members]
-    if len(set(fams)) != len(fams):
-        raise L10nError(f"jury {tier} has two members from the same family ({', '.join(fams)})")
-    view = [juror_view(e) for e in entries]
-    out: Dict[str, List[Dict[str, Any]]] = {e["key"]: [] for e in entries}
-
-    def one(m: Any) -> Dict[str, Dict[str, Any]]:
-        return score_entries(m.provider, view, locale, tier=tier, system=system, batch_size=batch_size, workers=workers, memo=memo)
-    if int(workers) > 1 and len(members) > 1:
-        with ThreadPoolExecutor(max_workers=len(members)) as ex:
-            results = list(ex.map(one, members))
-    else:
-        results = [one(m) for m in members]
-    for m, votes in zip(members, results):
-        for key, v in votes.items():
-            out[key].append({"key": key, "tier": tier, "member": m.index, "family": m.family, "model": m.provider.model, **v})
-    for key_votes in out.values():  # two jurors who find a word that is not everyday cap the tier (llm_tasks.everyday_rule)
-        everyday_rule(key_votes)
-    return out
-
-
-def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, system: str, batch_size: Optional[int] = None,
-             budget_caps: bool = True, tm_lookup: Optional[Callable[[Dict[str, Any]], List[Dict[str, Any]]]] = None,
-             roundtrip_fn: Optional[Callable[[Sequence[Dict[str, Any]]], Dict[str, Dict[str, Any]]]] = None,
-             deliberator: Optional[Deliberator] = None, workers: int = 1, tally: Optional[EscalationTally] = None,
-             memo: Any = None) -> Dict[str, Any]:
-    """Run J1 to J3 (+ deliberation) and return {'verdicts', 'pending', 'halted', 'stats'}.
-
-    The budget caps compare the lines sent to J2 or J3 with every line judged in the run so far (tally, kept by
-    the caller across batches, a fresh one for a single slice). A cap stops the run only when this batch sends
-    lines to that tier, at least budget_caps.min_judged lines were judged and at least min_escalated lines are
-    over the cap, a small sample never stops a run. The tally is updated before the function returns.
-    memo (llm_tasks.BatchMemo) keeps every finished batch of votes, a rerun answers them from the file.
-
-    workers > 1 runs the members of a tier and the disputed J3 lines of the deliberation round in parallel.
-    """
-    cfg = router.config
-    agreement = {k: int(v) for k, v in cfg.agreement.items()}
-    caps = cfg.budget_caps
-    by_key = {e["key"]: e for e in entries}
-    order = [e["key"] for e in entries]
-    total = len(order)
-    votes: Dict[str, List[Dict[str, Any]]] = {k: [] for k in order}
-    bans = ban_hits(entries, locale)
-    evidence: Dict[str, Dict[str, Any]] = {k: {"ban_hits": bans[k], "tm_neighbors": tm_lookup(by_key[k]) if tm_lookup else [],
-                                               "roundtrip": {"applied": False, "reason": "not_needed"}} for k in order}
-    settled: Dict[str, Dict[str, Any]] = {}
-    halted: Optional[Dict[str, Any]] = None
-    stats: Dict[str, Any] = {"lines": total}
-
-    def settle(key: str, tier: str, score: int, status: str, rationales: Sequence[str], extra: Optional[Dict[str, Any]] = None) -> None:
-        settled[key] = {"key": key, "final_tier": tier, "score": score, "status": status, "votes": votes[key],
-                        "evidence": evidence[key], "rationales": list(rationales), **(extra or {})}
-
-    tally = tally if tally is not None else EscalationTally()
-    min_judged = int(caps.get("min_judged", 0))
-    min_escalated = int(caps.get("min_escalated", 0))
-
-    def cap_check(stage: str, keys: Sequence[str], limit: float) -> Optional[Dict[str, Any]]:
-        stats[f"to_{stage}_ratio"] = round(len(keys) / total, 4) if total else 0.0
-        count = (tally.to_j2 if stage == "J2" else tally.to_j3) + len(keys)
-        judged = tally.lines + total
-        ratio = round(count / judged, 4) if judged else 0.0
-        stats[f"run_to_{stage}_ratio"] = ratio
-        if budget_caps and keys and ratio > limit and judged >= min_judged and count >= min_escalated:
-            return {"stage": stage, "ratio": ratio, "cap": limit, "lines": count, "judged": judged, "keys": list(keys),
-                    "reason": f"{count} of {judged} lines judged in this run would go to {stage} ({ratio:.0%} > {limit:.0%}), "
-                              f"check Pass 1 or the prompt. Lines of this batch that would go there: {', '.join(list(keys)[:10])}"
-                              + (f" and {len(keys) - 10} more" if len(keys) > 10 else "")}
-        return None
-
-    # J1 ------------------------------------------------------------------- #
-    tv = _tier_votes(router, "J1", entries, locale, system, batch_size, workers, memo)
-    to_j2: List[str] = []
-    to_j3: List[str] = []
-    for k in order:
-        votes[k].extend(tv[k])
-        scores = [v["score"] for v in tv[k]]
-        c = classify(scores, agreement)
-        if c == "pass":
-            settle(k, "J1", min(scores), status_for(min(scores)), [v["reason"] for v in tv[k]])
-        elif c == "critical":
-            to_j3.append(k)
-        else:
-            to_j2.append(k)
-    stats["J1"] = {"lines": total, "settled": total - len(to_j2) - len(to_j3), "to_J2": len(to_j2), "critical_to_J3": len(to_j3)}
-    halted = cap_check("J2", to_j2, float(caps["escalate_j2_ratio"])) or cap_check("J3", to_j3, float(caps["escalate_j3_ratio"]))
-    # J2 ------------------------------------------------------------------- #
-    if halted is None and to_j2:
-        tv = _tier_votes(router, "J2", [by_key[k] for k in to_j2], locale, system, batch_size, workers, memo)
-        moved = 0
-        for k in to_j2:
-            votes[k].extend(tv[k])
-            scores = [v["score"] for v in tv[k]]
-            if classify(scores, agreement) == "pass":
-                settle(k, "J2", min(scores), status_for(min(scores)), [v["reason"] for v in tv[k]])
-            else:
-                to_j3.append(k)
-                moved += 1
-        stats["J2"] = {"lines": len(to_j2), "settled": len(to_j2) - moved, "to_J3": moved}
-        to_j3 = [k for k in order if k in set(to_j3)]
-        halted = cap_check("J3", to_j3, float(caps["escalate_j3_ratio"]))
-    # J3 ------------------------------------------------------------------- #
-    if halted is None and to_j3:
-        if roundtrip_fn is not None:
-            for k, ev in roundtrip_fn([by_key[k] for k in to_j3]).items():
-                if k in evidence:
-                    evidence[k]["roundtrip"] = ev
-        tv = _tier_votes(router, "J3", [by_key[k] for k in to_j3], locale, system, batch_size, workers, memo)
-        for k in to_j3:
-            votes[k].extend(tv[k])
-        open_keys = [k for k in to_j3 if not agrees([v["score"] for v in tv[k]], agreement)]
-        # a deliberator with many() re-votes all disputed lines in a few calls per member, a plain callable line by line
-        if deliberator is not None and open_keys and hasattr(deliberator, "many"):
-            outcomes = deliberator.many([(by_key[k], tv[k], evidence[k]) for k in open_keys], workers=workers, memo=memo)
-        elif deliberator is not None and open_keys:
-            if int(workers) > 1 and len(open_keys) > 1:
-                with ThreadPoolExecutor(max_workers=int(workers)) as ex:
-                    outcomes = dict(zip(open_keys, ex.map(lambda key: deliberator(by_key[key], tv[key], evidence[key]), open_keys)))
-            else:
-                outcomes = {key: deliberator(by_key[key], tv[key], evidence[key]) for key in open_keys}
-        else:
-            outcomes = {}
-        disputed = 0
-        for k in to_j3:
-            j3 = tv[k]
-            scores = [v["score"] for v in j3]
-            if agrees(scores, agreement):
-                settle(k, "J3", min(scores), status_for(min(scores)), [v["reason"] for v in j3])
-                continue
-            disputed += 1
-            result = outcomes.get(k)
-            if result is None:
-                settle(k, "J3", min(scores), "unresolved", [v["reason"] for v in j3])
-            else:
-                votes[k].extend(result.get("revotes", []))
-                settle(k, "deliberation", int(result["score"]), str(result["status"]), result.get("rationales", []),
-                       {"deliberation": result["deliberation"]} if "deliberation" in result else None)
-        stats["J3"] = {"lines": len(to_j3), "agreed": len(to_j3) - disputed, "disputed": disputed}
-    tally.lines += total
-    tally.to_j2 += int(stats["J1"]["to_J2"])
-    tally.to_j3 += len(to_j3)
-    pending = [k for k in order if k not in settled]
-    verdicts = [settled[k] for k in order if k in settled]
-    stats["status"] = {s: sum(1 for v in verdicts if v["status"] == s) for s in STATUSES}
-    stats["final_tier"] = {t: sum(1 for v in verdicts if v["final_tier"] == t) for t in TIERS + ("deliberation",)}
-    return {"verdicts": verdicts, "pending": pending, "halted": halted, "stats": stats}
+def run_jury(
+    entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, system: str, batch_size: Optional[int] = None,
+    budget_caps: bool = True, tm_lookup: Optional[Callable[[Dict[str, Any]], List[Dict[str, Any]]]] = None,
+    roundtrip_fn: Optional[Callable[[Sequence[Dict[str, Any]]], Dict[str, Dict[str, Any]]]] = None,
+    deliberator: Optional[Deliberator] = None, workers: int = 1, tally: Optional[EscalationTally] = None, memo: Any = None,
+) -> Dict[str, Any]:
+    """Run J1-J3 escalation chain via gcl.application.jury.run_jury with target-only ban hits."""
+    return _run_jury(
+        entries, locale, router, system=system, batch_size=batch_size, budget_caps=budget_caps,
+        tm_lookup=tm_lookup, roundtrip_fn=roundtrip_fn, deliberator=deliberator,
+        workers=workers, tally=tally, memo=memo, ban_hits_fn=ban_hits, score_fn=score_entries,
+    )
 
 
 def load_source_rows(path: Path, src_field: str, dst_field: Optional[str], key_field: str) -> Dict[str, str]:
@@ -402,13 +169,12 @@ def main() -> int:
         raise L10nError("--workers must be 1 or more")
     router = make_router(args, list(TIERS), default_budget_path(out))
     pack_dir = (Path(args.langpack_dir) if args.langpack_dir else LANGPACK_DIR) / locale
-    system, info = build_system_prompt(locale, entries, pack_dir, warmup=not args.no_warmup, warmup_count=args.warmup_count,
-                                       shots=args.shots, seed=args.seed)
-    if args.context_map:  # jurors read the map and the neutral line fields, never the locale appendix
-        ctx = load_context(Path(args.context_map), locale)
-        info["context_map"] = ctx.source
-        info["context_lines"] = ctx.enrich(entries)
-        system = ctx.system(system)
+    system, info = build_system_prompt(locale, entries, pack_dir, warmup=not args.no_warmup, warmup_count=args.warmup_count, shots=args.shots, seed=args.seed)
+    if args.context_map:
+        ctx = BlindContextAdapter(load_context(Path(args.context_map), locale))
+        info["context_map"] = ctx.source_name
+        info["context_lines"] = ctx.enrich_entries(entries)
+        system = ctx.build_system(system)
     memo = BatchMemo(Path(args.cache)) if args.cache else None
     roundtrip_fn = None
     if args.source_table:
@@ -436,7 +202,7 @@ def main() -> int:
                                 category=str(entry.get("category") or ""), speaker=str(entry.get("speaker") or ""), exclude_key=entry["key"])
     deliberator = None
     if not args.no_deliberation:
-        from deliberate import make_deliberator  # local import: deliberate.py imports this module
+        from gcl.application.jury.deliberation import make_deliberator
         deliberator = make_deliberator(router, locale, system)
     try:
         res = run_jury(entries, locale, router, system=system, batch_size=args.batch_size, budget_caps=not args.no_budget_caps,
@@ -448,11 +214,13 @@ def main() -> int:
 
 
 def write_report(args: Any, locale: str, out: Path, source_file: str, info: Dict[str, Any], router: Any, res: Dict[str, Any]) -> int:
-    """Write the verdict file and print the summary; returns the exit code."""
-    doc = {"locale": locale, "source_file": source_file, "langpack_version": info.get("langpack_version"),
-           "prompt": {"warmup_lines": info.get("warmup_lines", 0), "shots": info.get("shots", 0),
-                      "context_map": info.get("context_map"), "context_lines": info.get("context_lines", 0)},
-           "stats": res["stats"], "halted": res["halted"], "verdicts": res["verdicts"], "pending": res["pending"], "notes": router.notes}
+    """Write the verdict file and print summary; return exit code."""
+    doc = {
+        "locale": locale, "source_file": source_file, "langpack_version": info.get("langpack_version"),
+        "prompt": {"warmup_lines": info.get("warmup_lines", 0), "shots": info.get("shots", 0),
+                   "context_map": info.get("context_map"), "context_lines": info.get("context_lines", 0)},
+        "stats": res["stats"], "halted": res["halted"], "verdicts": res["verdicts"], "pending": res["pending"], "notes": router.notes,
+    }
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     st = res["stats"]
