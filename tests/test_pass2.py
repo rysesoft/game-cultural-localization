@@ -1,11 +1,10 @@
 """P12: Pass 2 with three candidates (prompts/pass2.<locale>.md), blind J1 pick, validate_critique check."""
-from __future__ import annotations
 
 import json
 import re
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from unittest import mock
 
 import sys as _sys
@@ -28,7 +27,7 @@ SOURCES = {
 }
 
 
-def verdict(key: str, status: str, score: int, issue: str = "translationese") -> Dict[str, Any]:
+def verdict(key: str, status: str, score: int, issue: str = "translationese") -> dict[str, Any]:
     votes = [{"key": key, "tier": "J1", "member": i, "family": f, "model": m, "score": score, "issue_type": issue if score < 5 else "none",
               "reason": "English word order" if score < 5 else "", "suggested": ""}
              for i, (f, m) in enumerate((("anthropic", "claude-haiku-5-5"), ("deepseek", "deepseek-flash"), ("google", "gemini-4-hydrogen")))]
@@ -49,7 +48,7 @@ SCENARIO = {
 }
 
 
-def run(scenario: Dict[str, Any] = SCENARIO, **kw: Any) -> Dict[str, Any]:
+def run(scenario: dict[str, Any] = SCENARIO, **kw: Any) -> dict[str, Any]:
     router = Router(load_providers_config(), dry_run=True, scenario=FakeScenario(scenario))
     return p2.rewrite_lines(VERDICTS, SOURCES, "tr-TR", router, pass2_system="P2", pick_system="CRITIC", **kw)
 
@@ -97,7 +96,7 @@ class RewriteTests(unittest.TestCase):
         self.assertEqual([e["key"] for e in crit["entries"]], ["DLG", "PH"])
 
     def test_jurors_never_see_the_source(self):
-        seen: List[Dict[str, Any]] = []
+        seen: list[dict[str, Any]] = []
         real = p2.pick_candidates
 
         def spy(provider, items, locale, **kw):

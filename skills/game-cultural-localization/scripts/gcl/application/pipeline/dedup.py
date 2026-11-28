@@ -1,11 +1,11 @@
 """Context safe intra batch deduplication and approved TM 1.0 short circuit."""
-from __future__ import annotations
 
 import json
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from gcl.application.jury.policy import STATUSES, TIERS
 from gcl.ports.context import WriterContextView
@@ -24,7 +24,7 @@ def normalize_text(text: str) -> str:
     return _WS_RE.sub(" ", unicodedata.normalize("NFC", text or "")).strip().casefold()
 
 
-def context_signature(row: Any, register: str, wctx: Optional[WriterContextView]) -> Tuple[Any, ...]:
+def context_signature(row: Any, register: str, wctx: WriterContextView | None) -> tuple[Any, ...]:
     """Full context signature ensuring homographs like 'Play' never merge across places."""
     note = json.dumps(wctx.line_fields(row.key), ensure_ascii=False, sort_keys=True) if wctx is not None else ""
     return (
@@ -38,7 +38,7 @@ def context_signature(row: Any, register: str, wctx: Optional[WriterContextView]
     )
 
 
-def jury_signature(entry: Dict[str, Any]) -> Tuple[Any, ...]:
+def jury_signature(entry: dict[str, Any]) -> tuple[Any, ...]:
     """Full target + context signature for blind jury deduplication."""
     ctx_blob = json.dumps(entry.get("context") or {}, ensure_ascii=False, sort_keys=True)
     return (
@@ -52,33 +52,33 @@ def jury_signature(entry: Dict[str, Any]) -> Tuple[Any, ...]:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DedupEnv:
     """Parameter bundle passed to Pass 1 batch deduplication and TM lookup."""
 
     locale: str
     register_of: Callable[[Any], str]
-    wctx: Optional[WriterContextView]
+    wctx: WriterContextView | None
     tm: Any
     parity: Any
     opts: Any
 
 
-@dataclass
+@dataclass(slots=True)
 class Pass1BatchPlan:
     """Partitioned Pass 1 batch separating drafts, approved TM hits and canonical rows."""
 
-    targets: Dict[str, str] = field(default_factory=dict)
-    tm_verdicts: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    canon_rows: List[Any] = field(default_factory=list)
-    canon_payloads: List[Dict[str, Any]] = field(default_factory=list)
-    dup_to_canon: Dict[str, str] = field(default_factory=dict)
+    targets: dict[str, str] = field(default_factory=dict)
+    tm_verdicts: dict[str, dict[str, Any]] = field(default_factory=dict)
+    canon_rows: list[Any] = field(default_factory=list)
+    canon_payloads: list[dict[str, Any]] = field(default_factory=list)
+    dup_to_canon: dict[str, str] = field(default_factory=dict)
     draft_count: int = 0
     tm_count: int = 0
     dedup_count: int = 0
 
 
-def _tm_exact_hit(row: Any, dedup_env: DedupEnv) -> Optional[Dict[str, Any]]:
+def _tm_exact_hit(row: Any, dedup_env: DedupEnv) -> dict[str, Any] | None:
     opts = dedup_env.opts
     if not getattr(opts, "tm_shortcircuit", True) or dedup_env.tm is None:
         return None
@@ -96,7 +96,7 @@ def _tm_exact_hit(row: Any, dedup_env: DedupEnv) -> Optional[Dict[str, Any]]:
     return hit
 
 
-def make_tm_verdict(key: str, tm_hit: Dict[str, Any]) -> Dict[str, Any]:
+def make_tm_verdict(key: str, tm_hit: dict[str, Any]) -> dict[str, Any]:
     """Synthetic J1 pass verdict for an unambiguous approved exact TM match."""
     return {
         "key": key, "final_tier": "J1", "score": 5, "status": "pass", "votes": [],
@@ -109,7 +109,7 @@ def plan_pass1_batch(batch: Sequence[Any], dedup_env: DedupEnv) -> Pass1BatchPla
     """Partition batch rows into drafts, exact TM hits, deduplicated duplicates and canonical rows."""
     plan = Pass1BatchPlan()
     draft_field = getattr(dedup_env.opts, "draft_field", None)
-    seen: Dict[Tuple[Any, ...], str] = {}
+    seen: dict[tuple[Any, ...], str] = {}
     for row in batch:
         draft = str(row.meta.get(draft_field) or "") if draft_field else ""
         if draft_field and draft.strip():
@@ -136,10 +136,10 @@ def plan_pass1_batch(batch: Sequence[Any], dedup_env: DedupEnv) -> Pass1BatchPla
     return plan
 
 
-def expand_pass1_targets(plan: Pass1BatchPlan, translated: Dict[str, str], batch: Sequence[Any]) -> Dict[str, str]:
+def expand_pass1_targets(plan: Pass1BatchPlan, translated: dict[str, str], batch: Sequence[Any]) -> dict[str, str]:
     """Fan out canonical translations to all duplicate keys while preserving batch order."""
     pool = {**plan.targets, **translated}
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     for row in batch:
         k = row.key
         src_k = plan.dup_to_canon.get(k, k)
@@ -147,20 +147,20 @@ def expand_pass1_targets(plan: Pass1BatchPlan, translated: Dict[str, str], batch
     return out
 
 
-@dataclass
+@dataclass(slots=True)
 class JuryBatchPlan:
     """Deduplicated blind jury batch plan skipping TM resolved and duplicate context items."""
 
-    pre_settled: Dict[str, Dict[str, Any]]
-    unique_entries: List[Dict[str, Any]]
-    dup_to_canon: Dict[str, str]
+    pre_settled: dict[str, dict[str, Any]]
+    unique_entries: list[dict[str, Any]]
+    dup_to_canon: dict[str, str]
 
 
-def plan_jury_batch(jentries: Sequence[Dict[str, Any]], pre_settled: Dict[str, Dict[str, Any]]) -> JuryBatchPlan:
+def plan_jury_batch(jentries: Sequence[dict[str, Any]], pre_settled: dict[str, dict[str, Any]]) -> JuryBatchPlan:
     """Deduplicate non settled jury entries sharing target and full blind context."""
-    seen: Dict[Tuple[Any, ...], str] = {}
-    unique: List[Dict[str, Any]] = []
-    dup_to_canon: Dict[str, str] = {}
+    seen: dict[tuple[Any, ...], str] = {}
+    unique: list[dict[str, Any]] = []
+    dup_to_canon: dict[str, str] = {}
     for entry in jentries:
         k = str(entry["key"])
         if k in pre_settled:
@@ -175,15 +175,15 @@ def plan_jury_batch(jentries: Sequence[Dict[str, Any]], pre_settled: Dict[str, D
     return JuryBatchPlan(pre_settled=dict(pre_settled), unique_entries=unique, dup_to_canon=dup_to_canon)
 
 
-def _clone_verdict(verdict: Dict[str, Any], new_key: str) -> Dict[str, Any]:
+def _clone_verdict(verdict: dict[str, Any], new_key: str) -> dict[str, Any]:
     return {**verdict, "key": new_key, "votes": [{**v, "key": new_key} for v in verdict.get("votes", [])]}
 
 
-def expand_jury_result(plan: JuryBatchPlan, raw_res: Optional[Dict[str, Any]], full_order: Sequence[str]) -> Dict[str, Any]:
+def expand_jury_result(plan: JuryBatchPlan, raw_res: dict[str, Any] | None, full_order: Sequence[str]) -> dict[str, Any]:
     """Merge TM settled and duplicate verdicts back into full batch order."""
     if raw_res is None:
         verdicts = [plan.pre_settled[k] for k in full_order if k in plan.pre_settled]
-        stats: Dict[str, Any] = {
+        stats: dict[str, Any] = {
             "lines": len(verdicts),
             "J1": {"lines": 0, "settled": len(verdicts), "to_J2": 0, "critical_to_J3": 0},
             "status": {s: sum(1 for v in verdicts if v["status"] == s) for s in STATUSES},
@@ -193,7 +193,7 @@ def expand_jury_result(plan: JuryBatchPlan, raw_res: Optional[Dict[str, Any]], f
     by_canon = {v["key"]: v for v in raw_res.get("verdicts", [])}
     verdicts = []
     pending_canon = set(raw_res.get("pending") or [])
-    pending: List[str] = []
+    pending: list[str] = []
     for k in full_order:
         if k in plan.pre_settled:
             verdicts.append(plan.pre_settled[k])
@@ -210,15 +210,15 @@ def expand_jury_result(plan: JuryBatchPlan, raw_res: Optional[Dict[str, Any]], f
     return {"verdicts": verdicts, "pending": pending, "halted": raw_res.get("halted"), "stats": stats}
 
 
-def expand_pass2_rewrites(rw: Dict[str, Any], dup_to_canon: Dict[str, str], batch_order: Sequence[str]) -> Dict[str, Any]:
+def expand_pass2_rewrites(rw: dict[str, Any], dup_to_canon: dict[str, str], batch_order: Sequence[str]) -> dict[str, Any]:
     """Expand canonical Pass 2 rewrite lines and critique entries onto duplicate siblings."""
     if not dup_to_canon:
         return rw
     lines_by_key = {l["key"]: l for l in rw.get("lines", [])}
     crit_entries = (rw.get("critique") or {}).get("entries") or []
     crit_by_key = {e["key"]: e for e in crit_entries}
-    new_lines: List[Dict[str, Any]] = []
-    new_crit: List[Dict[str, Any]] = []
+    new_lines: list[dict[str, Any]] = []
+    new_crit: list[dict[str, Any]] = []
     for k in batch_order:
         src_k = dup_to_canon.get(k, k)
         if src_k in lines_by_key:

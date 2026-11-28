@@ -1,5 +1,4 @@
 """CLI / integration tests for lqa_linter.py (exit codes, formats, JSON, encoding, perf)."""
-from __future__ import annotations
 
 import json
 import time

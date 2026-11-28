@@ -1,11 +1,10 @@
 """v3.2.0 Phase M cost, token and request optimizations plus Python 3.15 contract tests."""
-from __future__ import annotations
 
 import json
 import sys
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -33,11 +32,11 @@ from providers import FakeScenario, Router, load_providers_config  # noqa: E402
 class ScriptedTransport:
     """In memory HTTP POST fake recording request bodies and returning scripted tuples."""
 
-    def __init__(self, replies: List[Tuple[int, Any, Dict[str, str]]]) -> None:
+    def __init__(self, replies: list[tuple[int, Any, dict[str, str]]]) -> None:
         self._replies = list(replies)
-        self.requests: List[Dict[str, Any]] = []
+        self.requests: list[dict[str, Any]] = []
 
-    def __call__(self, url: str, headers: Dict[str, str], body: bytes, timeout: float) -> Tuple[int, bytes, Dict[str, str]]:
+    def __call__(self, url: str, headers: dict[str, str], body: bytes, timeout: float) -> tuple[int, bytes, dict[str, str]]:
         self.requests.append({"url": url, "headers": headers, "body": json.loads(body.decode("utf-8"))})
         status, data, hdrs = self._replies.pop(0) if len(self._replies) > 1 else self._replies[0]
         raw = data if isinstance(data, bytes) else json.dumps(data).encode("utf-8")
@@ -50,7 +49,8 @@ class RuntimeAndLayer0Tests(unittest.TestCase):
     def test_python_315_and_version_lockstep(self) -> None:
         self.assertGreaterEqual(sys.version_info[:2], (3, 15))
         self.assertEqual(lc.MIN_PYTHON, (3, 15))
-        self.assertEqual(lc.__version__, "3.2.0")
+        plugin = json.loads((lc.SCRIPTS_DIR.parents[2] / "plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(lc.__version__, plugin["version"])
 
     def test_google_cap_and_thought_flex_budget_telemetry(self) -> None:
         cfg = load_providers_config()
@@ -131,7 +131,7 @@ class Layer1EffortAndPromptTests(unittest.TestCase):
         self.assertIn("A1", lean_sys)
         self.assertNotIn("## 12. Linter Coverage Note", lean_sys)
 
-        seen_systems: List[Tuple[str, str]] = []
+        seen_systems: list[tuple[str, str]] = []
         rows = [
             {"key": "UI_1", "en": "Open inventory", "category": "ui"},
             {"key": "DLG_1", "en": "Keep calm, kid.", "category": "dialogue", "speaker": "Mentor", "archetype": "A1"},
@@ -231,7 +231,7 @@ class Layer3OptimizationAndSafetyTests(unittest.TestCase):
         rec = salvage_keyed_items(truncated, "votes")
         self.assertEqual([x["key"] for x in rec], ["A"])
 
-        sent: List[List[str]] = []
+        sent: list[list[str]] = []
 
         class CutOnce:
             model = "m"
@@ -248,7 +248,7 @@ class Layer3OptimizationAndSafetyTests(unittest.TestCase):
         self.assertEqual(sent, [["A", "B"], ["B"]])
 
     def test_item_memo_reuses_items_across_batch_sizes(self) -> None:
-        calls: List[List[str]] = []
+        calls: list[list[str]] = []
 
         class SpyProv:
             model = "m"

@@ -2,14 +2,13 @@
 """Final translations exporter CLI Facade delegating to TableFormatRegistry and export services.
 
 Exit codes: 0 clean, 1 undecided lines / held back texts / unplaced keys, 2 usage error.
-Python 3.9+, standard library only.
+Python 3.15, standard library only.
 """
-from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -38,11 +37,11 @@ TOOL = "export_translations"
 TEMPLATE_SUFFIXES = (".asset", ".csv", ".tsv", ".json", ".po")
 
 
-def unity_rewrite(text: str, id_texts: Dict[str, str], written: Any = None) -> str:
+def unity_rewrite(text: str, id_texts: dict[str, str], written: Any = None) -> str:
     return _unity_rewrite(text, id_texts, written, quote_fn=yaml_dq)
 
 
-def export_unity(final: Dict[str, str], templates: Any, shared_override: Any, out_dir: Path) -> Dict[str, Any]:
+def export_unity(final: dict[str, str], templates: Any, shared_override: Any, out_dir: Path) -> dict[str, Any]:
     return _export_unity(final, templates, shared_override, out_dir, quote_fn=yaml_dq)
 
 
@@ -64,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def _resolve_templates(ap: argparse.ArgumentParser, args: Any, locale: str) -> List[Path]:
+def _resolve_templates(ap: argparse.ArgumentParser, args: Any, locale: str) -> list[Path]:
     templates = [Path(t) for t in args.template]
     if args.template_dir:
         tdir = Path(args.template_dir)
@@ -100,14 +99,14 @@ def main() -> int:
     if any(out_dir.resolve() == t.resolve().parent for t in templates):
         raise L10nError("--out must not be the folder of a template, the export never overwrites the game's own files")
     finals, reports = collect_inputs(Path(args.input), locale, args.changes)
-    sources: Dict[str, str] = {}
+    sources: dict[str, str] = {}
     final = load_finals(finals, locale, args.dst_field, args.key_field, sources)
     decided = apply_decisions(final, reports)
     held = hold_back_broken(final, sources, args.placeholder_style, args.tag_style)
     out_dir.mkdir(parents=True, exist_ok=True)
     dst_field = args.dst_field or locale
     unity = [t for t in templates if t.suffix.lower() == ".asset"]
-    files: List[str] = []
+    files: list[str] = []
     placed, unchanged, placed_keys = 0, 0, set()
     if unity:
         ures = export_unity(final, unity, Path(args.shared_table) if args.shared_table else None, out_dir)

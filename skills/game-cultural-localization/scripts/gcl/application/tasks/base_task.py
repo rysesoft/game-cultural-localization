@@ -1,9 +1,9 @@
 """Template Method base class and keyed retry/split driver for LLM batch tasks."""
-from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from gcl.aspects.task_chain import run_batches_with_aspects
 from gcl.domain.envelope_codec import envelope, extract_json, salvage_keyed_items
@@ -17,7 +17,7 @@ __pattern__ = "Template Method"
 __owns__ = "missing key re-ask loop, binary half split retry and KeyedBatchTask base"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class KeyedCallSpec:
     """Parameter object describing one keyed JSON task request/reply contract."""
 
@@ -25,7 +25,7 @@ class KeyedCallSpec:
     list_field: str
     reply_field: str
     id_field: str
-    accept: Callable[[Dict[str, Any]], bool]
+    accept: Callable[[dict[str, Any]], bool]
     max_tokens: int
     split_depth: int = SPLIT_DEPTH
     salvage_truncated: bool = False
@@ -34,10 +34,10 @@ class KeyedCallSpec:
 def _try_keyed_attempt(
     provider: Any,
     system: str,
-    base_payload: Dict[str, Any],
-    pending: List[Dict[str, Any]],
+    base_payload: dict[str, Any],
+    pending: list[dict[str, Any]],
     spec: KeyedCallSpec,
-) -> Tuple[Dict[str, Dict[str, Any]], Any, str]:
+) -> tuple[dict[str, dict[str, Any]], Any, str]:
     payload = {**base_payload, "task": spec.task, spec.list_field: pending}
     try:
         res = provider.complete(system, envelope(INSTRUCTIONS[spec.task], payload), max_tokens=spec.max_tokens, json_mode=True)
@@ -56,7 +56,7 @@ def _try_keyed_attempt(
             "a reply cut off at the output limit looks like this"
         )
     valid_ids = {str(p[spec.id_field]) for p in pending}
-    got: Dict[str, Dict[str, Any]] = {}
+    got: dict[str, dict[str, Any]] = {}
     for item in (data.get(spec.reply_field) or []) if isinstance(data, dict) else []:
         if isinstance(item, dict) and str(item.get(spec.id_field)) in valid_ids and spec.accept(item):
             got[str(item[spec.id_field])] = item
@@ -66,12 +66,12 @@ def _try_keyed_attempt(
 def call_keyed(
     provider: Any,
     system: str,
-    base_payload: Dict[str, Any],
-    items: List[Dict[str, Any]],
+    base_payload: dict[str, Any],
+    items: list[dict[str, Any]],
     spec: KeyedCallSpec,
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """Call provider with missing key retries and half splitting on non provider failures."""
-    got: Dict[str, Dict[str, Any]] = {}
+    got: dict[str, dict[str, Any]] = {}
     pending = items
     last_error = ""
     provider_failed: Any = False
@@ -104,18 +104,18 @@ class KeyedBatchTask(ABC):
     task_name: str = ""
     item_id_field: str = "key"
 
-    def item_cache_value(self, item: Any, opts: Dict[str, Any]) -> Any:
+    def item_cache_value(self, item: Any, opts: dict[str, Any]) -> Any:
         """Projection stored inside item level memo key; override when payloads omit fields."""
         return item
 
     def _partition_item_memo(
-        self, item_memo: Optional[MemoRepository], tag: Any, items: Sequence[Any], cfg: Dict[str, Any],
-    ) -> Tuple[Dict[str, Any], List[Any], Dict[str, str]]:
+        self, item_memo: MemoRepository | None, tag: Any, items: Sequence[Any], cfg: dict[str, Any],
+    ) -> tuple[dict[str, Any], list[Any], dict[str, str]]:
         if item_memo is None:
             return {}, list(items), {}
-        cached: Dict[str, Any] = {}
-        pending: List[Any] = []
-        key_map: Dict[str, str] = {}
+        cached: dict[str, Any] = {}
+        pending: list[Any] = []
+        key_map: dict[str, str] = {}
         id_field = self.item_id_field
         for it in items:
             iid = str(it[id_field])
@@ -129,7 +129,7 @@ class KeyedBatchTask(ABC):
         return cached, pending, key_map
 
     @staticmethod
-    def _store_item_memo(item_memo: MemoRepository, key_map: Dict[str, str], fresh: Dict[str, Any]) -> None:
+    def _store_item_memo(item_memo: MemoRepository, key_map: dict[str, str], fresh: dict[str, Any]) -> None:
         to_write = {key_map[k]: v for k, v in fresh.items() if k in key_map}
         if not to_write:
             return
@@ -139,18 +139,18 @@ class KeyedBatchTask(ABC):
             for ck, val in to_write.items():
                 item_memo.put(ck, val)
 
-    def execute(self, provider: Any, items: Sequence[Any], locale: str, opts: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def execute(self, provider: Any, items: Sequence[Any], locale: str, opts: dict[str, Any] | None = None) -> dict[str, Any]:
         """Run Template Method pipeline across batches via run_batches_with_aspects and item_memo."""
         cfg = dict(opts or {})
         sys_prompt = self.build_system(locale, cfg)
         tag = self.cache_tag(provider, sys_prompt, locale, cfg)
-        item_memo: Optional[MemoRepository] = cfg.get("item_memo")
+        item_memo: MemoRepository | None = cfg.get("item_memo")
         cached, pending_items, key_map = self._partition_item_memo(item_memo, tag, items, cfg)
         if not pending_items:
             return cached
         batches = self.make_batches(pending_items, cfg)
         workers = int(cfg.get("workers", 1))
-        memo: Optional[MemoRepository] = cfg.get("memo")
+        memo: MemoRepository | None = cfg.get("memo")
         fresh = run_batches_with_aspects(
             batches,
             lambda b: self.run_batch(provider, sys_prompt, locale, b, cfg),
@@ -168,17 +168,17 @@ class KeyedBatchTask(ABC):
         return {str(it[id_field]): merged[str(it[id_field])] for it in items if str(it[id_field]) in merged}
 
     @abstractmethod
-    def build_system(self, locale: str, opts: Dict[str, Any]) -> str:
+    def build_system(self, locale: str, opts: dict[str, Any]) -> str:
         """Return formatted system prompt for this task."""
 
     @abstractmethod
-    def make_batches(self, items: Sequence[Any], opts: Dict[str, Any]) -> List[List[Any]]:
+    def make_batches(self, items: Sequence[Any], opts: dict[str, Any]) -> list[list[Any]]:
         """Partition items respecting row count and character budgets."""
 
     @abstractmethod
-    def cache_tag(self, provider: Any, system: str, locale: str, opts: Dict[str, Any]) -> Any:
+    def cache_tag(self, provider: Any, system: str, locale: str, opts: dict[str, Any]) -> Any:
         """Build deterministic cache key tuple for MemoRepository."""
 
     @abstractmethod
-    def run_batch(self, provider: Any, system: str, locale: str, batch: List[Any], opts: Dict[str, Any]) -> Dict[str, Any]:
+    def run_batch(self, provider: Any, system: str, locale: str, batch: list[Any], opts: dict[str, Any]) -> dict[str, Any]:
         """Execute one batch against provider and extract normalized dict outputs."""

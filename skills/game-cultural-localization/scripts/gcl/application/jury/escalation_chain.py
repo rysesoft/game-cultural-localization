@@ -1,10 +1,10 @@
 """Chain of Responsibility jury escalation (J1 -> BudgetCap -> J2 -> Roundtrip -> J3 -> Deliberation)."""
-from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from gcl.application.tasks.concrete_tasks import score_entries
 from gcl.application.tasks.vote_codec import everyday_rule
@@ -16,27 +16,27 @@ __layer__ = "application"
 __pattern__ = "Chain of Responsibility"
 __owns__ = "tiered mixed family jury voting, budget cap enforcement and deliberation dispatch"
 
-Deliberator = Callable[[Dict[str, Any], List[Dict[str, Any]], Dict[str, Any]], Optional[Dict[str, Any]]]
+type Deliberator = Callable[[dict[str, Any], list[dict[str, Any]], dict[str, Any]], dict[str, Any] | None]
 
 
-def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], locale: str, **kw: Any) -> Dict[str, List[Dict[str, Any]]]:
+def _tier_votes(router: Any, tier: str, entries: Sequence[dict[str, Any]], locale: str, **kw: Any) -> dict[str, list[dict[str, Any]]]:
     """Collect votes from all three vendor families for one tier and apply everyday_rule."""
     members = router.jury(tier)
     fams = [m.family for m in members]
     if len(set(fams)) != len(fams):
         raise L10nError(f"jury {tier} has two members from the same family ({', '.join(fams)})")
     view = [juror_view(e) for e in entries]
-    out: Dict[str, List[Dict[str, Any]]] = {e["key"]: [] for e in entries}
+    out: dict[str, list[dict[str, Any]]] = {e["key"]: [] for e in entries}
     workers = int(kw.get("workers", 1))
     system, batch_size, memo = str(kw.get("system", "")), kw.get("batch_size"), kw.get("memo")
-    extra_opts: Dict[str, Any] = {}
+    extra_opts: dict[str, Any] = {}
     if kw.get("item_memo") is not None:
         extra_opts["item_memo"] = kw["item_memo"]
     if kw.get("salvage_truncated"):
         extra_opts["salvage_truncated"] = True
     score_fn = kw.get("score_fn") or score_entries
 
-    def one(m: Any) -> Dict[str, Dict[str, Any]]:
+    def one(m: Any) -> dict[str, dict[str, Any]]:
         return score_fn(m.provider, view, locale, tier=tier, system=system, batch_size=batch_size, workers=workers, memo=memo, **extra_opts)
 
     if workers > 1 and len(members) > 1:
@@ -52,52 +52,52 @@ def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], local
     return out
 
 
-@dataclass
+@dataclass(slots=True)
 class JuryBatchContext:
     """Mutable execution state passed along jury TierHandler chain."""
 
-    entries: Sequence[Dict[str, Any]]
-    by_key: Dict[str, Dict[str, Any]]
-    order: List[str]
+    entries: Sequence[dict[str, Any]]
+    by_key: dict[str, dict[str, Any]]
+    order: list[str]
     locale: str
     router: Any
     system: str
-    agreement: Dict[str, int]
-    caps: Dict[str, Any]
+    agreement: dict[str, int]
+    caps: dict[str, Any]
     budget_caps: bool
     tally: EscalationTally
-    batch_size: Optional[int]
+    batch_size: int | None
     workers: int
     memo: Any
-    roundtrip_fn: Optional[Callable[[Sequence[Dict[str, Any]]], Dict[str, Dict[str, Any]]]]
-    deliberator: Optional[Deliberator]
-    score_fn: Callable[..., Dict[str, Dict[str, Any]]] = score_entries
+    roundtrip_fn: Callable[[Sequence[dict[str, Any]]], dict[str, dict[str, Any]]] | None
+    deliberator: Deliberator | None
+    score_fn: Callable[..., dict[str, dict[str, Any]]] = score_entries
     clean_light_pass: bool = False
     item_memo: Any = None
     salvage_truncated: bool = False
-    votes: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
-    evidence: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    settled: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    to_j2: List[str] = field(default_factory=list)
-    to_j3: List[str] = field(default_factory=list)
-    open_keys: List[str] = field(default_factory=list)
-    j3_votes: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
-    halted: Optional[Dict[str, Any]] = None
-    stats: Dict[str, Any] = field(default_factory=dict)
+    votes: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    evidence: dict[str, dict[str, Any]] = field(default_factory=dict)
+    settled: dict[str, dict[str, Any]] = field(default_factory=dict)
+    to_j2: list[str] = field(default_factory=list)
+    to_j3: list[str] = field(default_factory=list)
+    open_keys: list[str] = field(default_factory=list)
+    j3_votes: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    halted: dict[str, Any] | None = None
+    stats: dict[str, Any] = field(default_factory=dict)
 
-    def settle(self, key: str, tier: str, score: int, status: str, rationales: Sequence[str], extra: Optional[Dict[str, Any]] = None) -> None:
+    def settle(self, key: str, tier: str, score: int, status: str, rationales: Sequence[str], extra: dict[str, Any] | None = None) -> None:
         self.settled[key] = {
             "key": key, "final_tier": tier, "score": score, "status": status,
             "votes": self.votes[key], "evidence": self.evidence[key], "rationales": list(rationales), **(extra or {}),
         }
 
-    def settle_tier_pass(self, key: str, tier: str, tier_votes: Sequence[Dict[str, Any]]) -> None:
+    def settle_tier_pass(self, key: str, tier: str, tier_votes: Sequence[dict[str, Any]]) -> None:
         scores = [v["score"] for v in tier_votes]
         score = min(scores)
         clean = self.clean_light_pass and is_clean_light_pass(tier_votes, self.evidence[key].get("ban_hits", ()))
         self.settle(key, tier, score, "pass" if clean else status_for(score), [v["reason"] for v in tier_votes])
 
-    def cap_check(self, stage: str, keys: Sequence[str], limit: float) -> Optional[Dict[str, Any]]:
+    def cap_check(self, stage: str, keys: Sequence[str], limit: float) -> dict[str, Any] | None:
         total = len(self.order)
         self.stats[f"to_{stage}_ratio"] = round(len(keys) / total, 4) if total else 0.0
         count = (self.tally.to_j2 if stage == "J2" else self.tally.to_j3) + len(keys)
@@ -120,9 +120,9 @@ class TierHandler(ABC):
     """Base Chain of Responsibility handler for jury escalation stages."""
 
     def __init__(self) -> None:
-        self._next: Optional["TierHandler"] = None
+        self._next: TierHandler | None = None
 
-    def set_next(self, nxt: "TierHandler") -> "TierHandler":
+    def set_next(self, nxt: TierHandler) -> TierHandler:
         self._next = nxt
         return nxt
 
@@ -134,7 +134,6 @@ class TierHandler(ABC):
     @abstractmethod
     def process(self, ctx: JuryBatchContext) -> None:
         """Process one escalation stage updating ctx."""
-
 
 class J1TierHandler(TierHandler):
     def process(self, ctx: JuryBatchContext) -> None:
@@ -228,7 +227,7 @@ class DeliberationHandler(TierHandler):
         ctx.stats["J3"] = {"lines": len(ctx.to_j3), "agreed": len(ctx.to_j3) - disputed, "disputed": disputed}
 
 
-def _dispatch_deliberation(ctx: JuryBatchContext) -> Dict[str, Any]:
+def _dispatch_deliberation(ctx: JuryBatchContext) -> dict[str, Any]:
     d = ctx.deliberator
     if d is None or not ctx.open_keys:
         return {}
@@ -240,7 +239,7 @@ def _dispatch_deliberation(ctx: JuryBatchContext) -> Dict[str, Any]:
     return {key: d(ctx.by_key[key], ctx.j3_votes[key], ctx.evidence[key]) for key in ctx.open_keys}
 
 
-def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, **kw: Any) -> Dict[str, Any]:
+def run_jury(entries: Sequence[dict[str, Any]], locale: str, router: Any, **kw: Any) -> dict[str, Any]:
     """Execute J1 -> BudgetCap -> J2 -> Roundtrip -> J3 -> Deliberation escalation pipeline."""
     cfg = router.config
     order = [e["key"] for e in entries]

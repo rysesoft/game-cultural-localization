@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Critique schema validation CLI facade delegating to gcl.infrastructure.formats.critique_validator."""
-from __future__ import annotations
 
 import argparse
 import sys

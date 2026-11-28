@@ -1,5 +1,4 @@
 """Token parsing strategies for placeholders, rich text tags and visual width."""
-from __future__ import annotations
 
 from .parity_adapter import DefaultTokenParityAdapter
 from .placeholders import (

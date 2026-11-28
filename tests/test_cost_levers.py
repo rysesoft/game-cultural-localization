@@ -1,12 +1,11 @@
 """3.1.0 cost levers: larger batches with a character budget, cache priming, empty Pass 1 targets, batched
 deliberation re-votes, the parallel Pass 2 recheck, batch API mode (Anthropic and Google) and its price."""
-from __future__ import annotations
 
 import json
 import threading
 import time
 import unittest
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -42,7 +41,7 @@ class BudgetChunkTests(unittest.TestCase):
         self.assertGreaterEqual(lt.BATCH_ROWS["pass2"], 25)
 
     def test_score_entries_sends_fewer_calls(self):
-        calls: List[int] = []
+        calls: list[int] = []
 
         class P:
             model = "m"
@@ -59,10 +58,10 @@ class BudgetChunkTests(unittest.TestCase):
 
 class PrimingTests(unittest.TestCase):
     def test_first_batch_runs_alone_then_the_rest_in_parallel(self):
-        events: List[Tuple[str, int]] = []
+        events: list[tuple[str, int]] = []
         lock = threading.Lock()
 
-        def fn(b: int) -> Dict[str, Any]:
+        def fn(b: int) -> dict[str, Any]:
             with lock:
                 events.append(("start", b))
             time.sleep(0.02)
@@ -78,11 +77,11 @@ class PrimingTests(unittest.TestCase):
             batched = True
         self.assertFalse(lt.primes(Batched()))
         self.assertTrue(lt.primes(object()))
-        events: List[Tuple[str, int]] = []
+        events: list[tuple[str, int]] = []
         lock = threading.Lock()
         gate = threading.Barrier(2, timeout=2)
 
-        def fn(b: int) -> Dict[str, Any]:
+        def fn(b: int) -> dict[str, Any]:
             with lock:
                 events.append(("start", b))
             gate.wait()  # both batches must be running at once, a primed first batch would time out here
@@ -94,7 +93,7 @@ class EmptyTargetTests(unittest.TestCase):
     def test_an_empty_target_for_a_source_is_asked_again(self):
         replies = [{"rows": [{"key": "a", "target": ""}, {"key": "b", "target": "bee"}, {"key": "c", "target": ""}]},
                    {"rows": [{"key": "a", "target": "ay"}]}]
-        sent: List[List[str]] = []
+        sent: list[list[str]] = []
 
         class P:
             model = "m"
@@ -122,7 +121,7 @@ class EmptyTargetTests(unittest.TestCase):
 ENTRIES = [{"key": f"L{i}", "target": f"Satır {i} burada duruyor ve biraz uzun.", "register": "ui"} for i in range(5)]
 
 
-def j3_votes(key: str, scores: List[int]) -> List[Dict[str, Any]]:
+def j3_votes(key: str, scores: list[int]) -> list[dict[str, Any]]:
     fams = ("anthropic", "deepseek", "google")
     return [{"key": key, "tier": "J3", "member": i, "family": fams[i], "model": f"m{i}", "score": s,
              "issue_type": "none" if s == 5 else "other", "reason": f"first {s}", "suggested": ""} for i, s in enumerate(scores)]
@@ -181,7 +180,7 @@ class RecheckTests(unittest.TestCase):
                     for e in ENTRIES]
         sources = {e["key"]: {"en": f"Line {e['key']}", "target": e["target"]} for e in ENTRIES}
 
-        def run(workers: int) -> List[Tuple[str, str, Any]]:
+        def run(workers: int) -> list[tuple[str, str, Any]]:
             router = Router(load_providers_config(), dry_run=True)
             res = p2.rewrite_lines(verdicts, sources, "tr-TR", router, pass2_system="P2", pick_system="PICK", workers=workers)
             return [(l["key"], l["new"], l.get("recheck")) for l in res["lines"]]
@@ -196,27 +195,27 @@ class Http:
 
     def __init__(self, handler: Any) -> None:
         self.handler = handler
-        self.log: List[Tuple[str, str, Any]] = []
+        self.log: list[tuple[str, str, Any]] = []
         self.lock = threading.Lock()
 
-    def post(self, url: str, headers: Dict[str, str], body: bytes, timeout: float) -> Tuple[int, bytes, Dict[str, str]]:
+    def post(self, url: str, headers: dict[str, str], body: bytes, timeout: float) -> tuple[int, bytes, dict[str, str]]:
         data = json.loads(body.decode("utf-8"))
         with self.lock:
             self.log.append(("POST", url, data))
         status, out = self.handler("POST", url, data)
         return status, out if isinstance(out, bytes) else json.dumps(out).encode("utf-8"), {}
 
-    def get(self, url: str, headers: Dict[str, str], timeout: float) -> Tuple[int, bytes, Dict[str, str]]:
+    def get(self, url: str, headers: dict[str, str], timeout: float) -> tuple[int, bytes, dict[str, str]]:
         with self.lock:
             self.log.append(("GET", url, None))
         status, out = self.handler("GET", url, None)
         return status, out if isinstance(out, bytes) else json.dumps(out).encode("utf-8"), {}
 
 
-def anthropic_handler(fail_ids: Tuple[str, ...] = ()) -> Any:
+def anthropic_handler(fail_ids: tuple[str, ...] = ()) -> Any:
     state = {"polls": 0, "reqs": []}
 
-    def handle(method: str, url: str, body: Any) -> Tuple[int, Any]:
+    def handle(method: str, url: str, body: Any) -> tuple[int, Any]:
         if method == "POST" and url.endswith("/v1/messages/batches"):
             state["reqs"] = body["requests"]
             return 200, {"id": "msgbatch_1", "processing_status": "in_progress"}
@@ -246,8 +245,8 @@ def collector(backend: Any, **kw: Any) -> BatchCollector:
     return BatchCollector(backend, linger_s=kw.pop("linger_s", 0.15), poll_s=0.0, sleep=time.sleep, **kw)
 
 
-def run_threads(fn: Any, args: List[Any]) -> List[Any]:
-    out: List[Any] = [None] * len(args)
+def run_threads(fn: Any, args: list[Any]) -> list[Any]:
+    out: list[Any] = [None] * len(args)
 
     def go(i: int) -> None:
         try:
@@ -301,7 +300,7 @@ class AnthropicBatchTests(unittest.TestCase):
     def test_max_requests_splits_the_jobs(self):
         ids = iter(range(100))
 
-        def handle(method: str, url: str, body: Any) -> Tuple[int, Any]:
+        def handle(method: str, url: str, body: Any) -> tuple[int, Any]:
             if method == "POST":
                 n = next(ids)
                 handle.jobs[f"msgbatch_{n}"] = body["requests"]  # type: ignore[attr-defined]
@@ -327,7 +326,7 @@ class GoogleBatchTests(unittest.TestCase):
     def _handler(self, shape: str) -> Any:
         state = {"reqs": [], "polls": 0}
 
-        def reply(r: Dict[str, Any], with_key: bool) -> Dict[str, Any]:
+        def reply(r: dict[str, Any], with_key: bool) -> dict[str, Any]:
             user = r["request"]["contents"][0]["parts"][0]["text"]
             item = {"response": {"candidates": [{"content": {"parts": [{"text": "think", "thought": True}, {"text": "g:" + user}]}, "finishReason": "STOP"}],
                                  "usageMetadata": {"promptTokenCount": 20, "candidatesTokenCount": 5, "thoughtsTokenCount": 7}}}
@@ -335,7 +334,7 @@ class GoogleBatchTests(unittest.TestCase):
                 item["metadata"] = {"key": r["metadata"]["key"]}
             return item
 
-        def handle(method: str, url: str, body: Any) -> Tuple[int, Any]:
+        def handle(method: str, url: str, body: Any) -> tuple[int, Any]:
             if method == "POST" and url.endswith("/models/gemini-4-hydrogen:batchGenerateContent"):
                 state["reqs"] = body["batch"]["inputConfig"]["requests"]["requests"]
                 return 200, {"name": "batches/abc", "metadata": {"state": "JOB_STATE_PENDING"}}
@@ -375,7 +374,7 @@ class GoogleBatchTests(unittest.TestCase):
                 self.assertIn("key", req["metadata"])
 
     def test_a_failed_job_fails_its_callers(self):
-        def handle(method: str, url: str, body: Any) -> Tuple[int, Any]:
+        def handle(method: str, url: str, body: Any) -> tuple[int, Any]:
             if method == "POST":
                 return 200, {"name": "batches/bad"}
             return 200, {"name": "batches/bad", "metadata": {"state": "JOB_STATE_FAILED"}, "error": {"message": "quota"}}

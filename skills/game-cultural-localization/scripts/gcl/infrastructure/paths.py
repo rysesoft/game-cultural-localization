@@ -1,5 +1,4 @@
 """Resolved filesystem locations for scripts, rules, prompts and langpacks."""
-from __future__ import annotations
 
 from pathlib import Path
 

@@ -1,5 +1,4 @@
 """Facade delegating providers.batch symbols to gcl.infrastructure.providers.batch_* modules."""
-from __future__ import annotations
 
 import sys
 from pathlib import Path

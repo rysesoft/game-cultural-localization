@@ -1,5 +1,4 @@
 """export_translations.py: decisions applied, then the game's own formats (Unity, CSV, JSON, PO), never into a game project."""
-from __future__ import annotations
 
 import json
 import unittest
@@ -31,7 +30,6 @@ MonoBehaviour:
   - m_Id: 4
     m_Key: Hud.New
 """
-
 
 def table(code: str, rows: str) -> str:
     return (f"%YAML 1.1\n--- !u!114 &11400000\nMonoBehaviour:\n  m_Name: Hud_{code}\n  m_LocaleId:\n    m_Code: {code}\n"

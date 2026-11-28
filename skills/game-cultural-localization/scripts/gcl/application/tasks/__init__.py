@@ -1,5 +1,4 @@
 """Batched LLM task execution built on Template Method and AOP TaskAspect."""
-from __future__ import annotations
 
 from .base_task import KeyedBatchTask, KeyedCallSpec, call_keyed
 from .concrete_tasks import (

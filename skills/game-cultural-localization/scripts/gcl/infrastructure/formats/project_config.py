@@ -1,9 +1,8 @@
 """Project l10n.config.json loader and CLI precedence helper."""
-from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from gcl.domain.errors import L10nError
 
@@ -13,7 +12,7 @@ __layer__ = "infrastructure"
 __pattern__ = "Configuration Loader"
 __owns__ = "l10n.config.json schema validation and CLI override resolution"
 
-CONFIG_KEYS: Dict[str, Any] = {
+CONFIG_KEYS: dict[str, Any] = {
     "locales": list, "src_field": str, "dst_field": str, "key_field": str,
     "placeholder_style": str, "tag_style": str, "placeholder_regex": str,
     "rules_dir": str, "glossary": str, "glossary_severity": str,
@@ -24,7 +23,7 @@ CONFIG_KEYS: Dict[str, Any] = {
 }
 
 
-def load_config(path: Optional[Path]) -> Dict[str, Any]:
+def load_config(path: Path | None) -> dict[str, Any]:
     """Load and validate l10n.config.json resolving relative paths against config folder."""
     if path is None:
         return {}
@@ -44,14 +43,14 @@ def load_config(path: Optional[Path]) -> Dict[str, Any]:
     return data
 
 
-def pick(cli_value: Any, config: Dict[str, Any], key: str, default: Any) -> Any:
+def pick(cli_value: Any, config: dict[str, Any], key: str, default: Any) -> Any:
     """Resolve option priority: CLI explicit value > config > default."""
     if cli_value is not None:
         return cli_value
     return config[key] if key in config else default
 
 
-def apply_config(args: Any, defaults: Dict[str, Any]) -> Dict[str, Any]:
+def apply_config(args: Any, defaults: dict[str, Any]) -> dict[str, Any]:
     """Populate None attributes on args from --config or defaults."""
     cfg = load_config(Path(args.config)) if getattr(args, "config", None) else {}
     for key, default in defaults.items():

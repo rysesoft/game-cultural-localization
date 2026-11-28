@@ -1,9 +1,8 @@
 """Facade delegating providers package exports to gcl.infrastructure.providers."""
-from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -34,7 +33,7 @@ __all__ = [
     "envelope", "estimate_tokens", "extract_json", "get_provider", "load_providers_config", "split_envelope",
 ]
 
-PROVIDER_CLASSES: Dict[str, Any] = DEFAULT_VENDOR_REGISTRY.provider_classes()
+PROVIDER_CLASSES: dict[str, Any] = DEFAULT_VENDOR_REGISTRY.provider_classes()
 
 
 def get_provider(name: str, model: str, **kwargs: Any) -> Any:

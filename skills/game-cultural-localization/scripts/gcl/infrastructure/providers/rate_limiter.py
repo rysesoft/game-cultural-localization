@@ -1,10 +1,9 @@
 """Per provider RPS rate limiter, retry backoff delays and secret redaction."""
-from __future__ import annotations
 
 import re
 import threading
 import time
-from typing import Callable, Dict, Optional, Sequence
+from collections.abc import Callable, Sequence
 
 from gcl.domain.errors import L10nError
 
@@ -50,7 +49,7 @@ class RateLimiter:
             return slept
 
 
-_LIMITERS: Dict[str, RateLimiter] = {}
+_LIMITERS: dict[str, RateLimiter] = {}
 _LIMITERS_LOCK = threading.Lock()
 
 
@@ -64,7 +63,7 @@ def limiter_for(provider_name: str, rps: float) -> RateLimiter:
         return lim
 
 
-def backoff_delay(attempt: int, retry_after: Optional[str] = None) -> float:
+def backoff_delay(attempt: int, retry_after: str | None = None) -> float:
     """Exponential delay (1, 2, 4, 8 s capped at 30s) or Retry-After header value."""
     if retry_after:
         try:
@@ -74,7 +73,7 @@ def backoff_delay(attempt: int, retry_after: Optional[str] = None) -> float:
     return min(BACKOFF_CAP_S, BACKOFF_BASE_S * (2 ** attempt))
 
 
-def rate_limit_delay(attempt: int, retry_after: Optional[str] = None, body: str = "") -> float:
+def rate_limit_delay(attempt: int, retry_after: str | None = None, body: str = "") -> float:
     """Longer delay (15, 30, 60, 120 s) or server retryDelay after HTTP 429."""
     m = _RETRY_DELAY.search(body or "")
     for hint in (retry_after, m.group(1) if m else None):

@@ -1,9 +1,9 @@
 """JSON locale LQA rule compilation and directory loading."""
-from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from gcl.domain.errors import L10nError
 from gcl.domain.lint_models import ROW_CONTEXTS, RULE_CONTEXTS, Rule
@@ -16,10 +16,10 @@ __layer__ = "infrastructure"
 __pattern__ = "Rule Loader"
 __owns__ = "parsing, compiling and deduplicating locale LQA JSON rule files"
 
-_FLAG_MAP: Dict[str, int] = {"i": re.IGNORECASE, "m": re.MULTILINE, "x": re.VERBOSE, "s": re.DOTALL}
+_FLAG_MAP: dict[str, int] = {"i": re.IGNORECASE, "m": re.MULTILINE, "x": re.VERBOSE, "s": re.DOTALL}
 
 
-def _compile_rule_entry(raw: Any, idx: int, path: Path, variant: Optional[str]) -> Optional[Rule]:
+def _compile_rule_entry(raw: Any, idx: int, path: Path, variant: str | None) -> Rule | None:
     if not isinstance(raw, dict):
         raise L10nError(f"{path}: rule #{idx} is not an object")
     for req in ("id", "severity", "pattern", "message"):
@@ -56,7 +56,7 @@ def _compile_rule_entry(raw: Any, idx: int, path: Path, variant: Optional[str]) 
     return Rule(str(raw["id"]), sev, rx, str(raw["message"]), ctx, skip, path.name, tuple(str(c) for c in skip_ctx))
 
 
-def _compile_rule_file(path: Path, locale: str, variant: Optional[str]) -> List[Rule]:
+def _compile_rule_file(path: Path, locale: str, variant: str | None) -> list[Rule]:
     data = load_json_data(path)
     if not isinstance(data, dict) or "rules" not in data:
         raise L10nError(f"{path}: rule file must be an object with a 'rules' array")
@@ -67,7 +67,7 @@ def _compile_rule_file(path: Path, locale: str, variant: Optional[str]) -> List[
                 return []
         except L10nError:
             raise L10nError(f"{path}: unknown 'locale' value {file_locale!r}")
-    out: List[Rule] = []
+    out: list[Rule] = []
     for idx, raw in enumerate(data["rules"]):
         compiled = _compile_rule_entry(raw, idx, path, variant)
         if compiled is not None:
@@ -75,9 +75,9 @@ def _compile_rule_file(path: Path, locale: str, variant: Optional[str]) -> List[
     return out
 
 
-def compile_rule_files(files: Sequence[Path], locale: str, variant: Optional[str]) -> List[Rule]:
-    rules: List[Rule] = []
-    seen: Dict[str, str] = {}
+def compile_rule_files(files: Sequence[Path], locale: str, variant: str | None) -> list[Rule]:
+    rules: list[Rule] = []
+    seen: dict[str, str] = {}
     for f in files:
         for r in _compile_rule_file(f, locale, variant):
             if r.id in seen:
@@ -89,15 +89,15 @@ def compile_rule_files(files: Sequence[Path], locale: str, variant: Optional[str
 
 def load_rules(
     locale: str,
-    variant: Optional[str] = None,
+    variant: str | None = None,
     extra_dirs: Sequence[Path] = (),
     builtin_dir: Path = DEFAULT_RULES_DIR,
-) -> List[Rule]:
+) -> list[Rule]:
     """Load built in rules/<locale>.json, rules/custom/*.json and extra directories."""
     builtin = builtin_dir / f"{locale}.json"
     if not builtin.is_file():
         raise L10nError(f"no built-in rule file for locale '{locale}' (expected {builtin})")
-    files: List[Path] = [builtin]
+    files: list[Path] = [builtin]
     custom_dir = builtin_dir / "custom"
     if custom_dir.is_dir():
         files.extend(sorted(p for p in custom_dir.glob("*.json") if p.name != "rules.schema.json"))

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """House punctuation style facade delegating to gcl.domain.house_style (not a CLI)."""
-from __future__ import annotations
 
 import sys
 from pathlib import Path

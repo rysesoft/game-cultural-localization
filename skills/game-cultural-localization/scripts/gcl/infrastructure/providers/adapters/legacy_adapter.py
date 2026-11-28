@@ -1,5 +1,4 @@
 """Legacy complete(system, user) -> str adapters bridging 2.1 callers into LLMClient."""
-from __future__ import annotations
 
 import time
 from typing import Any

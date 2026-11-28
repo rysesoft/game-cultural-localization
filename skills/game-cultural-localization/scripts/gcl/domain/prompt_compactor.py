@@ -1,5 +1,4 @@
 """Pure domain prompt compaction removing IDE workflow prose for API mode calls."""
-from __future__ import annotations
 
 import re
 

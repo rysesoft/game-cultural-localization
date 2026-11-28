@@ -1,9 +1,9 @@
 """Thread safe BatchCollector coalescing concurrent complete() calls into batch jobs."""
-from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from gcl.domain.errors import BatchJobError, ProviderError
 from gcl.domain.models import ChatResult
@@ -42,13 +42,13 @@ class BatchCollector:
         self.max_bytes = int(kw.get("max_bytes") or getattr(backend, "max_bytes", 200_000_000))
         self._sleep: Callable[[float], None] = kw.get("sleep") or time.sleep
         self._clock: Callable[[], float] = kw.get("clock") or time.monotonic
-        self._on_job: Optional[Callable[[Dict[str, Any]], None]] = kw.get("on_job")
+        self._on_job: Callable[[dict[str, Any]], None] | None = kw.get("on_job")
         self._lock = threading.Lock()
-        self._queue: List[PendingCall] = []
+        self._queue: list[PendingCall] = []
         self._last = 0.0
         self._seq = 0
-        self._flusher: Optional[threading.Thread] = None
-        self.jobs: List[Dict[str, Any]] = []
+        self._flusher: threading.Thread | None = None
+        self.jobs: list[dict[str, Any]] = []
 
     def __repr__(self) -> str:
         return f"BatchCollector({self.name}/{self.model})"
@@ -70,8 +70,8 @@ class BatchCollector:
         assert item.result is not None
         return item.result
 
-    def _take(self) -> List[PendingCall]:
-        items: List[PendingCall] = []
+    def _take(self) -> list[PendingCall]:
+        items: list[PendingCall] = []
         used = 0
         while self._queue and len(items) < self.max_requests:
             nxt = self._queue[0]
@@ -95,7 +95,7 @@ class BatchCollector:
             else:
                 self._sleep(min(0.25, max(0.01, self.linger_s / 4)))
 
-    def _poll_until_done(self, job: Dict[str, Any], started: float) -> Dict[str, Any]:
+    def _poll_until_done(self, job: dict[str, Any], started: float) -> dict[str, Any]:
         while True:
             state = self.backend.poll(job)
             if state.get("done"):
@@ -108,7 +108,7 @@ class BatchCollector:
                 raise BatchJobError(f"{self.name}/{self.model}: batch job {job.get('id')} did not end within {self.timeout_s:.0f} s, cancelled")
             self._sleep(self.poll_s)
 
-    def _run_job(self, items: List[PendingCall]) -> None:
+    def _run_job(self, items: list[PendingCall]) -> None:
         started = self._clock()
         try:
             job = self.backend.submit(items)
@@ -128,7 +128,7 @@ class BatchCollector:
             for it in items:
                 it.event.set()
 
-    def _deliver(self, items: List[PendingCall], results: Dict[str, Any], job: Dict[str, Any], latency: int) -> None:
+    def _deliver(self, items: list[PendingCall], results: dict[str, Any], job: dict[str, Any], latency: int) -> None:
         jid = str(job.get("id", ""))
         for it in items:
             r = results.get(it.cid)

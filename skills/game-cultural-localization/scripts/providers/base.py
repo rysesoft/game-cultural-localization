@@ -1,10 +1,10 @@
 """Facade delegating providers.base symbols to gcl.infrastructure.providers and gcl.aspects."""
-from __future__ import annotations
 
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -29,7 +29,7 @@ from gcl.ports.llm import LLMClient as Provider  # noqa: E402
 
 def http_get(
     url: str,
-    headers: Dict[str, str],
+    headers: dict[str, str],
     *,
     get: GetTransport,
     sleep: Callable[[float], None] = time.sleep,
@@ -45,18 +45,18 @@ def http_get(
 
 def post_json(
     url: str,
-    headers: Dict[str, str],
-    payload: Dict[str, Any],
+    headers: dict[str, str],
+    payload: dict[str, Any],
     *,
     transport: Transport,
     sleep: Callable[[float], None] = time.sleep,
     timeout: float = DEFAULT_TIMEOUT_S,
     max_attempts: int = MAX_ATTEMPTS,
     label: str = "provider",
-    before_attempt: Optional[Callable[[], Any]] = None,
+    before_attempt: Callable[[], Any] | None = None,
     secrets: Sequence[str] = (),
-    decode: Optional[Callable[[str, Dict[str, str]], Dict[str, Any]]] = None,
-) -> Dict[str, Any]:
+    decode: Callable[[str, dict[str, str]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Legacy keyword compatible wrapper delegating to gcl.infrastructure.providers.http_transport.send_json."""
     opts = HttpRequestOptions(
         sleep=sleep, timeout=timeout, max_attempts=max_attempts, label=label,

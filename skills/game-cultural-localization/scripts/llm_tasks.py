@@ -1,9 +1,9 @@
 """Facade delegating batched LLM tasks and model routing helpers to gcl layers."""
-from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, TypeVar
+from collections.abc import Callable, Sequence
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -21,17 +21,14 @@ from gcl.aspects.task_chain import run_batches_with_aspects  # noqa: E402
 from gcl.composition.cli_wiring import add_model_args, default_budget_path, make_router  # noqa: E402
 from gcl.infrastructure.persistence.memo_store import BatchMemo  # noqa: E402
 
-T = TypeVar("T")
-
-
-def run_batches(
+def run_batches[T](
     batches: Sequence[T],
-    fn: Callable[[T], Dict[str, Any]],
+    fn: Callable[[T], dict[str, Any]],
     workers: int = 1,
-    memo: Optional[BatchMemo] = None,
+    memo: BatchMemo | None = None,
     tag: Any = None,
     prime: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run batch callable across threads through MemoizationTaskAspect and cache priming."""
     return run_batches_with_aspects(batches, fn, workers=workers, memo=memo, tag=tag, prime=prime)
 
@@ -40,26 +37,26 @@ def _call_keyed(
     provider: Any,
     system: str,
     task: str,
-    base_payload: Dict[str, Any],
-    items: List[Dict[str, Any]],
+    base_payload: dict[str, Any],
+    items: list[dict[str, Any]],
     list_field: str,
     reply_field: str,
     id_field: str,
-    accept: Callable[[Dict[str, Any]], bool],
+    accept: Callable[[dict[str, Any]], bool],
     max_tokens: int,
     split_depth: int = SPLIT_DEPTH,
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """Backward compatible wrapper delegating to gcl.application.tasks.base_task.call_keyed."""
     spec = KeyedCallSpec(task, list_field, reply_field, id_field, accept, max_tokens, split_depth)
     return call_keyed(provider, system, base_payload, items, spec)
 
 
 def translate_rows(
-    provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, task: str = "pass1",
-    system: Optional[str] = None, batch_size: Optional[int] = None, max_tokens: int = 4096,
-    extra: Optional[Dict[str, Any]] = None, workers: int = 1, memo: Optional[BatchMemo] = None,
-    max_chars: Optional[int] = None, item_memo: Optional[BatchMemo] = None, salvage_truncated: bool = False,
-) -> Dict[str, str]:
+    provider: Any, rows: Sequence[dict[str, Any]], locale: str, *, task: str = "pass1",
+    system: str | None = None, batch_size: int | None = None, max_tokens: int = 4096,
+    extra: dict[str, Any] | None = None, workers: int = 1, memo: BatchMemo | None = None,
+    max_chars: int | None = None, item_memo: BatchMemo | None = None, salvage_truncated: bool = False,
+) -> dict[str, str]:
     """Translate source rows with task 'pass1' or 'literal'; return key -> target."""
     return _translate_rows(
         provider, rows, locale, task=task, system=system, batch_size=batch_size,
@@ -69,11 +66,11 @@ def translate_rows(
 
 
 def backtranslate_rows(
-    provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
-    batch_size: Optional[int] = None, max_tokens: int = 4096, workers: int = 1,
-    memo: Optional[BatchMemo] = None, max_chars: Optional[int] = None,
-    item_memo: Optional[BatchMemo] = None, salvage_truncated: bool = False,
-) -> Dict[str, str]:
+    provider: Any, rows: Sequence[dict[str, Any]], locale: str, *, system: str | None = None,
+    batch_size: int | None = None, max_tokens: int = 4096, workers: int = 1,
+    memo: BatchMemo | None = None, max_chars: int | None = None,
+    item_memo: BatchMemo | None = None, salvage_truncated: bool = False,
+) -> dict[str, str]:
     """Back translate rows into English; return key -> back translation."""
     return _backtranslate_rows(
         provider, rows, locale, system=system, batch_size=batch_size,
@@ -83,11 +80,11 @@ def backtranslate_rows(
 
 
 def score_entries(
-    provider: Any, entries: Sequence[Dict[str, Any]], locale: str, *, tier: str = "J1",
-    system: Optional[str] = None, batch_size: Optional[int] = None, max_tokens: int = 4096,
-    extra: Optional[Dict[str, Any]] = None, workers: int = 1, memo: Optional[BatchMemo] = None,
-    max_chars: Optional[int] = None, item_memo: Optional[BatchMemo] = None, salvage_truncated: bool = False,
-) -> Dict[str, Dict[str, Any]]:
+    provider: Any, entries: Sequence[dict[str, Any]], locale: str, *, tier: str = "J1",
+    system: str | None = None, batch_size: int | None = None, max_tokens: int = 4096,
+    extra: dict[str, Any] | None = None, workers: int = 1, memo: BatchMemo | None = None,
+    max_chars: int | None = None, item_memo: BatchMemo | None = None, salvage_truncated: bool = False,
+) -> dict[str, dict[str, Any]]:
     """Ask one jury member to score target only entries; return key -> normalized vote."""
     return _score_entries(
         provider, entries, locale, tier=tier, system=system, batch_size=batch_size,
@@ -97,11 +94,11 @@ def score_entries(
 
 
 def pairwise_choices(
-    provider: Any, pairs: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
-    batch_size: Optional[int] = None, max_tokens: int = 2048, workers: int = 1,
-    memo: Optional[BatchMemo] = None, max_chars: Optional[int] = None,
-    item_memo: Optional[BatchMemo] = None, salvage_truncated: bool = False,
-) -> Dict[str, str]:
+    provider: Any, pairs: Sequence[dict[str, Any]], locale: str, *, system: str | None = None,
+    batch_size: int | None = None, max_tokens: int = 2048, workers: int = 1,
+    memo: BatchMemo | None = None, max_chars: int | None = None,
+    item_memo: BatchMemo | None = None, salvage_truncated: bool = False,
+) -> dict[str, str]:
     """Ask one member which side of each pair is more natural; return id -> 'a' | 'b'."""
     return _pairwise_choices(
         provider, pairs, locale, system=system, batch_size=batch_size,
@@ -110,17 +107,17 @@ def pairwise_choices(
     )
 
 
-def revote(provider: Any, payload: Dict[str, Any], locale: str, *, system: Optional[str] = None, max_tokens: int = 1024) -> Dict[str, Any]:
+def revote(provider: Any, payload: dict[str, Any], locale: str, *, system: str | None = None, max_tokens: int = 1024) -> dict[str, Any]:
     """Run one deliberation re-vote and return a normalized vote."""
     return _revote(provider, payload, locale, system=system, max_tokens=max_tokens)
 
 
 def revote_many(
-    provider: Any, payloads: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
-    batch_size: Optional[int] = None, max_chars: Optional[int] = None, max_tokens: int = 4096,
-    workers: int = 1, memo: Optional[BatchMemo] = None, item_memo: Optional[BatchMemo] = None,
+    provider: Any, payloads: Sequence[dict[str, Any]], locale: str, *, system: str | None = None,
+    batch_size: int | None = None, max_chars: int | None = None, max_tokens: int = 4096,
+    workers: int = 1, memo: BatchMemo | None = None, item_memo: BatchMemo | None = None,
     salvage_truncated: bool = False,
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """Run deliberation re-votes for many disputed lines at once."""
     return _revote_many(
         provider, payloads, locale, system=system, batch_size=batch_size,
@@ -130,11 +127,11 @@ def revote_many(
 
 
 def pass2_candidates(
-    provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, n: int = 3,
-    system: Optional[str] = None, batch_size: Optional[int] = None, max_tokens: int = 4096,
-    workers: int = 1, memo: Optional[BatchMemo] = None, max_chars: Optional[int] = None,
-    item_memo: Optional[BatchMemo] = None, salvage_truncated: bool = False,
-) -> Dict[str, List[str]]:
+    provider: Any, rows: Sequence[dict[str, Any]], locale: str, *, n: int = 3,
+    system: str | None = None, batch_size: int | None = None, max_tokens: int = 4096,
+    workers: int = 1, memo: BatchMemo | None = None, max_chars: int | None = None,
+    item_memo: BatchMemo | None = None, salvage_truncated: bool = False,
+) -> dict[str, list[str]]:
     """Ask Pass 2 writer model for n candidates per flagged row."""
     return _pass2_candidates(
         provider, rows, locale, n=n, system=system, batch_size=batch_size,
@@ -144,11 +141,11 @@ def pass2_candidates(
 
 
 def pick_candidates(
-    provider: Any, items: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
-    batch_size: Optional[int] = None, max_tokens: int = 2048, workers: int = 1,
-    memo: Optional[BatchMemo] = None, max_chars: Optional[int] = None,
-    item_memo: Optional[BatchMemo] = None, salvage_truncated: bool = False,
-) -> Dict[str, str]:
+    provider: Any, items: Sequence[dict[str, Any]], locale: str, *, system: str | None = None,
+    batch_size: int | None = None, max_tokens: int = 2048, workers: int = 1,
+    memo: BatchMemo | None = None, max_chars: int | None = None,
+    item_memo: BatchMemo | None = None, salvage_truncated: bool = False,
+) -> dict[str, str]:
     """Run blind choice among Pass 2 candidates."""
     return _pick_candidates(
         provider, items, locale, system=system, batch_size=batch_size,

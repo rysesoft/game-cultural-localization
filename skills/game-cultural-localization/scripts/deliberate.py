@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """J3 deliberation round CLI facade delegating to gcl.application.jury.deliberation."""
-from __future__ import annotations
 
 import argparse
 import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -31,29 +31,29 @@ TOOL = "deliberate"
 
 
 def deliberate_line(
-    entry: Dict[str, Any],
-    j3_votes: Sequence[Dict[str, Any]],
-    evidence: Dict[str, Any],
+    entry: dict[str, Any],
+    j3_votes: Sequence[dict[str, Any]],
+    evidence: dict[str, Any],
     members: Sequence[Any],
     locale: str,
     system: str,
-    scrub: "re.Pattern[str]",
+    scrub: re.Pattern[str],
     critical_max: int = 2,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Backward compatible wrapper forwarding explicit critical_max to gcl.application.jury.deliberation."""
     return _deliberate_line(entry, j3_votes, evidence, members, locale, system, scrub, critical_max=critical_max)
 
 
 def deliberate_lines(
-    items: Sequence[Tuple[Dict[str, Any], Sequence[Dict[str, Any]], Dict[str, Any]]],
+    items: Sequence[tuple[dict[str, Any], Sequence[dict[str, Any]], dict[str, Any]]],
     members: Sequence[Any],
     locale: str,
     system: str,
-    scrub: "re.Pattern[str]",
+    scrub: re.Pattern[str],
     critical_max: int = 2,
     workers: int = 1,
     memo: Any = None,
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """Backward compatible wrapper forwarding explicit parameters to gcl.application.jury.deliberation."""
     return _deliberate_lines(items, members, locale, system, scrub, critical_max=critical_max, workers=workers, memo=memo)
 

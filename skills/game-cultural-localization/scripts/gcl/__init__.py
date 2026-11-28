@@ -1,1 +1,1 @@
-"""Layered core package for game-cultural-localization (Python 3.9+ stdlib only)."""
+"""Layered core package for game-cultural-localization (Python 3.15 stdlib only)."""

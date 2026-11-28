@@ -1,10 +1,9 @@
 """Termbase CSV glossary compilation and violation checking."""
-from __future__ import annotations
 
 import csv
 import re
 from pathlib import Path
-from typing import Dict, List, Sequence
+from collections.abc import Sequence
 
 from gcl.domain.errors import L10nError
 from gcl.domain.locales import normalize_locale
@@ -25,10 +24,10 @@ def _make_term(src: str, tgt: str, forbidden: str) -> GlossaryTerm:
     return GlossaryTerm(src, tuple(t.strip() for t in tgt.split("|") if t.strip()), forb, rx)
 
 
-def _load_long_glossary(reader: csv.DictReader, lower: Dict[str, str], locale: str) -> List[GlossaryTerm]:
+def _load_long_glossary(reader: csv.DictReader, lower: dict[str, str], locale: str) -> list[GlossaryTerm]:
     src_col, tgt_col = lower["source"], lower["target"]
     loc_col, forb_col = lower.get("locale"), lower.get("forbidden")
-    terms: List[GlossaryTerm] = []
+    terms: list[GlossaryTerm] = []
     for row in reader:
         src, tgt = as_str(row.get(src_col)).strip(), as_str(row.get(tgt_col)).strip()
         if not src or not tgt:
@@ -51,7 +50,7 @@ def _find_locale_column(fields: Sequence[str], locale: str, path: Path) -> str:
     raise L10nError(f"{path}: glossary has no column for locale '{locale}' (columns: {list(fields)})")
 
 
-def load_glossary(path: Path, locale: str) -> List[GlossaryTerm]:
+def load_glossary(path: Path, locale: str) -> list[GlossaryTerm]:
     """Load wide or long termbase CSV definitions for locale."""
     raw = read_text_bom(path)
     if raw.strip() == "":
@@ -66,7 +65,7 @@ def load_glossary(path: Path, locale: str) -> List[GlossaryTerm]:
         raise L10nError(f"{path}: glossary header must be 'term_en,<locale>,...,notes' or 'source,target[,locale]'; got {fields}")
     loc_col = _find_locale_column(fields, locale, path)
     src_col, notes_col = lower["term_en"], lower.get("notes")
-    terms: List[GlossaryTerm] = []
+    terms: list[GlossaryTerm] = []
     for row in reader:
         src, tgt = as_str(row.get(src_col)).strip(), as_str(row.get(loc_col)).strip()
         if not src or not tgt:
@@ -76,9 +75,9 @@ def load_glossary(path: Path, locale: str) -> List[GlossaryTerm]:
     return terms
 
 
-def glossary_violations(src: str, dst: str, terms: Sequence[GlossaryTerm]) -> List[str]:
+def glossary_violations(src: str, dst: str, terms: Sequence[GlossaryTerm]) -> list[str]:
     """Return violations when source contains locked term missing or forbidden in target."""
-    out: List[str] = []
+    out: list[str] = []
     low = dst.lower()
     for t in terms:
         if not t.regex.search(src):

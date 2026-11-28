@@ -1,11 +1,10 @@
 """CSV and TSV localization table Strategy implementation."""
-from __future__ import annotations
 
 import codecs
 import csv
 import io
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from gcl.domain.errors import L10nError
 from gcl.domain.models import Row
@@ -18,7 +17,7 @@ __pattern__ = "Strategy"
 __owns__ = "CSV and TSV localization reading and BOM preserving export"
 
 
-def export_csv(final: Dict[str, str], template: Path, dst_field: str, key_field: str, out_dir: Path) -> Dict[str, Any]:
+def export_csv(final: dict[str, str], template: Path, dst_field: str, key_field: str, out_dir: Path) -> dict[str, Any]:
     """Update dst_field column in CSV/TSV template keeping BOM, line endings and extra columns."""
     raw_bytes = template.read_bytes()
     bom = raw_bytes.startswith(codecs.BOM_UTF8)
@@ -54,7 +53,7 @@ class CsvTableFormat:
     """TableFormatStrategy for .csv and .tsv files."""
     suffixes = (".csv", ".tsv")
 
-    def read_rows(self, path: Path, options: TableLoadOptions) -> List[Row]:
+    def read_rows(self, path: Path, options: TableLoadOptions) -> list[Row]:
         req = {"target": options.dst_field} if options.target_only else {"source": options.src_field, "target": options.dst_field}
         raw = read_text_bom(path)
         if raw.strip() == "":
@@ -64,12 +63,12 @@ class CsvTableFormat:
         fieldnames = [f.strip() for f in (reader.fieldnames or [])]
         reader.fieldnames = fieldnames
         check_columns(fieldnames, req, path)
-        rows: List[Row] = []
+        rows: list[Row] = []
         for idx, row in enumerate(reader):
             k = as_str(row.get(options.key_field)) or f"row_{idx}"
             rows.append(Row(k, "" if options.target_only else as_str(row.get(options.src_field)), as_str(row.get(options.dst_field)), dict(row)))
         return rows
 
-    def write_export(self, final_texts: Dict[str, str], template: Path, out_dir: Path, *, dst_field: str, key_field: str) -> ExportResult:
+    def write_export(self, final_texts: dict[str, str], template: Path, out_dir: Path, *, dst_field: str, key_field: str) -> ExportResult:
         res = export_csv(final_texts, template, dst_field, key_field, out_dir)
         return ExportResult(tuple(res["files"]), int(res["placed"]), tuple(sorted(res["keys"])))

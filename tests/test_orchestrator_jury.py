@@ -1,5 +1,4 @@
 """P14: orchestrator_stub.py jury flow (Phase 0-3 end to end with the fake provider) and the legacy --provider flow."""
-from __future__ import annotations
 
 import json
 import unittest

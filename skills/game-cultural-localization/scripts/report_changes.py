@@ -28,17 +28,16 @@ Usage:
 
 Exit codes: 0 report written, 1 report written and some lines are unresolved or kept their old
 text, 2 usage or input error.
-Python 3.9+, standard library only.
+Python 3.15, standard library only.
 """
-
-from __future__ import annotations
 
 import argparse
 import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -62,7 +61,7 @@ STATUS_ORDER = ("critical", "unresolved", "rewrite", "rewrite_light", "pass")
 NO_OBJECTION = "No objection, the line sounds native to this juror."
 
 
-def trust_level(pack_dir: Path) -> Tuple[str, Optional[str]]:
+def trust_level(pack_dir: Path) -> tuple[str, str | None]:
     """(A9 level, langpack version) from the pack's trust card and manifest."""
     card = pack_dir / "trust_card.json"
     if not card.is_file():
@@ -80,7 +79,7 @@ SECONDARY_FAILED = ("The jurors passed the pairwise gate, they pick the native l
                     "of a line as a ranking and not as a grade.")
 
 
-def secondary_passed(pack_dir: Path) -> Optional[bool]:
+def secondary_passed(pack_dir: Path) -> bool | None:
     """The second check of the calibration (native mean above 4.5, literal mean below 3), None when not calibrated."""
     card = pack_dir / "trust_card.json"
     if not card.is_file():
@@ -90,15 +89,15 @@ def secondary_passed(pack_dir: Path) -> Optional[bool]:
     return passed if isinstance(passed, bool) else None
 
 
-def votes_summary(votes: Sequence[Dict[str, Any]]) -> Dict[str, List[int]]:
+def votes_summary(votes: Sequence[dict[str, Any]]) -> dict[str, list[int]]:
     """{tier: [scores in member order]}."""
-    out: Dict[str, List[int]] = {}
+    out: dict[str, list[int]] = {}
     for v in sorted(votes, key=lambda x: (str(x.get("tier")), int(x.get("member", 0)))):
         out.setdefault(str(v.get("tier")), []).append(int(v.get("score", 0)))
     return out
 
 
-def confidence(verdict: Dict[str, Any], rewrite_valid: Optional[bool]) -> float:
+def confidence(verdict: dict[str, Any], rewrite_valid: bool | None) -> float:
     """Confidence that the recommended outcome of a line is right (see module docstring)."""
     if verdict.get("status") == "unresolved":
         base = 0.30
@@ -118,7 +117,7 @@ def confidence(verdict: Dict[str, Any], rewrite_valid: Optional[bool]) -> float:
     return round(min(1.0, max(0.0, base)), 2)
 
 
-def reason_of(verdict: Dict[str, Any]) -> str:
+def reason_of(verdict: dict[str, Any]) -> str:
     """One readable reason: the issue type of the settling votes and their first rationale, in house style."""
     tier = verdict.get("final_tier")
     settling = [v for v in verdict.get("votes", []) if v.get("tier") == tier]
@@ -129,13 +128,13 @@ def reason_of(verdict: Dict[str, Any]) -> str:
     return sanitize_prose(". ".join(parts)) if parts else ""
 
 
-def build_report(doc: Dict[str, Any], locale: str, batch: str, *, rewrites: Optional[Dict[str, Any]], sources: Dict[str, Dict[str, str]],
-                 pack_dir: Path, budget: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def build_report(doc: dict[str, Any], locale: str, batch: str, *, rewrites: dict[str, Any] | None, sources: dict[str, dict[str, str]],
+                 pack_dir: Path, budget: dict[str, Any] | None) -> dict[str, Any]:
     """Assemble the B3.8 report document."""
     level, version = trust_level(pack_dir)
     rw = {l["key"]: l for l in (rewrites or {}).get("lines", [])}
-    lines: List[Dict[str, Any]] = []
-    unresolved: List[Dict[str, Any]] = []
+    lines: list[dict[str, Any]] = []
+    unresolved: list[dict[str, Any]] = []
     counts = {s: 0 for s in STATUS_ORDER}
     for v in doc.get("verdicts", []):
         counts[v.get("status", "pass")] = counts.get(v.get("status", "pass"), 0) + 1
@@ -184,7 +183,7 @@ def _cell(text: Any) -> str:
     return sanitize_prose(str(text)).replace("|", "/").replace("\n", " ") or "none"
 
 
-def render_markdown(rep: Dict[str, Any]) -> str:
+def render_markdown(rep: dict[str, Any]) -> str:
     """Developer facing Markdown in the house punctuation style."""
     h = rep["header"]
     out = [f"# Change report {rep['locale']} batch {rep['batch']}", ""]
@@ -227,7 +226,7 @@ def render_markdown(rep: Dict[str, Any]) -> str:
     return "\n".join(out)
 
 
-def load_sources(path: Optional[Path], locale: str) -> Dict[str, Dict[str, str]]:
+def load_sources(path: Path | None, locale: str) -> dict[str, dict[str, str]]:
     """key -> {en, target, category, speaker} from the Pass 1 table (optional)."""
     if path is None:
         return {}

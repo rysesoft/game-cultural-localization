@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """SQLite translation memory CLI facade delegating storage to gcl.infrastructure.persistence.sqlite_tm."""
-from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -21,11 +20,11 @@ from l10n_common import (  # noqa: E402
 TOOL = "tm"
 
 
-def load_rows(path: Path, locale: str, src_field: str, dst_field: Optional[str], key_field: str, need_target: bool) -> List[Dict[str, Any]]:
+def load_rows(path: Path, locale: str, src_field: str, dst_field: str | None, key_field: str, need_target: bool) -> list[dict[str, Any]]:
     """Load table rows with fallback target column probing."""
     if need_target:
         candidates = [dst_field] if dst_field else [locale, "dst", "target", locale.split("-")[0]]
-        last: Optional[L10nError] = None
+        last: L10nError | None = None
         for col in candidates:
             try:
                 rows = load_table(path, src_field, col, key_field)
@@ -47,7 +46,7 @@ def load_rows(path: Path, locale: str, src_field: str, dst_field: Optional[str],
     ]
 
 
-def approvals(data: Any) -> List[Dict[str, Any]]:
+def approvals(data: Any) -> list[dict[str, Any]]:
     """Extract decision records from a change report or list payload."""
     if isinstance(data, dict):
         for k in ("lines", "changes"):
@@ -90,8 +89,8 @@ def main() -> int:
         if not args.locale:
             ap.error("--locale is required except with --mode stats")
     locale = normalize_locale(args.locale)[0] if args.locale else ""
-    lines: List[str] = []
-    payload: Dict[str, Any] = {"tool": TOOL, "version": __version__, "db": args.db, "mode": args.mode, "locale": locale}
+    lines: list[str] = []
+    payload: dict[str, Any] = {"tool": TOOL, "version": __version__, "db": args.db, "mode": args.mode, "locale": locale}
     exit_code = EXIT_OK
     with TranslationMemory(Path(args.db)) as tm:
         if args.mode == "add":

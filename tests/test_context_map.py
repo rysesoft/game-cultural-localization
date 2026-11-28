@@ -1,5 +1,4 @@
 """Context map facts (build_context_map.py --scan) on a small synthetic Unity project, and the context first rules."""
-from __future__ import annotations
 
 import json
 import re
@@ -115,7 +114,6 @@ public class DayStartHUDController {
     }
 }
 """
-
 
 SHARED_ASSET_GUID = "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
 PREFAB_GUID = "7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b"

@@ -1,8 +1,8 @@
 """Composition root for model CLI flags, budget paths and Router instantiation."""
-from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from gcl.application.tasks.prompts import BATCH_WORKERS
 from gcl.infrastructure.paths import SCRIPTS_DIR
@@ -41,7 +41,7 @@ def default_budget_path(out: Path) -> Path:
         return resolved.parent / "budget.jsonl"
 
 
-def make_router(args: Any, roles: Sequence[str], budget_default: Optional[Path] = None) -> Router:
+def make_router(args: Any, roles: Sequence[str], budget_default: Path | None = None) -> Router:
     """Build configured Router, enforce role API keys and scale workers in batch mode."""
     cfg = load_providers_config(Path(args.providers_config) if getattr(args, "providers_config", None) else None)
     budget = Path(args.budget_log) if getattr(args, "budget_log", None) else budget_default

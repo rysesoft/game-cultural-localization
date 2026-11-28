@@ -1,5 +1,4 @@
 """Facade delegating providers.anthropic symbols to gcl.infrastructure.providers.adapters.anthropic_adapter."""
-from __future__ import annotations
 
 import sys
 from pathlib import Path

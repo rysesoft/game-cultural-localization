@@ -1,8 +1,7 @@
 """Google Gemini adapter with cachedContentTokenCount telemetry fix and SSE reassembly."""
-from __future__ import annotations
 
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from gcl.domain.errors import ProviderError, StreamInterrupted
 from gcl.domain.models import RawVendorReply, TokenUsage
@@ -15,12 +14,12 @@ __pattern__ = "Adapter"
 __owns__ = "Gemini streamGenerateContent request formatting and full TokenUsage including cache reads"
 
 
-def assemble_stream(text: str, label: str = "google") -> Dict[str, Any]:
+def assemble_stream(text: str, label: str = "google") -> dict[str, Any]:
     """Reassemble Google streamGenerateContent SSE chunks into one GenerateContentResponse."""
-    parts: List[Dict[str, Any]] = []
-    usage: Dict[str, Any] = {}
-    finish: Optional[str] = None
-    feedback: Optional[Dict[str, Any]] = None
+    parts: list[dict[str, Any]] = []
+    usage: dict[str, Any] = {}
+    finish: str | None = None
+    feedback: dict[str, Any] | None = None
     for event in sse_events(text, label):
         if isinstance(event.get("error"), dict):
             err = event["error"]
@@ -55,14 +54,14 @@ class GoogleProvider(HttpProvider):
         model = urllib.parse.quote(self.model, safe="-._")
         return f"{self.endpoint}/models/{model}:streamGenerateContent?alt=sse"
 
-    def _decode(self, text: str, headers: Dict[str, str]) -> Dict[str, Any]:
+    def _decode(self, text: str, headers: dict[str, str]) -> dict[str, Any]:
         return assemble_stream(text, f"{self.name}/{self.model}") if self._is_stream(text, headers) else super()._decode(text, headers)
 
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self) -> dict[str, str]:
         return {"x-goog-api-key": self._key, "content-type": "application/json"}
 
-    def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> Dict[str, Any]:
-        gen: Dict[str, Any] = {
+    def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> dict[str, Any]:
+        gen: dict[str, Any] = {
             "temperature": float(temperature),
             "maxOutputTokens": self.max_output(GOOGLE_MAX_OUTPUT),
             "responseMimeType": "application/json" if json_mode else "text/plain",
@@ -70,7 +69,7 @@ class GoogleProvider(HttpProvider):
         effort = self.options.get("effort")
         if isinstance(effort, str) and effort.strip():
             gen["thinkingConfig"] = {"thinkingLevel": effort.strip().upper()}
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
             "generationConfig": gen,
@@ -80,7 +79,7 @@ class GoogleProvider(HttpProvider):
             body["serviceTier"] = service_tier.strip().lower()
         return body
 
-    def parse_reply(self, data: Dict[str, Any]) -> RawVendorReply:
+    def parse_reply(self, data: dict[str, Any]) -> RawVendorReply:
         cands = data.get("candidates")
         if not isinstance(cands, list) or not cands:
             reason = (data.get("promptFeedback") or {}).get("blockReason", "no candidates")

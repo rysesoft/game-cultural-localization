@@ -1,11 +1,11 @@
 """Pass 2 candidate tournament enforcing WriterContextView vs BlindContextView and LineState."""
-from __future__ import annotations
 
 import random
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 from gcl.application.jury.policy import classify
 from gcl.application.tasks.concrete_tasks import pass2_candidates, pick_candidates, score_entries
@@ -21,11 +21,11 @@ __layer__ = "application"
 __pattern__ = "State and Segregated Tournament"
 __owns__ = "Pass 2 candidate writing, blind J1 candidate selection, validation and J1 confirmation recheck"
 
-DEFAULT_STATUSES: Tuple[str, ...] = ("rewrite_light", "rewrite", "critical", "unresolved")
-CONTEXT_FIELDS: Tuple[str, ...] = ("register", "category", "speaker", "archetype")
+DEFAULT_STATUSES: tuple[str, ...] = ("rewrite_light", "rewrite", "critical", "unresolved")
+CONTEXT_FIELDS: tuple[str, ...] = ("register", "category", "speaker", "archetype")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TournamentOptions:
     """Parameter object driving Pass 2 rewrite tournament."""
 
@@ -35,11 +35,11 @@ class TournamentOptions:
     seed: int = 1234
     ph_style: str = "auto"
     tag_style: str = "auto"
-    statuses: Tuple[str, ...] = DEFAULT_STATUSES
+    statuses: tuple[str, ...] = DEFAULT_STATUSES
     source_file: str = ""
     workers: int = 1
-    writer_context: Optional[WriterContextView] = None
-    blind_context: Optional[BlindContextView] = None
+    writer_context: WriterContextView | None = None
+    blind_context: BlindContextView | None = None
     memo: Any = None
     tiered: bool = False
     light_candidates: int = 2
@@ -55,22 +55,22 @@ def _jury_tier(router: Any, tier: str, task_role: str) -> Any:
         return router.jury(tier)
 
 
-@dataclass
+@dataclass(slots=True)
 class _TournamentSelection:
     """Bundled winner selection state passed to parallel J1 confirmation recheck."""
 
-    lines: List[Dict[str, Any]]
-    rows: Sequence[Dict[str, Any]]
-    states: Dict[str, LineState]
-    entries: List[Dict[str, Any]]
+    lines: list[dict[str, Any]]
+    rows: Sequence[dict[str, Any]]
+    states: dict[str, LineState]
+    entries: list[dict[str, Any]]
 
 
-def final_votes(verdict: Dict[str, Any]) -> List[Dict[str, Any]]:
+def final_votes(verdict: dict[str, Any]) -> list[dict[str, Any]]:
     tier = verdict.get("final_tier")
     return [v for v in verdict.get("votes", []) if v.get("tier") == tier]
 
 
-def main_issue(verdict: Dict[str, Any]) -> str:
+def main_issue(verdict: dict[str, Any]) -> str:
     types = [v.get("issue_type") for v in final_votes(verdict) if v.get("issue_type") not in (None, "none")]
     it = Counter(types).most_common(1)[0][0] if types else "other"
     return it if it in ISSUE_TYPES and it != "none" else "other"
@@ -88,12 +88,12 @@ class Pass2Tournament:
 
     def run(
         self,
-        verdicts: Sequence[Dict[str, Any]],
-        sources: Dict[str, Dict[str, Any]],
+        verdicts: Sequence[dict[str, Any]],
+        sources: dict[str, dict[str, Any]],
         locale: str,
         router: Any,
         opts: TournamentOptions,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         p2_sys = opts.writer_context.build_system(opts.pass2_system) if opts.writer_context else opts.pass2_system
         pk_sys = opts.blind_context.build_system(opts.pick_system) if opts.blind_context else opts.pick_system
         todo = [v for v in verdicts if v.get("status") in opts.statuses]
@@ -113,12 +113,12 @@ class Pass2Tournament:
         return {"lines": sel.lines, "critique": critique}
 
     @staticmethod
-    def _prepare_rows(todo: Sequence[Dict[str, Any]], sources: Dict[str, Dict[str, Any]], wctx: Optional[WriterContextView]) -> List[Dict[str, Any]]:
-        rows: List[Dict[str, Any]] = []
+    def _prepare_rows(todo: Sequence[dict[str, Any]], sources: dict[str, dict[str, Any]], wctx: WriterContextView | None) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
         for v in todo:
             s = sources[v["key"]]
             fv = final_votes(v)
-            row: Dict[str, Any] = {
+            row: dict[str, Any] = {
                 "key": v["key"], "source": s["en"], "target": s["target"],
                 **{k: s[k] for k in CONTEXT_FIELDS if s.get(k)},
                 "rationales": [r for r in v.get("rationales", []) if r],
@@ -137,14 +137,14 @@ class Pass2Tournament:
 
     @staticmethod
     def _shuffle_candidates(
-        rows: Sequence[Dict[str, Any]],
-        cands: Dict[str, List[str]],
+        rows: Sequence[dict[str, Any]],
+        cands: dict[str, list[str]],
         seed: int,
-        bctx: Optional[BlindContextView],
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, int]]]:
+        bctx: BlindContextView | None,
+    ) -> tuple[list[dict[str, Any]], dict[str, dict[str, int]]]:
         rng = random.Random(seed)
-        items: List[Dict[str, Any]] = []
-        id_maps: Dict[str, Dict[str, int]] = {}
+        items: list[dict[str, Any]] = []
+        id_maps: dict[str, dict[str, int]] = {}
         for r in rows:
             if r["target"] not in cands[r["key"]]:
                 cands[r["key"]] = list(cands[r["key"]]) + [r["target"]]
@@ -161,8 +161,8 @@ class Pass2Tournament:
         return items, id_maps
 
     @staticmethod
-    def _task_extra(opts: TournamentOptions) -> Dict[str, Any]:
-        extra: Dict[str, Any] = {}
+    def _task_extra(opts: TournamentOptions) -> dict[str, Any]:
+        extra: dict[str, Any] = {}
         if opts.item_memo is not None:
             extra["item_memo"] = opts.item_memo
         if opts.salvage_truncated:
@@ -177,22 +177,22 @@ class Pass2Tournament:
             return router.for_role("pass2")
 
     def _generate_candidates(
-        self, todo: Sequence[Dict[str, Any]], rows: Sequence[Dict[str, Any]], locale: str, router: Any, p2_sys: str, opts: TournamentOptions,
-    ) -> Dict[str, List[str]]:
+        self, todo: Sequence[dict[str, Any]], rows: Sequence[dict[str, Any]], locale: str, router: Any, p2_sys: str, opts: TournamentOptions,
+    ) -> dict[str, list[str]]:
         extra = self._task_extra(opts)
         if not opts.tiered:
             return self._pass2_fn(router.for_role("pass2"), rows, locale, n=opts.n, system=p2_sys, workers=opts.workers, memo=opts.memo, **extra)
         status_by_key = {v["key"]: v.get("status") for v in todo}
         light = [r for r in rows if status_by_key.get(r["key"]) == "rewrite_light"]
         heavy = [r for r in rows if status_by_key.get(r["key"]) != "rewrite_light"]
-        out: Dict[str, List[str]] = {}
+        out: dict[str, list[str]] = {}
         if light:
             out.update(self._pass2_fn(self._light_provider(router), light, locale, n=opts.light_candidates, system=p2_sys, workers=opts.workers, memo=opts.memo, **extra))
         if heavy:
             out.update(self._pass2_fn(router.for_role("pass2"), heavy, locale, n=opts.n, system=p2_sys, workers=opts.workers, memo=opts.memo, **extra))
         return out
 
-    def _run_pickers(self, router: Any, items: List[Dict[str, Any]], locale: str, pk_sys: str, opts: TournamentOptions) -> List[Tuple[Any, Dict[str, str]]]:
+    def _run_pickers(self, router: Any, items: list[dict[str, Any]], locale: str, pk_sys: str, opts: TournamentOptions) -> list[tuple[Any, dict[str, str]]]:
         if not items:
             return []
         pickers = _jury_tier(router, "J1", "pick")
@@ -205,17 +205,17 @@ class Pass2Tournament:
 
     def _select_winners(
         self,
-        todo: Sequence[Dict[str, Any]],
-        rows: Sequence[Dict[str, Any]],
-        cands: Dict[str, List[str]],
-        id_maps: Dict[str, Dict[str, int]],
-        picks: Sequence[Tuple[Any, Dict[str, str]]],
+        todo: Sequence[dict[str, Any]],
+        rows: Sequence[dict[str, Any]],
+        cands: dict[str, list[str]],
+        id_maps: dict[str, dict[str, int]],
+        picks: Sequence[tuple[Any, dict[str, str]]],
         locale: str,
         opts: TournamentOptions,
     ) -> _TournamentSelection:
-        lines: List[Dict[str, Any]] = []
-        entries: List[Dict[str, Any]] = []
-        states: Dict[str, LineState] = {}
+        lines: list[dict[str, Any]] = []
+        entries: list[dict[str, Any]] = []
+        states: dict[str, LineState] = {}
         for v, r in zip(todo, rows):
             key, texts, id_map = r["key"], cands[r["key"]], id_maps[r["key"]]
             votes = Counter(id_map[p[key]] for _m, p in picks)
@@ -237,11 +237,11 @@ class Pass2Tournament:
         return _TournamentSelection(lines, rows, states, entries)
 
     def _pick_valid(
-        self, v: Dict[str, Any], r: Dict[str, Any], texts: Sequence[str], ranking: Sequence[int], locale: str, opts: TournamentOptions,
-    ) -> Tuple[Optional[int], List[str], Optional[Dict[str, Any]]]:
+        self, v: dict[str, Any], r: dict[str, Any], texts: Sequence[str], ranking: Sequence[int], locale: str, opts: TournamentOptions,
+    ) -> tuple[int | None, list[str], dict[str, Any] | None]:
         key = r["key"]
         old_broken = self._parity.parity_problems(r["source"], r["target"], opts.ph_style, opts.tag_style)
-        problems_all: List[str] = []
+        problems_all: list[str] = []
         for idx in ranking:
             if texts[idx] == r["target"]:
                 if idx == ranking[0] and not old_broken:
@@ -266,7 +266,7 @@ class Pass2Tournament:
         locale: str,
         pk_sys: str,
         opts: TournamentOptions,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         recheck = [(l, r) for l, r in zip(sel.lines, sel.rows) if l["valid"] and l["new"] != l["old"]]
         if not recheck:
             return sel.entries
@@ -307,14 +307,14 @@ class Pass2Tournament:
 
 
 def run_tournament(
-    verdicts: Sequence[Dict[str, Any]],
-    sources: Dict[str, Dict[str, Any]],
+    verdicts: Sequence[dict[str, Any]],
+    sources: dict[str, dict[str, Any]],
     locale: str,
     router: Any,
     opts: TournamentOptions,
     validator: CritiqueValidatorPort,
     parity: TokenParityPort,
     **kw: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Execute Pass2Tournament with explicit validator, parity and optional callable hooks."""
     return Pass2Tournament(validator, parity, **kw).run(verdicts, sources, locale, router, opts)

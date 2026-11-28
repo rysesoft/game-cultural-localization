@@ -1,5 +1,4 @@
 """Tests for font_glyph_scanner.py with synthetic TTF / TTC / WOFF fonts and TMP assets."""
-from __future__ import annotations
 
 import json
 import struct

@@ -1,4 +1,4 @@
-# CLI Reference. game-cultural-localization scripts (v3.2.0)
+# CLI Reference. game-cultural-localization scripts (v3.3.0)
 
 All tools live in `skills/game-cultural-localization/scripts/`, need **Python 3.15 with the standard
 library only**, run on Windows, macOS and Linux, force UTF-8 console output and share one

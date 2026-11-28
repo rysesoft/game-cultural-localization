@@ -1,11 +1,10 @@
 """P7: eval_critic.py (pairwise gate, absolute means, kappa, warm-up comparison, B3.6 report)."""
-from __future__ import annotations
 
 import json
 import re
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -18,7 +17,7 @@ from providers import FakeScenario, Router, load_providers_config  # noqa: E402
 NO_KEYS = {"ANTHROPIC_API_KEY": "", "GOOGLE_API_KEY": "", "DEEPSEEK_API_KEY": "", "GCL_OFFLINE": "1"}
 
 
-def cset(n: int = 20) -> Dict[str, Any]:
+def cset(n: int = 20) -> dict[str, Any]:
     pairs = []
     for i in range(n):
         en = f"Take your time kid, number {i} is waiting."
@@ -209,7 +208,7 @@ class EvaluateTests(unittest.TestCase):
         from llm_tasks import BatchMemo, run_batches
         with TempDir() as td:
             memo = BatchMemo(td / "m.batches.json")
-            calls: List[Any] = []
+            calls: list[Any] = []
 
             def flaky(b):
                 calls.append(b)

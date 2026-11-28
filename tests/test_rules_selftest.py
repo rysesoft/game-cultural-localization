@@ -1,5 +1,4 @@
 """Rule-file self-test: every rule compiles, every example behaves, ids unique, ban-table coverage >= 70 %."""
-from __future__ import annotations
 
 import json
 import re

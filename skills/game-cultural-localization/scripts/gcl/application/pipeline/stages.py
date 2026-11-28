@@ -1,9 +1,9 @@
 """Pure application stage helpers for Phase 1 payload prep, parity guard and outputs."""
-from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from gcl.domain.models import Row
 from gcl.ports.context import WriterContextView
@@ -16,9 +16,9 @@ __owns__ = "Pass 1 RAG payload assembly, token parity escalation guard and batch
 
 
 def send_broken_lines_to_pass2(
-    res: Dict[str, Any],
-    targets: Dict[str, str],
-    sources: Dict[str, str],
+    res: dict[str, Any],
+    targets: dict[str, str],
+    sources: dict[str, str],
     ph_style: str,
     tag_style: str,
     parity: TokenParityPort,
@@ -47,12 +47,12 @@ def build_pass1_payload_rows(
     locale: str,
     register_of: Callable[[Row], str],
     tm: Any = None,
-    wctx: Optional[WriterContextView] = None,
-) -> List[Dict[str, Any]]:
+    wctx: WriterContextView | None = None,
+) -> list[dict[str, Any]]:
     """Build enriched Pass 1 row dicts including optional TM neighbors and WriterContextView notes."""
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for r in batch:
-        pr: Dict[str, Any] = {"key": r.key, "source": r.src, "register": register_of(r)}
+        pr: dict[str, Any] = {"key": r.key, "source": r.src, "register": register_of(r)}
         for k in ("category", "speaker", "archetype", "max_chars"):
             if r.meta.get(k) not in (None, ""):
                 pr[k] = r.meta[k]
@@ -68,7 +68,7 @@ def build_pass1_payload_rows(
     return out
 
 
-def _tm_lookup(tm: Any, locale: str, text: str, category: str, speaker: str, *, k: int = 5, exclude_key: Optional[str] = None) -> List[Dict[str, Any]]:
+def _tm_lookup(tm: Any, locale: str, text: str, category: str, speaker: str, *, k: int = 5, exclude_key: str | None = None) -> list[dict[str, Any]]:
     if hasattr(tm, "query_neighbors"):
         return tm.query_neighbors(TMQuery(locale=locale, text=text, category=category, speaker=speaker, k=k, exclude_key=exclude_key))
     return tm.neighbors(locale, text, category=category, speaker=speaker, k=k, exclude_key=exclude_key)
@@ -78,10 +78,10 @@ def write_verdict_doc(
     vpath: Path,
     locale: str,
     source_name: str,
-    info: Dict[str, Any],
-    res: Dict[str, Any],
+    info: dict[str, Any],
+    res: dict[str, Any],
     notes: Sequence[str],
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Serialize verdict artifact for one batch."""
     doc = {
         "locale": locale, "source_file": source_name, "langpack_version": info.get("langpack_version"),
@@ -96,7 +96,7 @@ def write_verdict_doc(
     return doc
 
 
-def write_final_batch(final_path: Path, p1_rows: Sequence[Dict[str, Any]], rw: Dict[str, Any], res: Dict[str, Any], locale: str) -> int:
+def write_final_batch(final_path: Path, p1_rows: Sequence[dict[str, Any]], rw: dict[str, Any], res: dict[str, Any], locale: str) -> int:
     """Apply confirmed Pass 2 rewrites into final_batch_NN.json and return actual change count."""
     status_by_key = {v["key"]: v["status"] for v in res["verdicts"]}
     applied = {

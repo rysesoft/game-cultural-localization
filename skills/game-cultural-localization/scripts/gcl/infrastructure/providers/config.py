@@ -1,10 +1,11 @@
 """ProvidersConfig schema validation loading against VendorRegistry."""
-from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Union
+from collections.abc import Iterable
+from typing import Any, NamedTuple
 
 from gcl.domain.errors import L10nError
+from gcl.domain.models import JuryTier, ServiceTier, ThinkingEffort
 from gcl.infrastructure.formats.io_utils import load_json_data
 from gcl.infrastructure.paths import SCRIPTS_DIR
 
@@ -18,11 +19,11 @@ DEFAULT_CONFIG_PATH = SCRIPTS_DIR / "providers.config.json"
 SINGLE_ROLES = ("pass1", "pass2", "roundtrip", "literal")
 OPTIONAL_SINGLE_ROLES = ("pass2_light",)
 CONTEXT_ROLES = ("context_orchestrator", "context_agent")
-JURY_TIERS = ("J1", "J2", "J3")
-_EFFORT_LEVELS = frozenset({"low", "medium", "high"})
-_SERVICE_TIERS = frozenset({"standard", "flex", "priority"})
+JURY_TIERS = tuple(JuryTier)
+_EFFORT_LEVELS = frozenset(ThinkingEffort)
+_SERVICE_TIERS = frozenset(ServiceTier)
 _TOP_KEYS = ("providers", "models", "roles", "agreement", "budget_caps", "roundtrip")
-_DEFAULTS: Dict[str, Dict[str, Any]] = {
+_DEFAULTS: dict[str, dict[str, Any]] = {
     "agreement": {"pass_min": 4, "max_spread": 1, "critical_max": 2},
     "budget_caps": {"escalate_j2_ratio": 0.30, "escalate_j3_ratio": 0.10, "min_judged": 100, "min_escalated": 10},
     "roundtrip": {"min_words": 6, "registers": ["dialogue_casual", "dialogue_formal"]},
@@ -35,23 +36,23 @@ class ModelSpec(NamedTuple):
     alias: str
     provider: str
     id: str
-    price_in: Optional[float]
-    price_out: Optional[float]
-    fallback: Optional[str]
+    price_in: float | None
+    price_out: float | None
+    fallback: str | None
     fallback_thinking: bool
-    price_cache_read: Optional[float] = None
-    price_cache_write: Optional[float] = None
-    max_output_tokens: Optional[int] = None
+    price_cache_read: float | None = None
+    price_cache_write: float | None = None
+    max_output_tokens: int | None = None
 
 
 class ProvidersConfig:
     """Validated providers.config.json view."""
 
-    def __init__(self, data: Dict[str, Any], path: Path) -> None:
+    def __init__(self, data: dict[str, Any], path: Path) -> None:
         self.path = path
         self.raw = data
-        self.providers: Dict[str, Dict[str, Any]] = data["providers"]
-        self.models: Dict[str, ModelSpec] = {
+        self.providers: dict[str, dict[str, Any]] = data["providers"]
+        self.models: dict[str, ModelSpec] = {
             alias: ModelSpec(
                 alias, m["provider"], m["id"], m.get("price_in"), m.get("price_out"),
                 m.get("fallback"), bool(m.get("fallback_thinking", False)),
@@ -59,10 +60,10 @@ class ProvidersConfig:
             )
             for alias, m in data["models"].items()
         }
-        self.roles: Dict[str, Union[str, List[str]]] = data["roles"]
-        self.agreement: Dict[str, Any] = {**_DEFAULTS["agreement"], **(data.get("agreement") or {})}
-        self.budget_caps: Dict[str, Any] = {**_DEFAULTS["budget_caps"], **(data.get("budget_caps") or {})}
-        self.roundtrip: Dict[str, Any] = {**_DEFAULTS["roundtrip"], **(data.get("roundtrip") or {})}
+        self.roles: dict[str, str | list[str]] = data["roles"]
+        self.agreement: dict[str, Any] = {**_DEFAULTS["agreement"], **(data.get("agreement") or {})}
+        self.budget_caps: dict[str, Any] = {**_DEFAULTS["budget_caps"], **(data.get("budget_caps") or {})}
+        self.roundtrip: dict[str, Any] = {**_DEFAULTS["roundtrip"], **(data.get("roundtrip") or {})}
 
     def role_model(self, role: str) -> ModelSpec:
         alias = self.roles.get(role)
@@ -73,14 +74,14 @@ class ProvidersConfig:
     def has_role(self, role: str) -> bool:
         return role in self.roles
 
-    def jury(self, tier: str) -> List[ModelSpec]:
+    def jury(self, tier: str) -> list[ModelSpec]:
         aliases = self.roles.get(tier)
         if not isinstance(aliases, list):
             raise L10nError(f"{self.path}: '{tier}' is not a jury tier; known: {', '.join(JURY_TIERS)}")
         return [self.models[a] for a in aliases]
 
-    def specs_for_roles(self, roles: Iterable[str]) -> List[ModelSpec]:
-        out: List[ModelSpec] = []
+    def specs_for_roles(self, roles: Iterable[str]) -> list[ModelSpec]:
+        out: list[ModelSpec] = []
         for role in roles:
             specs = self.jury(role) if role in JURY_TIERS else [self.role_model(role)]
             for s in specs:
@@ -130,7 +131,7 @@ def _validate_provider_entry(name: str, p: Any, path: Path, reg: VendorRegistry)
                 raise L10nError(f"{path}: providers.{name}.batch.{bk} must be a number >= 0")
 
 
-def _validate_model_entry(alias: str, m: Any, data: Dict[str, Any], path: Path) -> None:
+def _validate_model_entry(alias: str, m: Any, data: dict[str, Any], path: Path) -> None:
     if not isinstance(m, dict):
         raise L10nError(f"{path}: models.{alias} must be an object")
     if m.get("provider") not in data["providers"]:
@@ -151,7 +152,7 @@ def _validate_model_entry(alias: str, m: Any, data: Dict[str, Any], path: Path) 
             raise L10nError(f"{path}: models.{alias}.fallback '{fb}' has its own fallback (chains are not allowed)")
 
 
-def _validate_roles(roles: Dict[str, Any], models: Dict[str, Any], path: Path) -> None:
+def _validate_roles(roles: dict[str, Any], models: dict[str, Any], path: Path) -> None:
     for role in SINGLE_ROLES:
         if not isinstance(roles.get(role), str):
             raise L10nError(f"{path}: roles.{role} must name one model alias")
@@ -164,7 +165,7 @@ def _validate_roles(roles: Dict[str, Any], models: Dict[str, Any], path: Path) -
         members = roles.get(tier)
         if not isinstance(members, list) or len(members) != 3 or not all(isinstance(a, str) for a in members):
             raise L10nError(f"{path}: roles.{tier} must list exactly three model aliases")
-        families: Dict[str, str] = {}
+        families: dict[str, str] = {}
         for a in members:
             if a not in models:
                 raise L10nError(f"{path}: roles.{tier} member '{a}' is not a model alias")
@@ -181,7 +182,7 @@ def _validate_roles(roles: Dict[str, Any], models: Dict[str, Any], path: Path) -
             raise L10nError(f"{path}: unknown role '{k}'; known: {known}")
 
 
-def _validate_policies(data: Dict[str, Any], path: Path) -> None:
+def _validate_policies(data: dict[str, Any], path: Path) -> None:
     ag = {**_DEFAULTS["agreement"], **(data.get("agreement") or {})}
     for k in ("pass_min", "max_spread", "critical_max"):
         if not isinstance(ag.get(k), int) or isinstance(ag.get(k), bool) or not 0 <= ag[k] <= 5:
@@ -202,7 +203,7 @@ def _validate_policies(data: Dict[str, Any], path: Path) -> None:
         raise L10nError(f"{path}: roundtrip.registers must be a list of register names")
 
 
-def load_providers_config(path: Optional[Path] = None, registry: Optional[VendorRegistry] = None) -> ProvidersConfig:
+def load_providers_config(path: Path | None = None, registry: VendorRegistry | None = None) -> ProvidersConfig:
     """Load and validate providers.config.json; raise L10nError on any schema violation."""
     target = Path(path) if path else DEFAULT_CONFIG_PATH
     reg = registry or DEFAULT_VENDOR_REGISTRY

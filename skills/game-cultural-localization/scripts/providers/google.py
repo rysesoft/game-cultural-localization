@@ -1,5 +1,4 @@
 """Facade delegating providers.google symbols to gcl.infrastructure.providers.adapters.google_adapter."""
-from __future__ import annotations
 
 import sys
 from pathlib import Path

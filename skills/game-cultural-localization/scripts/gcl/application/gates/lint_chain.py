@@ -1,9 +1,8 @@
 """Chain of Responsibility deterministic LQA lint pipeline."""
-from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Set
+from collections.abc import Sequence
 
 from gcl.domain.lint_models import LintOptions, Rule
 from gcl.domain.locales import PLURAL_FORMS
@@ -21,21 +20,21 @@ _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _ALPHA_WORD_RE = re.compile(r"[A-Za-z]{3,}")
 
 
-@dataclass
+@dataclass(slots=True)
 class LintRowContext:
     """Per row execution context shared across Chain of Responsibility handlers."""
 
     row: Row
     opt: LintOptions
     rules: Sequence[Rule]
-    expected_forms: Optional[int]
+    expected_forms: int | None
     parity: TokenParityPort
-    contexts: Set[str]
-    ignored: Set[str]
+    contexts: set[str]
+    ignored: set[str]
     stop: bool = False
 
 
-def _ignored_rules(meta: dict) -> Set[str]:
+def _ignored_rules(meta: dict) -> set[str]:
     v = meta.get("lqa_ignore")
     if not v:
         return set()
@@ -47,7 +46,7 @@ def _ignored_rules(meta: dict) -> Set[str]:
 class EmptyTargetCheck:
     """Reject empty targets when source exists or entry is a kv_map, halting row checks."""
 
-    def check_row(self, row: Row, ctx: LintRowContext) -> List[Finding]:
+    def check_row(self, row: Row, ctx: LintRowContext) -> list[Finding]:
         if row.dst.strip() != "":
             return []
         ctx.stop = True
@@ -59,8 +58,8 @@ class EmptyTargetCheck:
 class PoMetadataCheck:
     """Flag PO fuzzy markers and incomplete plural form counts."""
 
-    def check_row(self, row: Row, ctx: LintRowContext) -> List[Finding]:
-        out: List[Finding] = []
+    def check_row(self, row: Row, ctx: LintRowContext) -> list[Finding]:
+        out: list[Finding] = []
         if row.meta.get("fuzzy"):
             out.append(Finding("WARN", "FUZZY", row.key, "PO entry is marked fuzzy (needs review before shipping)", row.dst))
         exp = ctx.expected_forms
@@ -73,8 +72,8 @@ class PoMetadataCheck:
 class EncodingCheck:
     """Detect U+FFFD, mojibake sequences and control characters."""
 
-    def check_row(self, row: Row, ctx: LintRowContext) -> List[Finding]:
-        out: List[Finding] = []
+    def check_row(self, row: Row, ctx: LintRowContext) -> list[Finding]:
+        out: list[Finding] = []
         if "\ufffd" in row.dst:
             out.append(Finding("ERR", "ENCODING", row.key, "replacement character U+FFFD found (decoding damage)", row.dst))
         if _MOJIBAKE_RE.search(row.dst):
@@ -87,8 +86,8 @@ class EncodingCheck:
 class PunctuationBanCheck:
     """Enforce forbid_chars and forbid_spaced_hyphen project bans."""
 
-    def check_row(self, row: Row, ctx: LintRowContext) -> List[Finding]:
-        out: List[Finding] = []
+    def check_row(self, row: Row, ctx: LintRowContext) -> list[Finding]:
+        out: list[Finding] = []
         for ch in ctx.opt.forbid_chars:
             if ch in row.dst:
                 out.append(Finding("ERR", "FORBIDDEN_CHAR", row.key, f"forbidden character {ch!r}", row.dst))
@@ -100,7 +99,7 @@ class PunctuationBanCheck:
 class PlaceholderCheck:
     """Validate placeholder parity when source text is present."""
 
-    def check_row(self, row: Row, ctx: LintRowContext) -> List[Finding]:
+    def check_row(self, row: Row, ctx: LintRowContext) -> list[Finding]:
         if row.src == "":
             return []
         probs = ctx.parity.placeholder_problems(row.src, row.dst, ctx.opt.placeholder_style, ctx.opt.placeholder_regex)
@@ -110,7 +109,7 @@ class PlaceholderCheck:
 class RichTagCheck:
     """Validate rich text tag parity and structure when source text is present."""
 
-    def check_row(self, row: Row, ctx: LintRowContext) -> List[Finding]:
+    def check_row(self, row: Row, ctx: LintRowContext) -> list[Finding]:
         if row.src == "":
             return []
         probs = ctx.parity.tag_problems(row.src, row.dst, ctx.opt.tag_style)
@@ -120,10 +119,10 @@ class RichTagCheck:
 class WhitespaceCheck:
     """Verify leading spaces, trailing spaces and trailing newlines when strict_whitespace is enabled."""
 
-    def check_row(self, row: Row, ctx: LintRowContext) -> List[Finding]:
+    def check_row(self, row: Row, ctx: LintRowContext) -> list[Finding]:
         if row.src == "" or not ctx.opt.strict_whitespace:
             return []
-        out: List[Finding] = []
+        out: list[Finding] = []
         lead_s = len(row.src) - len(row.src.lstrip(" \t\u00a0"))
         lead_d = len(row.dst) - len(row.dst.lstrip(" \t\u00a0"))
         if lead_s != lead_d:
@@ -141,7 +140,7 @@ class WhitespaceCheck:
 class UntranslatedCheck:
     """Warn when non English target copies source words unchanged."""
 
-    def check_row(self, row: Row, ctx: LintRowContext) -> List[Finding]:
+    def check_row(self, row: Row, ctx: LintRowContext) -> list[Finding]:
         if row.src == "" or not ctx.opt.check_untranslated or ctx.opt.locale == "en":
             return []
         if row.src.strip() == row.dst.strip() and _ALPHA_WORD_RE.search(row.src):
@@ -152,7 +151,7 @@ class UntranslatedCheck:
 class GlossaryCheck:
     """Check locked termbase matches when source and glossary are supplied."""
 
-    def check_row(self, row: Row, ctx: LintRowContext) -> List[Finding]:
+    def check_row(self, row: Row, ctx: LintRowContext) -> list[Finding]:
         if row.src == "" or not ctx.opt.glossary:
             return []
         probs = ctx.parity.glossary_problems(row.src, row.dst, ctx.opt.glossary)
@@ -162,8 +161,8 @@ class GlossaryCheck:
 class LocaleRegexCheck:
     """Evaluate compiled locale regex rules scoped to row contexts."""
 
-    def check_row(self, row: Row, ctx: LintRowContext) -> List[Finding]:
-        out: List[Finding] = []
+    def check_row(self, row: Row, ctx: LintRowContext) -> list[Finding]:
+        out: list[Finding] = []
         for rule in ctx.rules:
             if rule_applies(rule, ctx.contexts) and rule.id not in ctx.ignored and rule.regex.search(row.dst):
                 out.append(Finding(rule.severity, rule.id, row.key, rule.message, row.dst))
@@ -173,15 +172,15 @@ class LocaleRegexCheck:
 class LintChainRunner:
     """Executes an ordered sequence of LintCheck handlers over table rows."""
 
-    def __init__(self, handlers: Optional[Sequence[LintCheck]] = None) -> None:
+    def __init__(self, handlers: Sequence[LintCheck] | None = None) -> None:
         self.handlers: Sequence[LintCheck] = tuple(handlers) if handlers is not None else (
             EmptyTargetCheck(), PoMetadataCheck(), EncodingCheck(), PunctuationBanCheck(),
             PlaceholderCheck(), RichTagCheck(), WhitespaceCheck(), UntranslatedCheck(),
             GlossaryCheck(), LocaleRegexCheck(),
         )
 
-    def lint_rows(self, rows: Sequence[Row], rules: Sequence[Rule], opt: LintOptions, parity: TokenParityPort) -> List[Finding]:
-        findings: List[Finding] = []
+    def lint_rows(self, rows: Sequence[Row], rules: Sequence[Rule], opt: LintOptions, parity: TokenParityPort) -> list[Finding]:
+        findings: list[Finding] = []
         expected_forms = PLURAL_FORMS.get(opt.locale)
         for row in rows:
             ctx = LintRowContext(row, opt, rules, expected_forms, parity, row_contexts(row.key, row.meta), _ignored_rules(row.meta))
@@ -192,6 +191,6 @@ class LintChainRunner:
         return findings
 
 
-def lint_rows(rows: Sequence[Row], rules: Sequence[Rule], opt: LintOptions, parity: TokenParityPort) -> List[Finding]:
+def lint_rows(rows: Sequence[Row], rules: Sequence[Rule], opt: LintOptions, parity: TokenParityPort) -> list[Finding]:
     """Run default Chain of Responsibility lint checks over rows."""
     return LintChainRunner().lint_rows(rows, rules, opt, parity)

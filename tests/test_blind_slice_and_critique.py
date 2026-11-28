@@ -1,5 +1,4 @@
 """Tests for make_blind_slice.py and validate_critique.py."""
-from __future__ import annotations
 
 import csv
 import json

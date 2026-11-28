@@ -1,10 +1,10 @@
 """Vendor batch API backends for Anthropic Message Batches and Gemini Batch Mode."""
-from __future__ import annotations
 
 import json
 import threading
 import urllib.parse
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from gcl.domain.errors import BatchJobError, ProviderError
 from gcl.domain.models import ChatResult
@@ -34,8 +34,8 @@ class PendingCall:
         self.json_mode = json_mode
         self.size = len(system.encode("utf-8")) + len(user.encode("utf-8")) + 512
         self.event = threading.Event()
-        self.result: Optional[ChatResult] = None
-        self.error: Optional[BaseException] = None
+        self.result: ChatResult | None = None
+        self.error: BaseException | None = None
 
 
 _Pending = PendingCall
@@ -46,7 +46,7 @@ class _Backend:
 
     max_bytes = 200_000_000
 
-    def __init__(self, provider: Any, get: Optional[GetTransport] = None) -> None:
+    def __init__(self, provider: Any, get: GetTransport | None = None) -> None:
         self.provider = provider
         self.model = provider.model
         self.name = provider.name
@@ -59,7 +59,7 @@ class _Backend:
             label=f"{self.name}/{self.model} batch", before_attempt=p._limiter.wait, secrets=(p._key,),
         )
 
-    def _post(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _post(self, url: str, payload: dict[str, Any]) -> dict[str, Any]:
         p = self.provider
         return send_json(url, p._headers(), payload, p._transport, self._opts())
 
@@ -71,7 +71,7 @@ class _Backend:
         )
         return fetch_text(url, p._headers(), self._get, opts)
 
-    def _get_json(self, url: str) -> Dict[str, Any]:
+    def _get_json(self, url: str) -> dict[str, Any]:
         text = self._get_text(url)
         try:
             data = json.loads(text)
@@ -81,7 +81,7 @@ class _Backend:
             raise ProviderError(f"{self.name}/{self.model} batch: reply is not a JSON object")
         return data
 
-    def _result(self, data: Dict[str, Any], it_system: str = "", it_user: str = "") -> ChatResult:
+    def _result(self, data: dict[str, Any], it_system: str = "", it_user: str = "") -> ChatResult:
         if hasattr(self.provider, "parse_reply"):
             rep = self.provider.parse_reply(data)
             u = rep.usage
@@ -110,7 +110,7 @@ class AnthropicBatchBackend(_Backend):
     def _base(self) -> str:
         return self.provider.endpoint.rstrip("/") + "/batches"
 
-    def submit(self, items: Sequence[PendingCall]) -> Dict[str, Any]:
+    def submit(self, items: Sequence[PendingCall]) -> dict[str, Any]:
         reqs = []
         for it in items:
             params = self.provider._body(it.system, it.user, it.temperature, it.max_tokens, it.json_mode)
@@ -121,13 +121,13 @@ class AnthropicBatchBackend(_Backend):
             raise BatchJobError(f"anthropic/{self.model}: batch create reply has no id")
         return {"id": str(data["id"])}
 
-    def poll(self, job: Dict[str, Any]) -> Dict[str, Any]:
+    def poll(self, job: dict[str, Any]) -> dict[str, Any]:
         data = self._get_json(f"{self._base()}/{urllib.parse.quote(job['id'], safe='_-')}")
         return {"done": data.get("processing_status") == "ended", "data": data}
 
-    def results(self, job: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
+    def results(self, job: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
         url = (state.get("data") or {}).get("results_url") or f"{self._base()}/{urllib.parse.quote(job['id'], safe='_-')}/results"
-        out: Dict[str, Any] = {}
+        out: dict[str, Any] = {}
         for line in self._get_text(str(url)).splitlines():
             if not line.strip():
                 continue
@@ -138,7 +138,7 @@ class AnthropicBatchBackend(_Backend):
             out[cid] = self._decode_row(cid, res)
         return out
 
-    def _decode_row(self, cid: str, res: Dict[str, Any]) -> Any:
+    def _decode_row(self, cid: str, res: dict[str, Any]) -> Any:
         kind = res.get("type")
         if kind == "succeeded" and isinstance(res.get("message"), dict):
             try:
@@ -150,11 +150,11 @@ class AnthropicBatchBackend(_Backend):
         suffix = f" ({str(detail)[:200]})" if detail else ""
         return ProviderError(f"anthropic/{self.model} batch request {cid} {kind or 'failed'}{suffix}")
 
-    def cancel(self, job: Dict[str, Any]) -> None:
+    def cancel(self, job: dict[str, Any]) -> None:
         self._post(f"{self._base()}/{urllib.parse.quote(job['id'], safe='_-')}/cancel", {})
 
 
-def _safe_json_line(line: str) -> Optional[Dict[str, Any]]:
+def _safe_json_line(line: str) -> dict[str, Any] | None:
     try:
         row = json.loads(line)
         return row if isinstance(row, dict) else None
@@ -162,12 +162,12 @@ def _safe_json_line(line: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _google_state(data: Dict[str, Any]) -> str:
+def _google_state(data: dict[str, Any]) -> str:
     meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
     return str(meta.get("state") or data.get("state") or "")
 
 
-def _google_inlined(data: Dict[str, Any]) -> Optional[List[Any]]:
+def _google_inlined(data: dict[str, Any]) -> list[Any] | None:
     """Locate inline replies across known Gemini Batch response layouts."""
     meta_out = (data.get("metadata") or {}).get("output") if isinstance(data.get("metadata"), dict) else None
     resp_out = (data.get("response") or {}).get("output") if isinstance(data.get("response"), dict) else None
@@ -190,14 +190,14 @@ class GoogleBatchBackend(_Backend):
 
     max_bytes = 18_000_000
 
-    def _request(self, it: PendingCall) -> Dict[str, Any]:
+    def _request(self, it: PendingCall) -> dict[str, Any]:
         body = self.provider._body(it.system, it.user, it.temperature, it.max_tokens, it.json_mode)
         gen = body.get("generationConfig")
         if isinstance(gen, dict) and int(gen.get("maxOutputTokens") or 0) > GOOGLE_BATCH_MAX_OUTPUT:
             gen["maxOutputTokens"] = GOOGLE_BATCH_MAX_OUTPUT
         return body
 
-    def submit(self, items: Sequence[PendingCall]) -> Dict[str, Any]:
+    def submit(self, items: Sequence[PendingCall]) -> dict[str, Any]:
         reqs = [{"request": self._request(it), "metadata": {"key": it.cid}} for it in items]
         model = urllib.parse.quote(self.model, safe="-._")
         url = f"{self.provider.endpoint.rstrip('/')}/models/{model}:batchGenerateContent"
@@ -208,20 +208,20 @@ class GoogleBatchBackend(_Backend):
             raise BatchJobError(f"google/{self.model}: batch create reply has no name")
         return {"id": str(name), "order": [it.cid for it in items]}
 
-    def poll(self, job: Dict[str, Any]) -> Dict[str, Any]:
+    def poll(self, job: dict[str, Any]) -> dict[str, Any]:
         data = self._get_json(f"{self.provider.endpoint.rstrip('/')}/{job['id']}")
         state = _google_state(data)
         return {"done": bool(data.get("done")) or state.endswith(_DONE_STATES), "state": state, "data": data}
 
-    def results(self, job: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
+    def results(self, job: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
         data = state.get("data") or {}
         inl = _google_inlined(data)
         if inl is None:
             err = data.get("error") or {}
             suffix = f" ({str(err.get('message', ''))[:200]})" if err else ""
             raise BatchJobError(f"google/{self.model}: batch job {job['id']} ended as {state.get('state') or 'unknown'} without inline replies{suffix}")
-        order: List[str] = list(job.get("order") or [])
-        out: Dict[str, Any] = {}
+        order: list[str] = list(job.get("order") or [])
+        out: dict[str, Any] = {}
         for n, item in enumerate(inl):
             if not isinstance(item, dict):
                 continue
@@ -231,7 +231,7 @@ class GoogleBatchBackend(_Backend):
                 out[cid] = self._decode_google_item(cid, item)
         return out
 
-    def _decode_google_item(self, cid: str, item: Dict[str, Any]) -> Any:
+    def _decode_google_item(self, cid: str, item: dict[str, Any]) -> Any:
         if isinstance(item.get("response"), dict):
             try:
                 return self._result(item["response"])
@@ -240,7 +240,7 @@ class GoogleBatchBackend(_Backend):
         err = item.get("error") or {}
         return ProviderError(f"google/{self.model} batch request {cid} failed ({str(err.get('message', 'no reply'))[:200]})")
 
-    def cancel(self, job: Dict[str, Any]) -> None:
+    def cancel(self, job: dict[str, Any]) -> None:
         self._post(f"{self.provider.endpoint.rstrip('/')}/{job['id']}:cancel", {})
 
 

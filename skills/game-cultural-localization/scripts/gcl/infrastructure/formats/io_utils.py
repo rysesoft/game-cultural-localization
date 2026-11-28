@@ -1,10 +1,10 @@
 """Low level UTF-8 file reading, JSON loading, CSV delimiter sniffing and game root guard."""
-from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any
 
 from gcl.domain.errors import L10nError
 
@@ -52,7 +52,7 @@ def sniff_delimiter(sample: str, suffix: str) -> str:
     return best if counts[best] > 0 else ","
 
 
-def check_columns(available: Iterable[str], required: Dict[str, str], path: Path) -> None:
+def check_columns(available: Iterable[str], required: dict[str, str], path: Path) -> None:
     avail = set(available)
     missing = [f"{role} column '{name}'" for role, name in required.items() if name not in avail]
     if missing:
@@ -73,7 +73,7 @@ def load_json_data(path: Path) -> Any:
         raise L10nError(f"{path}: invalid JSON at line {exc.lineno} column {exc.colno}: {exc.msg}")
 
 
-def game_root(path: Path) -> Optional[Path]:
+def game_root(path: Path) -> Path | None:
     """Return Unity, Godot or Unreal root directory containing path, else None."""
     p = Path(path).resolve()
     for d in [p] + list(p.parents):

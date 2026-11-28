@@ -1,8 +1,8 @@
 """AOP CallAspect chain wrapping LLM calls with telemetry, fallback and error normalization."""
-from __future__ import annotations
 
 import os
-from typing import Any, Callable, Dict, Optional, Protocol, Sequence, Tuple, runtime_checkable
+from collections.abc import Callable, Sequence
+from typing import Any, Protocol, runtime_checkable
 
 from gcl.domain.errors import L10nError, ModelNotFoundError, ProviderError
 from gcl.domain.models import ChatRequest, ChatResult
@@ -12,7 +12,7 @@ __layer__ = "aspects"
 __pattern__ = "Decorator and Interceptor (AOP)"
 __owns__ = "composable CallAspect pipeline for telemetry, fallback, secret scrub and offline guard"
 
-ProceedCall = Callable[[ChatRequest], ChatResult]
+type ProceedCall = Callable[[ChatRequest], ChatResult]
 
 
 @runtime_checkable
@@ -53,7 +53,7 @@ class OfflineGuardAspect:
 class BudgetTelemetryAspect:
     """Emits LLMCallObserved events on success or failure without polluting adapters."""
 
-    def __init__(self, bus: EventBus, metadata_fn: Callable[[], Dict[str, object]]) -> None:
+    def __init__(self, bus: EventBus, metadata_fn: Callable[[], dict[str, object]]) -> None:
         self._bus = bus
         self._meta_fn = metadata_fn
 
@@ -66,7 +66,7 @@ class BudgetTelemetryAspect:
         self._emit(res=res, meta=self._meta_fn(), error="")
         return res
 
-    def _emit(self, *, res: Optional[ChatResult], meta: Dict[str, object], error: str) -> None:
+    def _emit(self, *, res: ChatResult | None, meta: dict[str, object], error: str) -> None:
         self._bus.publish(LLMCallObserved(
             role=str(meta.get("role", "")), provider=str(meta.get("provider", "")),
             alias=str(meta.get("alias", "")), model=str(meta.get("model", "")),
@@ -99,7 +99,7 @@ class FallbackModelAspect:
 class ThinkingEffortAspect:
     """Attaches resolved effort and service tier options onto ChatRequest.options."""
 
-    def __init__(self, options_fn: Callable[[], Dict[str, Any]]) -> None:
+    def __init__(self, options_fn: Callable[[], dict[str, Any]]) -> None:
         self._opts_fn = options_fn
 
     def around(self, request: ChatRequest, proceed: ProceedCall) -> ChatResult:
@@ -120,7 +120,7 @@ class AspectChain:
 
     def __init__(self, terminal: ProceedCall, aspects: Sequence[CallAspect] = ()) -> None:
         self._terminal = terminal
-        self._aspects: Tuple[CallAspect, ...] = tuple(aspects)
+        self._aspects: tuple[CallAspect, ...] = tuple(aspects)
 
     def invoke(self, request: ChatRequest) -> ChatResult:
         nxt = self._terminal

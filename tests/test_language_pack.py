@@ -1,11 +1,10 @@
 """P2: build_language_pack.py, langpack/sources.manifest.json and the five-layer filter."""
-from __future__ import annotations
 
 import json
 import re
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -24,7 +23,7 @@ ROUNDTRIP_LINE = "Atölyeyi bu gece kapatmadan önce bütün aletleri yerine koy
 JURY_LINE = "Bu gece çok uzun sürecek gibi görünüyor, değil mi dostum?"
 
 
-def po(entries: List[Dict[str, Any]]) -> str:
+def po(entries: list[dict[str, Any]]) -> str:
     out = [PO_HEADER]
     for e in entries:
         if e.get("fuzzy"):
@@ -33,7 +32,7 @@ def po(entries: List[Dict[str, Any]]) -> str:
     return "".join(out)
 
 
-def make_tr_corpus(td: Path, with_missing: bool = False, review_false: bool = True) -> Dict[str, Path]:
+def make_tr_corpus(td: Path, with_missing: bool = False, review_false: bool = True) -> dict[str, Path]:
     """Manifest + corpus files + reference table for a tr-TR build (one URL source in the cache, others by path)."""
     cache = td / "cache"
     url = "https://example.org/godot/tr.po"
@@ -62,7 +61,7 @@ def make_tr_corpus(td: Path, with_missing: bool = False, review_false: bool = Tr
     bulk = [{"key": f"B{i}", "en": f"Crate number {i} is ready", "tr-TR": f"{i} numaralı sandık hazır", "commit": "abc123"} for i in range(501)]
     bulk.append({"key": "C1", "en": "The crate is open", "tr-TR": "Sandık açık", "commit": "def456"})
     write_json(td / "bulk.json", bulk)
-    sources: List[Dict[str, Any]] = [
+    sources: list[dict[str, Any]] = [
         {"id": "godot-like", "name": "Godot like", "license": "MIT", "license_class": "bundle", "attribution": "MIT test",
          "register": "ui", "review_process": True, "version": "1.0", "format": "po", "files": [{"locale": "tr-TR", "url": url, "sha256": None}]},
         {"id": "props", "name": "Props game", "license": "GPL-3.0", "license_class": "local", "register": "game", "review_process": True,
@@ -92,13 +91,13 @@ def make_tr_corpus(td: Path, with_missing: bool = False, review_false: bool = Tr
     return {"manifest": manifest, "cache": cache, "ref": ref, "scenario": scenario}
 
 
-def build(paths: Dict[str, Path], td: Path, locale: str = "tr-TR", **kw: Any) -> Dict[str, Any]:
+def build(paths: dict[str, Path], td: Path, locale: str = "tr-TR", **kw: Any) -> dict[str, Any]:
     router = Router(load_providers_config(), dry_run=True, scenario=FakeScenario.load(paths.get("scenario")))
     return blp.build_pack(paths["manifest"], locale, td / "packs", paths["cache"], offline=True, references=[paths["ref"]] if "ref" in paths else [],
                           router=router, mt_check=True, jury_screen=True, min_words=6, registers=("dialogue_casual", "dialogue_formal"), **kw)
 
 
-def read_jsonl(path: Path) -> List[Dict[str, Any]]:
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
 
 

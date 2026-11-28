@@ -41,6 +41,7 @@ Allowed dependency directions inside `gcl/` (arrows point to what a layer may im
 - Zero cyclic imports across `gcl.*`
 - Blind jury, blind pick and deliberation modules may never import `WriterContextView` or writer adapters
 - `tests/test_architecture_contracts.py` and `scripts/dev/verify_architecture.py` enforce these limits automatically
+- Zero legacy Python syntax or idioms allowed (`from __future__ import annotations`, legacy `typing` aliases or `TypeVar`, unslotted `@dataclass`, `os.walk` or quoted type annotations blocked by `scripts/dev/py315_audit.py`)
 - Run `python scripts/dev/sync_navigation.py` whenever modules, classes or layers change under `scripts/gcl/`
 
 ## 4. House Rules That Stay Unchanged

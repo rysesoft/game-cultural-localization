@@ -1,9 +1,8 @@
 """JSON localization table Strategy implementation."""
-from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from gcl.domain.errors import L10nError
 from gcl.domain.models import Row
@@ -16,7 +15,7 @@ __pattern__ = "Strategy"
 __owns__ = "JSON list and map localization table reading and exporting"
 
 
-def _rows_from_list(data: List[Any], path: Path, opt: TableLoadOptions, req: Dict[str, str]) -> List[Row]:
+def _rows_from_list(data: list[Any], path: Path, opt: TableLoadOptions, req: dict[str, str]) -> list[Row]:
     keys: set = set()
     for idx, item in enumerate(data):
         if not isinstance(item, dict):
@@ -24,7 +23,7 @@ def _rows_from_list(data: List[Any], path: Path, opt: TableLoadOptions, req: Dic
         keys.update(item.keys())
     if data:
         check_columns(keys, req, path)
-    rows: List[Row] = []
+    rows: list[Row] = []
     for idx, item in enumerate(data):
         k = as_str(item.get(opt.key_field) or item.get("id") or f"row_{idx}")
         table = as_str(item.get("table"))
@@ -33,14 +32,14 @@ def _rows_from_list(data: List[Any], path: Path, opt: TableLoadOptions, req: Dic
     return rows
 
 
-def _rows_from_dict(data: Dict[str, Any], path: Path, opt: TableLoadOptions, req: Dict[str, str]) -> List[Row]:
+def _rows_from_dict(data: dict[str, Any], path: Path, opt: TableLoadOptions, req: dict[str, str]) -> list[Row]:
     dict_values = [v for v in data.values() if isinstance(v, dict)]
     if dict_values:
         keys: set = set()
         for v in dict_values:
             keys.update(v.keys())
         check_columns(keys, req, path)
-    rows: List[Row] = []
+    rows: list[Row] = []
     for k, v in data.items():
         if isinstance(v, dict):
             rows.append(Row(str(k), "" if opt.target_only else as_str(v.get(opt.src_field)), as_str(v.get(opt.dst_field)), dict(v)))
@@ -51,7 +50,7 @@ def _rows_from_dict(data: Dict[str, Any], path: Path, opt: TableLoadOptions, req
     return rows
 
 
-def export_json(final: Dict[str, str], template: Path, dst_field: str, key_field: str, out_dir: Path) -> Dict[str, Any]:
+def export_json(final: dict[str, str], template: Path, dst_field: str, key_field: str, out_dir: Path) -> dict[str, Any]:
     """Write final texts into a JSON list or map template under out_dir."""
     data = load_json_data(template)
     placed = set()
@@ -78,7 +77,7 @@ class JsonTableFormat:
     """TableFormatStrategy for .json files."""
     suffixes = (".json",)
 
-    def read_rows(self, path: Path, options: TableLoadOptions) -> List[Row]:
+    def read_rows(self, path: Path, options: TableLoadOptions) -> list[Row]:
         req = {"target": options.dst_field} if options.target_only else {"source": options.src_field, "target": options.dst_field}
         data = load_json_data(path)
         if isinstance(data, list):
@@ -87,6 +86,6 @@ class JsonTableFormat:
             return _rows_from_dict(data, path, options, req)
         raise L10nError(f"{path}: top-level JSON must be a list or an object, got {type(data).__name__}")
 
-    def write_export(self, final_texts: Dict[str, str], template: Path, out_dir: Path, *, dst_field: str, key_field: str) -> ExportResult:
+    def write_export(self, final_texts: dict[str, str], template: Path, out_dir: Path, *, dst_field: str, key_field: str) -> ExportResult:
         res = export_json(final_texts, template, dst_field, key_field, out_dir)
         return ExportResult(tuple(res["files"]), int(res["placed"]), tuple(sorted(res["keys"])))

@@ -43,10 +43,8 @@ text) and `loaded_not_shown` when the loaded variable is never read anywhere. --
 
 Exit codes: 0 written or covered, 1 findings (keys of --keys-from without a usage, unclaimed tables, missing
 locale tables, gaps in the scout reports), 2 usage or input error.
-Python 3.9+, standard library only.
+Python 3.15, standard library only.
 """
-
-from __future__ import annotations
 
 import argparse
 import bisect
@@ -58,7 +56,8 @@ import sys
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -111,16 +110,16 @@ def _rel(path: Path, root: Path) -> str:
         return path.name
 
 
-def load_tables(files: Sequence[Tuple[Path, str]], shared_paths: Optional[Dict[str, Path]] = None
-                ) -> Tuple[Dict[str, str], Dict[str, str], Dict[Tuple[str, str], str], Dict[str, set]]:
+def load_tables(files: Sequence[tuple[Path, str]], shared_paths: dict[str, Path] | None = None
+                ) -> tuple[dict[str, str], dict[str, str], dict[tuple[str, str], str], dict[str, set]]:
     """Shared Data assets -> (guid -> table name, table name -> guid, (guid, key id) -> key, guid -> key names).
 
     shared_paths, when given, receives table name -> Shared Data file (the locale tables sit next to it).
     """
-    names: Dict[str, str] = {}
-    by_name: Dict[str, str] = {}
-    by_id: Dict[Tuple[str, str], str] = {}
-    keys: Dict[str, set] = {}
+    names: dict[str, str] = {}
+    by_name: dict[str, str] = {}
+    by_id: dict[tuple[str, str], str] = {}
+    keys: dict[str, set] = {}
     for _path, txt in files:
         if "m_TableCollectionNameGuidString" not in txt:
             continue
@@ -140,14 +139,14 @@ def load_tables(files: Sequence[Tuple[Path, str]], shared_paths: Optional[Dict[s
     return names, by_name, by_id, keys
 
 
-def script_classes(root: Path) -> Dict[str, Path]:
+def script_classes(root: Path) -> dict[str, Path]:
     """MonoBehaviour script guid -> .cs file."""
     return _guid_map(root, "*.cs.meta")
 
 
-def _guid_map(root: Path, pattern: str) -> Dict[str, Path]:
+def _guid_map(root: Path, pattern: str) -> dict[str, Path]:
     """Asset guid -> asset file, from the .meta files matching pattern."""
-    out: Dict[str, Path] = {}
+    out: dict[str, Path] = {}
     for meta in root.rglob(pattern):
         m = re.search(r"guid: (\w+)", read_text(meta))
         if m:
@@ -155,10 +154,10 @@ def _guid_map(root: Path, pattern: str) -> Dict[str, Path]:
     return out
 
 
-def _docs(txt: str) -> Dict[str, Tuple[str, str]]:
+def _docs(txt: str) -> dict[str, tuple[str, str]]:
     """YAML documents of a Unity file, fileID -> (class id, text)."""
     starts = [(m.start(), m.group(1), m.group(2)) for m in _DOC.finditer(txt)]
-    out: Dict[str, Tuple[str, str]] = {}
+    out: dict[str, tuple[str, str]] = {}
     for i, (s, cls, fid) in enumerate(starts):
         out[fid] = (cls, txt[s:starts[i + 1][0] if i + 1 < len(starts) else len(txt)])
     return out
@@ -173,12 +172,12 @@ def _field(m_docs: str, pos: int, indent: int) -> str:
     return ""
 
 
-def object_paths(docs: Dict[str, Tuple[str, str]]) -> Dict[str, str]:
+def object_paths(docs: dict[str, tuple[str, str]]) -> dict[str, str]:
     """GameObject fileID -> hierarchy path (Parent/Child/Object) from the Transform and RectTransform documents."""
-    go_name: Dict[str, str] = {}
-    tr_of_go: Dict[str, str] = {}
-    father: Dict[str, str] = {}
-    go_of_tr: Dict[str, str] = {}
+    go_name: dict[str, str] = {}
+    tr_of_go: dict[str, str] = {}
+    father: dict[str, str] = {}
+    go_of_tr: dict[str, str] = {}
     for fid, (cls, d) in docs.items():
         if cls == "1":  # GameObject
             nm = re.search(r"\n  m_Name: (.*)", d)
@@ -191,7 +190,7 @@ def object_paths(docs: Dict[str, Tuple[str, str]]) -> Dict[str, str]:
                 go_of_tr[fid] = g.group(1)
             if f:
                 father[fid] = f.group(1)
-    paths: Dict[str, str] = {}
+    paths: dict[str, str] = {}
     for go, name in go_name.items():
         parts = [name]
         tr = tr_of_go.get(go)
@@ -204,11 +203,11 @@ def object_paths(docs: Dict[str, Tuple[str, str]]) -> Dict[str, str]:
     return paths
 
 
-def _override_usages(d: str, path: Path, root: Path, keys: Dict[str, Dict[str, Any]], by_name: Dict[str, str],
-                     by_id: Dict[Tuple[str, str], str], by_key: Dict[Tuple[str, str], str], guids_of_id: Dict[str, List[str]],
-                     prefabs: Dict[str, Path]) -> int:
+def _override_usages(d: str, path: Path, root: Path, keys: dict[str, dict[str, Any]], by_name: dict[str, str],
+                     by_id: dict[tuple[str, str], str], by_key: dict[tuple[str, str], str], guids_of_id: dict[str, list[str]],
+                     prefabs: dict[str, Path]) -> int:
     """Usages a prefab instance sets through m_Modifications. Returns the number of overrides that resolve to no key."""
-    groups: Dict[Tuple[str, str, str], Dict[str, str]] = defaultdict(dict)
+    groups: dict[tuple[str, str, str], dict[str, str]] = defaultdict(dict)
     for tfid, tguid, ppath, val in _MOD.findall(d):
         for suffix, slot in _MOD_SLOTS:
             if ppath.strip().endswith(suffix):
@@ -237,8 +236,8 @@ def _override_usages(d: str, path: Path, root: Path, keys: Dict[str, Dict[str, A
     return unresolved
 
 
-def scan_unity(project: Path, code_lines: int = CODE_LINES_PER_FIELD, tables_out: Optional[Dict[str, Dict[str, Any]]] = None,
-               use_sites: int = USE_SITES_PER_KEY) -> Dict[str, Any]:
+def scan_unity(project: Path, code_lines: int = CODE_LINES_PER_FIELD, tables_out: dict[str, dict[str, Any]] | None = None,
+               use_sites: int = USE_SITES_PER_KEY) -> dict[str, Any]:
     """Every key usage of a Unity project. Read only.
 
     tables_out, when given, receives table name -> {"shared": Shared Data file, "ids": key id -> key}.
@@ -246,13 +245,13 @@ def scan_unity(project: Path, code_lines: int = CODE_LINES_PER_FIELD, tables_out
     use sites per key.
     """
     root = find_unity_root(project)
-    files: List[Tuple[Path, str]] = []
+    files: list[tuple[Path, str]] = []
     for path in sorted(root.rglob("*")):
         if path.suffix in ASSET_EXTS and path.is_file():
             txt = read_text(path)
             if "m_TableReference" in txt or "m_TableEntryReference" in txt or "m_TableCollectionNameGuidString" in txt:
                 files.append((path, txt))
-    shared_paths: Dict[str, Path] = {}
+    shared_paths: dict[str, Path] = {}
     names, by_name, by_id, table_keys = load_tables(files, shared_paths)
     if not names:
         raise L10nError(f"{root}: no Unity Localization string table (Shared Data asset) found")
@@ -266,13 +265,13 @@ def scan_unity(project: Path, code_lines: int = CODE_LINES_PER_FIELD, tables_out
     by_key = {(g, k): label(g, k) for g, ks in table_keys.items() for k in ks}
     scripts = script_classes(root)
     prefabs = _guid_map(root, "*.prefab.meta")
-    guids_of_id: Dict[str, List[str]] = defaultdict(list)
+    guids_of_id: dict[str, list[str]] = defaultdict(list)
     for (g, kid) in by_id:
         guids_of_id[kid].append(g)
     if tables_out is not None:
         for guid, name in names.items():
             tables_out[name] = {"shared": shared_paths[name], "ids": {kid: k for (g, kid), k in by_id.items() if g == guid}}
-    keys: Dict[str, Dict[str, Any]] = {}
+    keys: dict[str, dict[str, Any]] = {}
     for guid, ks in table_keys.items():
         for k in ks:
             keys[label(guid, k)] = {"table": names[guid], "usages": [], "code": []}
@@ -280,7 +279,7 @@ def scan_unity(project: Path, code_lines: int = CODE_LINES_PER_FIELD, tables_out
                 keys[label(guid, k)]["name"] = k
     unresolved = 0
     missing_tables: Counter = Counter()
-    seen_fields: Dict[Tuple[str, str], Path] = {}
+    seen_fields: dict[tuple[str, str], Path] = {}
     for path, txt in files:
         if "m_TableReference" not in txt and "m_TableEntryReference" not in txt:
             continue
@@ -318,12 +317,12 @@ def scan_unity(project: Path, code_lines: int = CODE_LINES_PER_FIELD, tables_out
                 if script is not None and field:
                     seen_fields[(cls, field)] = script
     # code lines that show each localized field
-    code_cache: Dict[Path, List[str]] = {}
-    field_code: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    code_cache: dict[Path, list[str]] = {}
+    field_code: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for (cls, field), script in seen_fields.items():
         lines = code_cache.setdefault(script, read_text(script).splitlines())
         rx = re.compile(r"\b" + re.escape(field) + r"\b")
-        hits: List[Dict[str, Any]] = []
+        hits: list[dict[str, Any]] = []
         for n, line in enumerate(lines, start=1):
             s = line.strip()
             if rx.search(s) and not _DECL.search(s) and not s.startswith(("//", "[", "///")):
@@ -381,17 +380,17 @@ def _clip(s: str, n: int = 120) -> str:
     return s if len(s) <= n else s[: n - 3] + "..."
 
 
-@dataclass
+@dataclass(slots=True)
 class _Str:
     """A C# string literal. parts are ["lit", start, end] and ["hole", start, end] spans of the file text."""
     start: int
     interp: bool
     verbatim: bool
-    parts: List[List[Any]] = field(default_factory=list)
+    parts: list[list[Any]] = field(default_factory=list)
     end: int = -1
 
 
-def _mask_cs(text: str) -> Tuple[str, str, List[_Str]]:
+def _mask_cs(text: str) -> tuple[str, str, list[_Str]]:
     """(text without comments, text without comments and literal text, string literals). Offsets stay the same.
 
     The holes of interpolated strings stay code in both copies, so `$"{X}: {y}"` still shows X and y. Their braces
@@ -399,13 +398,13 @@ def _mask_cs(text: str) -> Tuple[str, str, List[_Str]]:
     """
     n = len(text)
     nc, mk = list(text), list(text)
-    strings: List[_Str] = []
+    strings: list[_Str] = []
 
-    def blank(arr: List[str], a: int, b: int) -> None:
+    def blank(arr: list[str], a: int, b: int) -> None:
         for k in range(a, min(b, n)):
             if arr[k] != "\n":
                 arr[k] = " "
-    stack: List[Any] = [[None, 0]]          # code frames [string of the hole or None, brace depth], or _Str frames
+    stack: list[Any] = [[None, 0]]          # code frames [string of the hole or None, brace depth], or _Str frames
     i = 0
     while i < n:
         top = stack[-1]
@@ -484,7 +483,7 @@ def _mask_cs(text: str) -> Tuple[str, str, List[_Str]]:
     return "".join(nc), "".join(mk), sorted(strings, key=lambda s: s.start)
 
 
-def _blocks(masked: str) -> List[Tuple[int, int]]:
+def _blocks(masked: str) -> list[tuple[int, int]]:
     out, stack = [], []
     for m in re.finditer(r"[{}]", masked):
         if m.group() == "{":
@@ -501,7 +500,7 @@ def _unescape(s: str, verbatim: bool, interp: bool) -> str:
     if verbatim:
         return s.replace('""', '"')
 
-    def esc(m: "re.Match[str]") -> str:
+    def esc(m: re.Match[str]) -> str:
         body = m.group(1)
         if body[0] in "ux" and len(body) > 1:
             try:
@@ -519,7 +518,7 @@ class _CsFile:
         self.rel, self.text = rel, text
         self.ready = False
 
-    def prepare(self) -> "_CsFile":
+    def prepare(self) -> _CsFile:
         if not self.ready:
             self.nocomment, self.masked, self.strings = _mask_cs(self.text)
             self.starts = [0] + [m.end() for m in re.finditer(r"\n", self.text)]
@@ -542,7 +541,7 @@ class _CsFile:
         return self.text[s: e if e >= 0 else len(self.text)].strip()[:240]
 
 
-def _match_fwd(m: str, k: int, limit: int = 4000) -> Optional[int]:
+def _match_fwd(m: str, k: int, limit: int = 4000) -> int | None:
     depth = 0
     for j in range(k, min(len(m), k + limit)):
         c = m[j]
@@ -555,7 +554,7 @@ def _match_fwd(m: str, k: int, limit: int = 4000) -> Optional[int]:
     return None
 
 
-def _match_back(m: str, k: int, limit: int = 4000) -> Optional[int]:
+def _match_back(m: str, k: int, limit: int = 4000) -> int | None:
     depth = 0
     for j in range(k, max(-1, k - limit), -1):
         c = m[j]
@@ -573,7 +572,7 @@ def _stmt_start(f: _CsFile, pos: int, floor: int = 0) -> int:
     return max(floor, max(m.rfind(";", floor, pos), m.rfind("{", floor, pos), m.rfind("}", floor, pos)) + 1)
 
 
-def _header(f: _CsFile, o: int) -> Tuple[int, str]:
+def _header(f: _CsFile, o: int) -> tuple[int, str]:
     """Start and text of the header of the block opened at o (the code between the previous statement and the brace)."""
     hs = _stmt_start(f, o)
     return hs, _collapse(re.sub(r"(?m)^[ \t]*#.*$", "", f.nocomment[hs:o]))
@@ -591,7 +590,7 @@ def _word_char(c: str) -> bool:
     return c.isalnum() or c == "_"
 
 
-def _operand(f: _CsFile, a: int, b: int) -> Tuple[int, int]:
+def _operand(f: _CsFile, a: int, b: int) -> tuple[int, int]:
     """Grow a name at [a, b) to its member chain (Class.NAME, this.NAME, NAME.Method(), NAME[i])."""
     m, n = f.masked, len(f.masked)
     while True:
@@ -643,7 +642,7 @@ def _operand(f: _CsFile, a: int, b: int) -> Tuple[int, int]:
     return a, b
 
 
-def _bounds(f: _CsFile, a: int, b: int) -> Tuple[int, int]:
+def _bounds(f: _CsFile, a: int, b: int) -> tuple[int, int]:
     """The expression around [a, b) at the same bracket depth, up to an argument comma, an assignment or a statement end."""
     m, n = f.masked, len(f.masked)
     depth, k = 0, a - 1
@@ -680,7 +679,7 @@ def _bounds(f: _CsFile, a: int, b: int) -> Tuple[int, int]:
     return lo, k
 
 
-def _split_top(f: _CsFile, lo: int, hi: int, sep: str) -> List[Tuple[int, int]]:
+def _split_top(f: _CsFile, lo: int, hi: int, sep: str) -> list[tuple[int, int]]:
     """Spans of [lo, hi) split at sep on bracket depth 0, trimmed. A '+' next to another '+' or before '=' does not split."""
     m = f.masked
     parts, depth, start, k = [], 0, lo, lo
@@ -709,7 +708,7 @@ def _split_top(f: _CsFile, lo: int, hi: int, sep: str) -> List[Tuple[int, int]]:
     return out
 
 
-def _render(f: _CsFile, s: _Str, this: Optional[Tuple[int, int]] = None) -> str:
+def _render(f: _CsFile, s: _Str, this: tuple[int, int] | None = None) -> str:
     """The text of a literal, holes as {expression}, the hole holding [a, b) as {THIS}."""
     out = []
     for kind, p, q in s.parts:
@@ -722,7 +721,7 @@ def _render(f: _CsFile, s: _Str, this: Optional[Tuple[int, int]] = None) -> str:
     return "".join(out)
 
 
-def _expr(f: _CsFile, a: int, b: int) -> Tuple[int, int, str]:
+def _expr(f: _CsFile, a: int, b: int) -> tuple[int, int, str]:
     """(start, end, shape) of the expression that carries the operand [a, b). Shape is '' when nothing is glued on."""
     m = f.masked
     inner = THIS
@@ -800,16 +799,16 @@ def _format_shape(f: _CsFile, j: int, a: int, b: int, inner: str) -> str:
     if lit is None or lit.end != args[0][1]:
         return ""
 
-    def sub(mm: "re.Match[str]") -> str:
+    def sub(mm: re.Match[str]) -> str:
         i = int(mm.group(1)) + 1
         return inner if i == idx else ("{" + texts[i] + "}" if i < len(texts) else mm.group())
     return re.sub(r"\{(\d+)(?:[:,][^}]*)?\}", sub, _render(f, lit))
 
 
-def _prefixes(f: _CsFile, s: int, pos: int) -> Tuple[List[str], int]:
+def _prefixes(f: _CsFile, s: int, pos: int) -> tuple[list[str], int]:
     """Braceless if, else, loop and case prefixes of the statement starting at s (outermost first), and where they end."""
     m = f.masked
-    conds: List[str] = []
+    conds: list[str] = []
     k = s
     while True:
         while k < pos and m[k].isspace():
@@ -894,7 +893,7 @@ def _ternary(f: _CsFile, lo: int) -> str:
     return _clip(("when not (" if neg else "when (") + cond + ")") if cond else ""
 
 
-def _classify_header(hdr: str) -> Tuple[str, str]:
+def _classify_header(hdr: str) -> tuple[str, str]:
     h = re.sub(r"^(?:\[[^\]]*\]\s*)+", "", hdr).strip()
     h = re.sub(r"^(?:(?:case\b[^:]*?|default\s*):(?!:)\s*)+", "", h).strip()
     if not h:
@@ -932,7 +931,7 @@ def _classify_header(hdr: str) -> Tuple[str, str]:
     return "other", h
 
 
-def _context(f: _CsFile, pos: int, s: int) -> Tuple[str, List[str]]:
+def _context(f: _CsFile, pos: int, s: int) -> tuple[str, list[str]]:
     """(method, enclosing conditions innermost first) of a code position, s being the start of its statement."""
     conds, _ = _prefixes(f, s, pos)
     conds.reverse()
@@ -962,9 +961,9 @@ def _context(f: _CsFile, pos: int, s: int) -> Tuple[str, List[str]]:
     return method, conds[:3]
 
 
-def _helpers(f: _CsFile, conds: Sequence[str]) -> Dict[str, str]:
+def _helpers(f: _CsFile, conds: Sequence[str]) -> dict[str, str]:
     """Bodies of the one line bool methods and properties a condition calls, from the same file."""
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     for cond in conds:
         for nm in re.finditer(r"\b([A-Za-z_]\w*)\b(\s*\(\s*\))?", cond):
             name = nm.group(1)
@@ -981,7 +980,7 @@ def _helpers(f: _CsFile, conds: Sequence[str]) -> Dict[str, str]:
     return out
 
 
-def _flow(f: _CsFile, lo: int, hi: int, floor: int = 0) -> Tuple[str, str, bool]:
+def _flow(f: _CsFile, lo: int, hi: int, floor: int = 0) -> tuple[str, str, bool]:
     """Where the value of the expression [lo, hi) goes.
 
     ('load', name, declares a local) for an assignment to a plain name, ('return', member, False) for a returned text,
@@ -1010,7 +1009,7 @@ def _flow(f: _CsFile, lo: int, hi: int, floor: int = 0) -> Tuple[str, str, bool]
     return "direct", "", False
 
 
-def _initializer(f: _CsFile, s: int, lo: int) -> Optional[str]:
+def _initializer(f: _CsFile, s: int, lo: int) -> str | None:
     """'Type.Member' when [s, lo) sits right inside an object initializer (new HoverData { HoverName = ... }), else None."""
     if s == 0 or f.masked[s - 1] != "{":
         return None
@@ -1051,40 +1050,40 @@ class _Tracer:
 
     def __init__(self, root: Path, limit: int) -> None:
         self.limit = limit
-        self.files: List[_CsFile] = []
-        self.by_rel: Dict[str, _CsFile] = {}
+        self.files: list[_CsFile] = []
+        self.by_rel: dict[str, _CsFile] = {}
         for p in sorted(root.rglob("*.cs")):
             if p.is_file():
                 cf = _CsFile(_rel(p, root), read_text(p))
                 self.files.append(cf)
                 self.by_rel[cf.rel] = cf
-        self._index: Optional[Dict[str, set]] = None
-        self._class_cache: Dict[str, List[_CsFile]] = {}
-        self._field_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
-        self._var_cache: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
-        self._site_cache: Dict[Tuple[str, int, str], Dict[str, Any]] = {}
+        self._index: dict[str, set] | None = None
+        self._class_cache: dict[str, list[_CsFile]] = {}
+        self._field_cache: dict[tuple[str, str], dict[str, Any]] = {}
+        self._var_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
+        self._site_cache: dict[tuple[str, int, str], dict[str, Any]] = {}
 
     # -- the code base ------------------------------------------------------
     def with_token(self, tok: str) -> set:
         """Indices of the files whose text holds the identifier."""
         if self._index is None:
-            idx: Dict[str, set] = defaultdict(set)
+            idx: dict[str, set] = defaultdict(set)
             for i, cf in enumerate(self.files):
                 for t in set(_IDENT.findall(cf.text)):
                     idx[t].add(i)
             self._index = idx
         return self._index.get(tok, set())
 
-    def class_files(self, cls: str) -> List[_CsFile]:
+    def class_files(self, cls: str) -> list[_CsFile]:
         """Files that declare the class (partial parts included)."""
         if cls not in self._class_cache:
             rx = re.compile(r"\b(?:class|struct)\s+" + re.escape(cls) + r"\b")
             self._class_cache[cls] = [self.files[i] for i in sorted(self.with_token(cls)) if rx.search(self.files[i].text)]
         return self._class_cache[cls]
 
-    def family(self, cls: str, first: Optional[_CsFile] = None) -> List[_CsFile]:
+    def family(self, cls: str, first: _CsFile | None = None) -> list[_CsFile]:
         """The class, its partial parts and its base classes (four levels), the script file first."""
-        out: List[_CsFile] = [first] if first is not None else []
+        out: list[_CsFile] = [first] if first is not None else []
         name = cls
         for _ in range(5):
             files = self.class_files(name)
@@ -1100,11 +1099,11 @@ class _Tracer:
             name = base
         return out
 
-    def derived(self, cls: str) -> List[_CsFile]:
+    def derived(self, cls: str) -> list[_CsFile]:
         rx = re.compile(r"\bclass\s+\w+\s*(?:<[^>{]*>)?\s*:\s*(?:[\w.]+\.)?" + re.escape(cls) + r"\b")
         return [self.files[i] for i in sorted(self.with_token(cls)) if rx.search(self.files[i].text)]
 
-    def member_decl(self, files: Sequence[_CsFile], name: str) -> Optional[Tuple[_CsFile, bool, bool, str]]:
+    def member_decl(self, files: Sequence[_CsFile], name: str) -> tuple[_CsFile, bool, bool, str] | None:
         """(file, static, shared, declaring class) of a class level field or property, shared being anything not private."""
         rx = re.compile(r"(?m)^[ \t]*(?:\[[^\]\n]*\][ \t]*)*((?:(?:public|private|protected|internal|static|readonly|const|new|"
                         r"volatile|override|virtual|abstract)[ \t]+)*)(" + _TYPE + r")[ \t]+" + re.escape(name) + r"[ \t]*(?:=|;|\{|=>|,)")
@@ -1121,13 +1120,13 @@ class _Tracer:
         return None
 
     @staticmethod
-    def _type_at(cf: _CsFile, pos: int) -> Tuple[str, str]:
+    def _type_at(cf: _CsFile, pos: int) -> tuple[str, str]:
         """Kind and name of the innermost block around pos ('type' when pos sits at class level)."""
         for o, _c in _enclosing(cf, pos):
             return _classify_header(_header(cf, o)[1])
         return "", ""
 
-    def _method_block(self, cf: _CsFile, pos: int) -> Optional[Tuple[int, int]]:
+    def _method_block(self, cf: _CsFile, pos: int) -> tuple[int, int] | None:
         for o, c in _enclosing(cf, pos):
             if _classify_header(_header(cf, o)[1])[0] in ("method", "property", "accessor"):
                 return o, c
@@ -1142,15 +1141,15 @@ class _Tracer:
         return ""
 
     # -- fields ------------------------------------------------------------
-    def field_trace(self, cls: str, fld: str, script: Optional[_CsFile]) -> Dict[str, Any]:
+    def field_trace(self, cls: str, fld: str, script: _CsFile | None) -> dict[str, Any]:
         """Loads, direct uses and opaque uses of one localized field."""
         ck = (cls, fld)
         if ck in self._field_cache:
             return self._field_cache[ck]
-        res: Dict[str, Any] = {"loads": [], "direct": [], "opaque": False}
+        res: dict[str, Any] = {"loads": [], "direct": [], "opaque": False}
         self._field_cache[ck] = res
         own = self.family(cls, script)
-        refs: List[Tuple[_CsFile, int, int]] = []
+        refs: list[tuple[_CsFile, int, int]] = []
         rx = re.compile(r"\b" + re.escape(fld) + r"\b")
         for cf in own:
             cf.prepare()
@@ -1186,8 +1185,8 @@ class _Tracer:
                 res["opaque"] = True
         return res
 
-    def _record(self, res: Dict[str, Any], cf: _CsFile, a0: int, b0: int, lo: int, shape: str,
-                flow: Tuple[str, str, bool], via: str, display: str) -> None:
+    def _record(self, res: dict[str, Any], cf: _CsFile, a0: int, b0: int, lo: int, shape: str,
+                flow: tuple[str, str, bool], via: str, display: str) -> None:
         """File one text value, a load into a variable or member, or a direct use of the text in place."""
         kind, name, local = flow
         if kind == "init":
@@ -1204,7 +1203,7 @@ class _Tracer:
         else:
             res["direct"].append((cf, a0, b0, display))
 
-    def _subscription(self, res: Dict[str, Any], cf: _CsFile, k: int, own: Sequence[_CsFile]) -> None:
+    def _subscription(self, res: dict[str, Any], cf: _CsFile, k: int, own: Sequence[_CsFile]) -> None:
         """StringChanged += handler. The handler's parameter carries the text."""
         m = cf.masked
         lm = re.match(r"\s*(?:\(\s*(?:string\s+)?([A-Za-z_]\w*)\s*\)|([A-Za-z_]\w*))\s*=>\s*", m[k:k + 200])
@@ -1235,7 +1234,7 @@ class _Tracer:
                 return
         res["opaque"] = True
 
-    def _param_flows(self, res: Dict[str, Any], cf: _CsFile, param: str, start: int, end: int, floor: int) -> None:
+    def _param_flows(self, res: dict[str, Any], cf: _CsFile, param: str, start: int, end: int, floor: int) -> None:
         if param == "_":
             return
         for pm in re.finditer(r"\b" + re.escape(param) + r"\b", cf.masked[start:end]):
@@ -1247,7 +1246,7 @@ class _Tracer:
             self._record(res, cf, a0, b0, lo, shape, _flow(cf, lo, hi, floor), "StringChanged", param)
 
     # -- variables ---------------------------------------------------------
-    def var_trace(self, load: Dict[str, Any], cls: str, own: Sequence[_CsFile]) -> Dict[str, Any]:
+    def var_trace(self, load: dict[str, Any], cls: str, own: Sequence[_CsFile]) -> dict[str, Any]:
         """Reads of the variable a text was loaded into. sites are listed, maybe counts reads that may be other members."""
         cf, name = load["cf"], load["var"]
         mb = self._method_block(cf, load["pos"])
@@ -1255,7 +1254,7 @@ class _Tracer:
         if not local and mb is not None and load["via"] != "return":
             local = bool(re.search(r"(?:\bvar|\bstring)\s+" + re.escape(name) + r"\s*[=;]", cf.masked[mb[0]:load["pos"]]))
         if local and mb is not None:
-            ck: Tuple[Any, ...] = ("local", cf.rel, mb[0], name)
+            ck: tuple[Any, ...] = ("local", cf.rel, mb[0], name)
             if ck not in self._var_cache:
                 rx = re.compile(r"\b" + re.escape(name) + r"\b")
                 sites = [(cf, m.start(), m.end(), name) for m in rx.finditer(cf.masked, load["pos"], mb[1])
@@ -1281,11 +1280,11 @@ class _Tracer:
             self._var_cache[ck] = self._member_reads(files, dcls, name, static, shared, "static" if static else "field")
         return self._var_cache[ck]
 
-    def _member_reads(self, own: Sequence[_CsFile], cls: str, name: str, static: bool, shared: bool, scope: str) -> Dict[str, Any]:
+    def _member_reads(self, own: Sequence[_CsFile], cls: str, name: str, static: bool, shared: bool, scope: str) -> dict[str, Any]:
         files = list(own)
         if shared:
             files += [g for g in self.derived(cls) if g not in files]
-        sites: List[Tuple[_CsFile, int, int, str]] = []
+        sites: list[tuple[_CsFile, int, int, str]] = []
         maybe = 0
         display = f"{cls}.{name}" if static else name
         rx = re.compile(r"\b" + re.escape(name) + r"\b")
@@ -1330,7 +1329,7 @@ class _Tracer:
         return {"scope": scope, "sites": sites, "maybe": maybe, "display": display}
 
     # -- sites -------------------------------------------------------------
-    def site(self, cf: _CsFile, a0: int, b0: int, display: str) -> Dict[str, Any]:
+    def site(self, cf: _CsFile, a0: int, b0: int, display: str) -> dict[str, Any]:
         ck = (cf.rel, a0, display)
         if ck in self._site_cache:
             return self._site_cache[ck]
@@ -1339,7 +1338,7 @@ class _Tracer:
         method, trigger = _context(cf, lo, _stmt_start(cf, lo))
         when = _ternary(cf, lo)
         trigger = ([when] if when else []) + trigger[:2] if when else trigger
-        out: Dict[str, Any] = {"file": cf.rel, "line": cf.line(a0), "text": cf.line_text(a0), "variable": display,
+        out: dict[str, Any] = {"file": cf.rel, "line": cf.line(a0), "text": cf.line_text(a0), "variable": display,
                                "method": method, "trigger": trigger, "concat": bool(shape)}
         if shape:
             out["shape"] = shape
@@ -1355,9 +1354,9 @@ class _Tracer:
         return out
 
     # -- keys --------------------------------------------------------------
-    def key_trace(self, usages: Sequence[Dict[str, Any]], scripts: Dict[Tuple[str, str], Path], root: Path) -> Dict[str, Any]:
-        loads: List[Dict[str, Any]] = []
-        raw: List[Tuple[_CsFile, int, int, str]] = []
+    def key_trace(self, usages: Sequence[dict[str, Any]], scripts: dict[tuple[str, str], Path], root: Path) -> dict[str, Any]:
+        loads: list[dict[str, Any]] = []
+        raw: list[tuple[_CsFile, int, int, str]] = []
         dead = bool(usages)
         for u in usages:
             script = scripts.get((u["class"], u["field"]))
@@ -1386,7 +1385,7 @@ class _Tracer:
                 raw += vt["sites"]
                 if vt["sites"] or vt["maybe"] or vt["scope"] in ("unknown", "member"):
                     dead = False
-        seen: Dict[Tuple[str, int, str], Tuple[_CsFile, int, int, str]] = {}
+        seen: dict[tuple[str, int, str], tuple[_CsFile, int, int, str]] = {}
         for cf, a0, b0, disp in raw:
             seen.setdefault((cf.rel, cf.line(a0), disp), (cf, a0, b0, disp))
         order = sorted(seen, key=lambda k: (_is_debug(seen[k][0], seen[k][1]), k))    # player facing sites first
@@ -1394,7 +1393,7 @@ class _Tracer:
         return {"loads": loads, "uses": uses, "uses_total": len(order), "loaded_not_shown": dead and bool(loads)}
 
 
-def trace_uses(root: Path, keys: Dict[str, Dict[str, Any]], scripts: Dict[Tuple[str, str], Path], limit: int) -> Dict[str, Any]:
+def trace_uses(root: Path, keys: dict[str, dict[str, Any]], scripts: dict[tuple[str, str], Path], limit: int) -> dict[str, Any]:
     """Add loads, uses, uses_total and loaded_not_shown to every key. Returns the use_trace header of key_usage.json."""
     tracer = _Tracer(root, limit)
     for info in keys.values():
@@ -1404,10 +1403,10 @@ def trace_uses(root: Path, keys: Dict[str, Dict[str, Any]], scripts: Dict[Tuple[
             "loaded_not_shown": sum(1 for i in keys.values() if i["loaded_not_shown"])}
 
 
-def summary(scan: Dict[str, Any], wanted: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+def summary(scan: dict[str, Any], wanted: Sequence[str] | None = None) -> dict[str, Any]:
     """Coverage numbers, per table counts and the main classes per table."""
     keys = scan["keys"]
-    per_table: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"keys": 0, "used": 0, "classes": Counter()})
+    per_table: dict[str, dict[str, Any]] = defaultdict(lambda: {"keys": 0, "used": 0, "classes": Counter()})
     for k, info in keys.items():
         t = per_table[info["table"]]
         t["keys"] += 1
@@ -1424,7 +1423,7 @@ def summary(scan: Dict[str, Any], wanted: Optional[Sequence[str]] = None) -> Dic
         out["with_uses"] = sum(1 for i in keys.values() if i.get("uses"))
         out["loaded_not_shown"] = sorted(k for k, i in keys.items() if i.get("loaded_not_shown"))
     if wanted is not None:
-        shared_names: Dict[str, List[str]] = defaultdict(list)  # a plain name two tables share stands for each of its labels
+        shared_names: dict[str, list[str]] = defaultdict(list)  # a plain name two tables share stands for each of its labels
         for k, info in keys.items():
             if info.get("name"):
                 shared_names[info["name"]].append(k)
@@ -1434,7 +1433,7 @@ def summary(scan: Dict[str, Any], wanted: Optional[Sequence[str]] = None) -> Dic
     return out
 
 
-def render_summary(scan: Dict[str, Any], s: Dict[str, Any]) -> str:
+def render_summary(scan: dict[str, Any], s: dict[str, Any]) -> str:
     """scan_summary.md in the house style (no semicolons, dashes or colons inside sentences)."""
     lines = [f"# Context scan of {scan['project']}", "",
              f"Engine {scan['engine']}. {s['keys']} keys in {len(scan['tables'])} string tables, {s['used']} of them have at least one usage in a prefab, scene or data asset.",
@@ -1491,7 +1490,7 @@ APPENDIX_HEADER = ("# Decisions of the existing {locale} version\n\n"
                    "does so to the last line.")
 
 
-@dataclass
+@dataclass(slots=True)
 class ContextPack:
     """CONTEXT_MAP.md, its per key line notes and the locale appendix, ready for model prompts.
 
@@ -1500,18 +1499,20 @@ class ContextPack:
     calibrated juror its answer key.
     """
     text: str = ""
-    notes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    notes: dict[str, dict[str, Any]] = field(default_factory=dict)
     appendix: str = ""
     locale: str = ""
     source: str = ""
     jury_text: str = ""                                                     # CONTEXT_MAP.jury.md, English
-    jury_notes: Dict[str, Dict[str, Any]] = field(default_factory=dict)     # line_notes.jury.json, English
+    jury_notes: dict[str, dict[str, Any]] = field(default_factory=dict)     # line_notes.jury.json, English
+    _plain: dict[str, str] = field(init=False, repr=False)
+    _jury_plain: dict[str, str] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._plain = _plain_labels(self.notes)
         self._jury_plain = _plain_labels(self.jury_notes)
 
-    def line(self, key: str, writer: bool = False) -> Dict[str, str]:
+    def line(self, key: str, writer: bool = False) -> dict[str, str]:
         """Context fields of one key (exact label, or a plain name that labels exactly one Table:Key).
 
         Jurors read the jury notes when they exist. The notes of the user's map are written in the user's language
@@ -1533,7 +1534,7 @@ class ContextPack:
             out += "\n" + APPENDIX_HEADER.format(locale=self.locale) + "\n\n" + self.appendix.strip() + "\n"
         return out
 
-    def enrich(self, items: Sequence[Dict[str, Any]], key_field: str = "key", writer: bool = False) -> int:
+    def enrich(self, items: Sequence[dict[str, Any]], key_field: str = "key", writer: bool = False) -> int:
         """Add a `context` object to every item that has none. Returns how many items got one."""
         n = 0
         for it in items:
@@ -1546,15 +1547,15 @@ class ContextPack:
         return n
 
 
-def _plain_labels(notes: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
-    plain: Dict[str, List[str]] = defaultdict(list)
+def _plain_labels(notes: dict[str, dict[str, Any]]) -> dict[str, str]:
+    plain: dict[str, list[str]] = defaultdict(list)
     for label in notes:
         if ":" in label:
             plain[label.split(":", 1)[1]].append(label)
     return {k: v[0] for k, v in plain.items() if len(v) == 1}
 
 
-def _load_notes(path: Path) -> Dict[str, Dict[str, Any]]:
+def _load_notes(path: Path) -> dict[str, dict[str, Any]]:
     if not path.is_file():
         return {}
     try:
@@ -1566,7 +1567,7 @@ def _load_notes(path: Path) -> Dict[str, Dict[str, Any]]:
     return {str(k): v for k, v in data.items() if isinstance(v, dict)}
 
 
-def load_context(map_path: Optional[Path], locale: str = "") -> ContextPack:
+def load_context(map_path: Path | None, locale: str = "") -> ContextPack:
     """ContextPack from CONTEXT_MAP.md and the files next to it.
 
     line_notes.json (scout notes), CONTEXT_MAP.<locale>.md (choices of an existing translation, writers only),
@@ -1609,7 +1610,7 @@ def target_only_words(rows: Sequence[Any]) -> set:
     return tgt - src
 
 
-def check_leak(pack: ContextPack, rows: Sequence[Any], quote_min: int = 25) -> Dict[str, Any]:
+def check_leak(pack: ContextPack, rows: Sequence[Any], quote_min: int = 25) -> dict[str, Any]:
     """What the jurors read against an existing translation. Words only that translation uses, and quoted source lines.
 
     The first calibration with a map passed partly on such words. Its scouts wrote the map in Turkish after reading the
@@ -1617,11 +1618,11 @@ def check_leak(pack: ContextPack, rows: Sequence[Any], quote_min: int = 25) -> D
     line only 115 times and with the literal line only 18 times).
     """
     vocab = target_only_words(rows)
-    texts: List[Tuple[str, str]] = [("map", pack.jury_text or pack.text)]
+    texts: list[tuple[str, str]] = [("map", pack.jury_text or pack.text)]
     for key in (pack.jury_notes or pack.notes):
         texts.append((key, " ".join(pack.line(key).values())))
     hits: Counter = Counter()
-    first: Dict[str, str] = {}
+    first: dict[str, str] = {}
     leaky_notes = 0
     for name, text in texts:
         found = _words(text) & vocab
@@ -1637,14 +1638,14 @@ def check_leak(pack: ContextPack, rows: Sequence[Any], quote_min: int = 25) -> D
             "notes_with_leaks": leaky_notes, "notes": len(texts) - 1, "quoted_source_lines": quoted}
 
 
-def locale_tables(shared: Path) -> Dict[str, Path]:
+def locale_tables(shared: Path) -> dict[str, Path]:
     """Locale code -> StringTable asset of the collection whose Shared Data asset is shared (they sit in one folder).
 
     An AssetTable collection (textures and other assets by GUID) gives none, its entries are no text for a scout."""
     meta = shared.with_name(shared.name + ".meta")
     m = re.search(r"guid: (\w+)", read_text(meta)) if meta.is_file() else None
     shared_guid = m.group(1) if m else ""
-    out: Dict[str, Path] = {}
+    out: dict[str, Path] = {}
     for f in sorted(shared.parent.glob("*.asset")):
         if f == shared:
             continue
@@ -1658,13 +1659,13 @@ def locale_tables(shared: Path) -> Dict[str, Path]:
     return out
 
 
-def table_texts(asset: Path) -> Dict[str, str]:
+def table_texts(asset: Path) -> dict[str, str]:
     """Key id -> text of a Unity StringTable asset, line and paragraph breaks intact."""
     data = parse_unity_yaml(read_text(asset).lstrip("﻿"))
     return {e["id"]: e["text"] or "" for e in data["entries"] if e["id"] is not None and e["text"] is not None}
 
 
-def load_slice_spec(path: Path) -> Dict[str, List[str]]:
+def load_slice_spec(path: Path) -> dict[str, list[str]]:
     """{slice name: [table name or glob, ...]} from a JSON file."""
     if not path.is_file():
         raise L10nError(f"--slices file not found: {path}")
@@ -1682,15 +1683,15 @@ def load_slice_spec(path: Path) -> Dict[str, List[str]]:
     return spec
 
 
-def build_slices(scan: Dict[str, Any], tables: Dict[str, Dict[str, Any]], spec: Dict[str, List[str]], source_locale: str,
-                 target_locale: Optional[str] = None, ref_meta: Optional[Dict[str, Dict[str, Any]]] = None
-                 ) -> Tuple[Dict[str, List[Dict[str, Any]]], Dict[str, Any]]:
+def build_slices(scan: dict[str, Any], tables: dict[str, dict[str, Any]], spec: dict[str, list[str]], source_locale: str,
+                 target_locale: str | None = None, ref_meta: dict[str, dict[str, Any]] | None = None
+                 ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
     """Scout inputs, one list of rows per slice, read from the project's own string tables.
 
     Every table lands in exactly one slice (a table claimed twice is an input error), tables no slice
     claims go to the slice 'unassigned', so no key is ever lost on the way to the scouts.
     """
-    assign: Dict[str, str] = {}
+    assign: dict[str, str] = {}
     for name, globs in spec.items():
         hit = [t for t in scan["tables"] if any(fnmatch.fnmatchcase(t, g) for g in globs)]
         if not hit:
@@ -1700,8 +1701,8 @@ def build_slices(scan: Dict[str, Any], tables: Dict[str, Dict[str, Any]], spec: 
                 raise L10nError(f"table {t} is claimed by slice '{assign[t]}' and by slice '{name}', every key must land in exactly one slice")
             assign[t] = name
     locales = [source_locale] + ([target_locale] if target_locale and target_locale != source_locale else [])
-    texts: Dict[Tuple[str, str], Dict[str, str]] = {}
-    missing_locales: List[str] = []
+    texts: dict[tuple[str, str], dict[str, str]] = {}
+    missing_locales: list[str] = []
     for t in scan["tables"]:
         found = locale_tables(tables[t]["shared"])
         for loc in locales:
@@ -1711,11 +1712,11 @@ def build_slices(scan: Dict[str, Any], tables: Dict[str, Dict[str, Any]], spec: 
                 continue
             ids = tables[t]["ids"]
             texts[(t, loc)] = {ids[kid]: txt for kid, txt in table_texts(found[loc]).items() if kid in ids}
-    out: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    out: dict[str, list[dict[str, Any]]] = defaultdict(list)
     ref_meta = ref_meta or {}
     for key, info in sorted(scan["keys"].items(), key=lambda kv: (kv[1]["table"], kv[0])):
         t = info["table"]
-        row: Dict[str, Any] = {"key": key, "table": t}
+        row: dict[str, Any] = {"key": key, "table": t}
         for loc in locales:
             row[loc] = texts[(t, loc)].get(key, "")
         meta = ref_meta.get(key) or ref_meta.get(info.get("name", ""), {})
@@ -1734,12 +1735,12 @@ def build_slices(scan: Dict[str, Any], tables: Dict[str, Dict[str, Any]], spec: 
     return dict(out), stats
 
 
-def check_slices(folder: Path) -> Dict[str, Dict[str, Any]]:
+def check_slices(folder: Path) -> dict[str, dict[str, Any]]:
     """Coverage of the scout reports. Every key of <slice>.input.json must sit in exactly one entry of <slice>.report.json."""
     inputs = sorted(folder.glob("*.input.json"))
     if not inputs:
         raise L10nError(f"{folder}: no <slice>.input.json files, run --slices first")
-    res: Dict[str, Dict[str, Any]] = {}
+    res: dict[str, dict[str, Any]] = {}
     for inp in inputs:
         name = inp.name[: -len(".input.json")]
         try:
@@ -1859,10 +1860,10 @@ def main() -> int:
     if args.use_sites < 0:
         raise L10nError("--use-sites must be 0 or more")
     spec = load_slice_spec(Path(args.slices)) if args.slices else None
-    tables: Dict[str, Dict[str, Any]] = {}
+    tables: dict[str, dict[str, Any]] = {}
     scan = scan_unity(project, args.code_lines, tables, args.use_sites)
     wanted = None
-    ref_meta: Dict[str, Dict[str, Any]] = {}
+    ref_meta: dict[str, dict[str, Any]] = {}
     if args.keys_from:
         ref = Path(args.keys_from)
         if not ref.is_file():
@@ -1884,7 +1885,7 @@ def main() -> int:
     if wanted is not None:
         lines.append(f"  keys of {Path(args.keys_from).name}: {s['wanted']}, without a usage: {len(s['wanted_missing'])}")
     lines.append(f"  wrote {out / 'key_usage.json'} and {out / 'scan_summary.md'}")
-    payload: Dict[str, Any] = {"tool": TOOL, "version": __version__, "project": scan["project"], "summary": s}
+    payload: dict[str, Any] = {"tool": TOOL, "version": __version__, "project": scan["project"], "summary": s}
     if spec is not None:
         slices, stats = build_slices(scan, tables, spec, args.source_locale, args.locale, ref_meta)
         sdir = out / "slices"

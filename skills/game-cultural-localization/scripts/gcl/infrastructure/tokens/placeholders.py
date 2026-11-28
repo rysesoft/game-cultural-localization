@@ -1,9 +1,7 @@
 """Strategy + Registry implementation for engine placeholder extraction and comparison."""
-from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import Dict, List, Optional, Tuple
 
 from gcl.domain.errors import L10nError
 from gcl.domain.models import PlaceholderSet
@@ -13,7 +11,7 @@ __layer__ = "infrastructure"
 __pattern__ = "Strategy and Registry"
 __owns__ = "pluggable placeholder parsing for unity, unreal, godot, icu, printf and python"
 
-PLACEHOLDER_STYLES: Tuple[str, ...] = ("auto", "unity", "unreal", "godot", "icu", "printf", "python")
+PLACEHOLDER_STYLES: tuple[str, ...] = ("auto", "unity", "unreal", "godot", "icu", "printf", "python")
 BACKTICK = "\x60"
 PRINTF_PH_RE = re.compile(
     r"%(?:(?P<pos>\d+)\$)?(?:\((?P<name>\w+)\))?[-+#0']*(?:\d+|\*)?(?:\.(?:\d+|\*))?"
@@ -24,8 +22,8 @@ _ICU_QUOTED_RE = re.compile(r"'[^']*'")
 _IDENT_RE = re.compile(r"^(?:[A-Za-z_][\w.]*|\d+)$")
 
 
-def _brace_groups(text: str, escape: str) -> List[str]:
-    groups: List[str] = []
+def _brace_groups(text: str, escape: str) -> list[str]:
+    groups: list[str] = []
     depth, start, i, n = 0, -1, 0, len(text)
     while i < n:
         ch = text[i]
@@ -52,10 +50,10 @@ def _slot_id(inner: str) -> str:
     return (m.group(1) if m else inner).strip()
 
 
-def _extract_brace_slots(text: str, escape: str, strip_icu_quotes: bool) -> Tuple[Tuple[str, ...], Tuple[str, ...]]:
+def _extract_brace_slots(text: str, escape: str, strip_icu_quotes: bool) -> tuple[tuple[str, ...], tuple[str, ...]]:
     src = _ICU_QUOTED_RE.sub(lambda m: m.group(0) if ("{" not in m.group(0) and "}" not in m.group(0)) else "", text) if strip_icu_quotes else text
-    top: List[str] = []
-    nested: List[str] = []
+    top: list[str] = []
+    nested: list[str] = []
     for inner in _brace_groups(src, escape):
         sid = _slot_id(inner)
         if sid == "" and "{" not in inner:
@@ -74,7 +72,7 @@ def _extract_brace_slots(text: str, escape: str, strip_icu_quotes: bool) -> Tupl
     return tuple(top), tuple(sorted(set(nested)))
 
 
-def _extract_printf(text: str) -> Tuple[str, ...]:
+def _extract_printf(text: str) -> tuple[str, ...]:
     return tuple(m.group(0) for m in PRINTF_PH_RE.finditer(_PRINTF_ESCAPE_RE.sub("", text)))
 
 
@@ -98,7 +96,7 @@ class PlaceholderRegistry:
     """OCP registry allowing custom placeholder styles without touching extract_placeholders."""
 
     def __init__(self) -> None:
-        self._strategies: Dict[str, PlaceholderStrategy] = {}
+        self._strategies: dict[str, PlaceholderStrategy] = {}
 
     def register(self, strategy: PlaceholderStrategy) -> None:
         self._strategies[strategy.style] = strategy
@@ -127,7 +125,7 @@ for _strat in (
 def extract_placeholders(
     text: str,
     style: str = "auto",
-    extra_regex: Optional["re.Pattern[str]"] = None,
+    extra_regex: re.Pattern[str] | None = None,
     registry: PlaceholderRegistry = DEFAULT_PLACEHOLDER_REGISTRY,
 ) -> PlaceholderSet:
     """Extract placeholders via the registered strategy plus optional project regex."""
@@ -142,9 +140,9 @@ def _printf_positional(tok: str) -> bool:
     return bool(re.match(r"%\d+\$|%\(\w+\)", tok))
 
 
-def compare_placeholders(src: PlaceholderSet, dst: PlaceholderSet) -> List[str]:
+def compare_placeholders(src: PlaceholderSet, dst: PlaceholderSet) -> list[str]:
     """Return human readable mismatch descriptions between source and target placeholders."""
-    problems: List[str] = []
+    problems: list[str] = []
     if Counter(src.top) != Counter(dst.top):
         problems.append(f"brace placeholders src={list(src.top)} vs dst={list(dst.top)}")
     if set(src.nested) != set(dst.nested):

@@ -1,13 +1,47 @@
 """Immutable core domain entities and typed value objects."""
-from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, NamedTuple, Tuple
+from enum import StrEnum
+from typing import Any, NamedTuple
 
 __layer__ = "domain"
 __pattern__ = "Value Objects"
 __owns__ = "rows, tokens, findings, risks, votes and typed LLM messages"
+
+
+class JuryTier(StrEnum):
+    """Supported mixed family jury evaluation tiers."""
+
+    J1 = "J1"
+    J2 = "J2"
+    J3 = "J3"
+
+
+class LineStatus(StrEnum):
+    """Canonical localization workflow verdict statuses."""
+
+    PASS = "pass"
+    REWRITE_LIGHT = "rewrite_light"
+    REWRITE = "rewrite"
+    CRITICAL = "critical"
+    UNRESOLVED = "unresolved"
+
+
+class ThinkingEffort(StrEnum):
+    """Configurable per task reasoning effort levels."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class ServiceTier(StrEnum):
+    """Supported vendor request service tiers."""
+
+    STANDARD = "standard"
+    FLEX = "flex"
+    PRIORITY = "priority"
 
 
 class Row(NamedTuple):
@@ -15,14 +49,14 @@ class Row(NamedTuple):
     key: str
     src: str
     dst: str
-    meta: Dict[str, Any]
+    meta: dict[str, Any]
 
 
 class PlaceholderSet(NamedTuple):
     """Placeholders extracted from one string."""
-    top: Tuple[str, ...]
-    nested: Tuple[str, ...]
-    printf: Tuple[str, ...]
+    top: tuple[str, ...]
+    nested: tuple[str, ...]
+    printf: tuple[str, ...]
 
 
 class Tag(NamedTuple):
@@ -36,9 +70,9 @@ class Tag(NamedTuple):
 class GlossaryTerm(NamedTuple):
     """Compiled glossary term constraint."""
     source: str
-    targets: Tuple[str, ...]
-    forbidden: Tuple[str, ...]
-    regex: "re.Pattern[str]"
+    targets: tuple[str, ...]
+    forbidden: tuple[str, ...]
+    regex: re.Pattern[str]
 
 
 class Finding(NamedTuple):
@@ -49,7 +83,7 @@ class Finding(NamedTuple):
     message: str
     target: str
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         return {"severity": self.severity, "code": self.code, "key": self.key, "message": self.message, "target": self.target}
 
 
@@ -65,7 +99,7 @@ class Risk(NamedTuple):
     allowed: float
     reason: str
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "level": self.level, "key": self.key, "src": self.src, "dst": self.dst,
             "src_width": round(self.src_width, 2), "dst_width": round(self.dst_width, 2),
@@ -86,7 +120,7 @@ class ChatResult(NamedTuple):
     thought_tokens: int = 0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TokenUsage:
     """Normalized vendor usage counts, always including cache telemetry."""
     input_tokens: int = 0
@@ -96,7 +130,7 @@ class TokenUsage:
     thought_tokens: int = 0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RawVendorReply:
     """Uniform adapter output replacing loose 3 or 5 element tuples."""
     text: str
@@ -105,7 +139,7 @@ class RawVendorReply:
     batch_id: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ChatRequest:
     """Immutable LLM invocation request passed through the AOP CallAspect chain."""
     system: str
@@ -115,23 +149,23 @@ class ChatRequest:
     temperature: float = 0.0
     max_tokens: int = 2048
     json_mode: bool = False
-    options: Dict[str, Any] = field(default_factory=dict)
+    options: dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class JurorVote:
     """Immutable normalized juror vote."""
     score: int
     issue_type: str = "none"
     reason: str = ""
     suggested: str = ""
-    odd_words: Tuple[str, ...] = ()
+    odd_words: tuple[str, ...] = ()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "score": self.score, "issue_type": self.issue_type, "reason": self.reason,
             "suggested": self.suggested, "odd_words": list(self.odd_words),
         }
 
-    def with_update(self, *, score: int, issue_type: str, reason: str) -> "JurorVote":
+    def with_update(self, *, score: int, issue_type: str, reason: str) -> JurorVote:
         return JurorVote(score=score, issue_type=issue_type, reason=reason, suggested=self.suggested, odd_words=self.odd_words)

@@ -1,11 +1,10 @@
 """Architecture, SOLID, Clean Code, OOP and AOP contract verification tests."""
-from __future__ import annotations
 
 import os
 import sys
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import patch
 
 if str(Path(__file__).resolve().parent) not in sys.path:
@@ -99,7 +98,7 @@ class AopAspectsAndEventBusTests(unittest.TestCase):
         bus = InMemoryEventBus()
         blog = BudgetLog()
         bus.subscribe(BudgetLogSubscriber(blog))
-        state: Dict[str, Any] = {"model": "primary-id", "fallback_from": ""}
+        state: dict[str, Any] = {"model": "primary-id", "fallback_from": ""}
 
         def primary(_req: ChatRequest) -> ChatResult:
             raise ModelNotFoundError("secret-token not found")
@@ -142,7 +141,7 @@ class AopAspectsAndEventBusTests(unittest.TestCase):
 
         calls = 0
 
-        def work(batch: List[Dict[str, str]]) -> Dict[str, str]:
+        def work(batch: list[dict[str, str]]) -> dict[str, str]:
             nonlocal calls
             calls += 1
             return {it["key"]: "done" for it in batch}
@@ -199,10 +198,10 @@ class GoogleCacheAndRegistryTests(unittest.TestCase):
         class XyzFormat:
             suffixes = (".xyz",)
 
-            def read_rows(self, path: Path, options: TableLoadOptions) -> List[Row]:
+            def read_rows(self, path: Path, options: TableLoadOptions) -> list[Row]:
                 return []
 
-            def write_export(self, final_texts: Dict[str, str], template: Path, out_dir: Path, *, dst_field: str, key_field: str) -> ExportResult:
+            def write_export(self, final_texts: dict[str, str], template: Path, out_dir: Path, *, dst_field: str, key_field: str) -> ExportResult:
                 return ExportResult((), 0, ())
 
         freg = TableFormatRegistry()
@@ -235,10 +234,10 @@ class ContextSegregationAndCliBatchTests(unittest.TestCase):
             def system(self, base: str, writer: bool = False) -> str:
                 return base + (" + WRITER_APP" if writer else " + NEUTRAL")
 
-            def line(self, key: str, writer: bool = False) -> Dict[str, str]:
+            def line(self, key: str, writer: bool = False) -> dict[str, str]:
                 return {"scene": "cockpit", **({"tone": "slang"} if writer else {})}
 
-            def enrich(self, items: List[Dict[str, Any]], key_field: str = "key", writer: bool = False) -> int:
+            def enrich(self, items: list[dict[str, Any]], key_field: str = "key", writer: bool = False) -> int:
                 return len(items)
 
         pack = FakePack()

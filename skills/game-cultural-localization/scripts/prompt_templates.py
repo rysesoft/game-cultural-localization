@@ -8,16 +8,15 @@ prompts/<name>.md           locale independent prompt (literal)
 A template starts with a small frontmatter block (name, locale, language,
 empty_warmup, empty_contrastive) and uses {{SLOT}} placeholders.
 Known slots: LOCALE, WARMUP, CONTRASTIVE, plus any extra slot a caller passes.
-Python 3.9+, standard library only.
+Python 3.15, standard library only.
 """
-
-from __future__ import annotations
 
 import random
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, NamedTuple, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any, NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -32,18 +31,18 @@ class PromptTemplate(NamedTuple):
     name: str
     path: Path
     native: bool              # True when the file is written for this exact locale
-    meta: Dict[str, str]
+    meta: dict[str, str]
     body: str
 
 
-def parse_frontmatter(text: str) -> Tuple[Dict[str, str], str]:
+def parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     """Split '---\\nkey: value\\n---\\n' frontmatter from the body (flat string values only)."""
     if not text.startswith("---\n"):
         return {}, text
     end = text.find("\n---\n", 4)
     if end == -1:
         raise L10nError("prompt frontmatter is not closed with '---'")
-    meta: Dict[str, str] = {}
+    meta: dict[str, str] = {}
     for line in text[4:end].splitlines():
         if not line.strip() or line.lstrip().startswith("#"):
             continue
@@ -54,7 +53,7 @@ def parse_frontmatter(text: str) -> Tuple[Dict[str, str], str]:
     return meta, text[end + 5:].lstrip("\n")
 
 
-def find_prompt(name: str, locale: str, prompts_dir: Optional[Path] = None) -> PromptTemplate:
+def find_prompt(name: str, locale: str, prompts_dir: Path | None = None) -> PromptTemplate:
     """Locale file first, then <name>.generic.md, then <name>.md."""
     base = Path(prompts_dir) if prompts_dir else PROMPTS_DIR
     for candidate, native in ((base / f"{name}.{locale}.md", True), (base / f"{name}.generic.md", False), (base / f"{name}.md", False)):
@@ -64,11 +63,11 @@ def find_prompt(name: str, locale: str, prompts_dir: Optional[Path] = None) -> P
     raise L10nError(f"no prompt template '{name}' for {locale} in {base}")
 
 
-def render_prompt(name: str, locale: str, *, warmup: str = "", contrastive: str = "", extra: Optional[Dict[str, str]] = None,
-                  prompts_dir: Optional[Path] = None) -> str:
+def render_prompt(name: str, locale: str, *, warmup: str = "", contrastive: str = "", extra: dict[str, str] | None = None,
+                  prompts_dir: Path | None = None) -> str:
     """Fill the slots of a template; empty warm-up / contrastive blocks get the template's own 'none' sentence."""
     tpl = find_prompt(name, locale, prompts_dir)
-    values: Dict[str, str] = {
+    values: dict[str, str] = {
         "LOCALE": locale,
         "WARMUP": warmup.strip() or tpl.meta.get("empty_warmup", "-"),
         "CONTRASTIVE": contrastive.strip() or tpl.meta.get("empty_contrastive", "-"),
@@ -80,7 +79,7 @@ def render_prompt(name: str, locale: str, *, warmup: str = "", contrastive: str 
     return SLOT_RE.sub(lambda m: values[m.group(1)], tpl.body)
 
 
-def render_contrastive(pairs: Sequence[Dict[str, Any]], count: int = 8, seed: int = 1234) -> str:
+def render_contrastive(pairs: Sequence[dict[str, Any]], count: int = 8, seed: int = 1234) -> str:
     """Few-shot block of native / robot pairs ('✓ native' then '✗ robot'), seeded and stable."""
     usable = [p for p in pairs if str(p.get("native", "")).strip() and str(p.get("robot", "")).strip()
               and str(p["native"]).strip() != str(p["robot"]).strip()]

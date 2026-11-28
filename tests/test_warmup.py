@@ -1,11 +1,10 @@
 """P3: warmup_loader.py seeded, register-aware, source-balanced warm-up sampling."""
-from __future__ import annotations
 
 import json
 import re
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -19,7 +18,7 @@ from l10n_common import L10nError  # noqa: E402
 def make_pack(td: Path) -> Path:
     pack = td / "tr-TR"
     (pack / "local").mkdir(parents=True)
-    bundle: List[Dict[str, Any]] = []
+    bundle: list[dict[str, Any]] = []
     for i in range(30):
         bundle.append({"text": f"Ayar satırı {i}", "register": "ui", "source": "godot", "license_class": "bundle", "key": f"g{i}", "consistency": "single"})
     for i in range(12):

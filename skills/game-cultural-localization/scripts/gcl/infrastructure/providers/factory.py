@@ -1,8 +1,8 @@
 """Provider Router, Member and RoleProvider weaving AOP telemetry and fallback."""
-from __future__ import annotations
 
 import os
-from typing import Any, Dict, Iterable, List, Mapping, NamedTuple, Optional, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any, NamedTuple
 
 from gcl.aspects.call_chain import (
     AspectChain, BudgetTelemetryAspect, FallbackModelAspect, ProceedCall, ThinkingEffortAspect,
@@ -30,18 +30,18 @@ class Member(NamedTuple):
     alias: str
     family: str
     model: str
-    provider: "RoleProvider"
+    provider: RoleProvider
 
 
 class RoleProvider:
     """Role scoped LLMClient proxy applying FallbackModelAspect and BudgetTelemetryAspect."""
 
-    def __init__(self, router: "Router", spec: ModelSpec, role: str, *, task_role: Optional[str] = None) -> None:
+    def __init__(self, router: Router, spec: ModelSpec, role: str, *, task_role: str | None = None) -> None:
         self.router = router
         self.spec = spec
         self.role = role
         self.task_role = task_role or role
-        self.fallback_from: Optional[str] = None
+        self.fallback_from: str | None = None
         self._impl = router._batch_wrap(spec, router._instantiate(spec, self.task_role, force_thinking=False))
 
     @property
@@ -70,7 +70,7 @@ class RoleProvider:
         caps = getattr(self._impl, "capabilities", None)
         return caps if isinstance(caps, ProviderCapabilities) else ProviderCapabilities(batched=self.batched)
 
-    def _telemetry_meta(self) -> Dict[str, object]:
+    def _telemetry_meta(self) -> dict[str, object]:
         opts = getattr(self._impl, "options", None) or {}
         return {
             "role": self.role, "provider": self.spec.provider, "alias": self.spec.alias,
@@ -125,7 +125,7 @@ class Router:
         self.flex = bool(kw.get("flex", False))
         self.get_transport = kw.get("get_transport")
         self._registry: VendorRegistry = kw.get("registry") or DEFAULT_VENDOR_REGISTRY
-        self._collectors: Dict[str, BatchCollector] = {}
+        self._collectors: dict[str, BatchCollector] = {}
         self.scenario: FakeScenario = kw.get("scenario") or FakeScenario()
         self.budget = BudgetLog(kw.get("budget_log"))
         self.event_bus: InMemoryEventBus = kw.get("event_bus") or InMemoryEventBus()
@@ -134,8 +134,8 @@ class Router:
         self.env: Mapping[str, str] = env if env is not None else os.environ
         self.transport = kw.get("transport")
         self.sleep = kw.get("sleep")
-        self.notes: List[str] = []
-        self._fakes: Dict[str, FakeProvider] = {}
+        self.notes: list[str] = []
+        self._fakes: dict[str, FakeProvider] = {}
 
     def note(self, msg: str) -> None:
         if msg not in self.notes:
@@ -155,7 +155,7 @@ class Router:
         """Fail early with MissingKeyError when a required API key env var is absent."""
         self._missing_key_check(self.config.specs_for_roles(list(roles)))
 
-    def _thinking(self, spec: ModelSpec, role: str, force: bool) -> Optional[bool]:
+    def _thinking(self, spec: ModelSpec, role: str, force: bool) -> bool | None:
         """Resolve per role thinking setting via providers config without vendor hardcoding."""
         conf = self.config.providers.get(spec.provider, {}).get("thinking", {}) or {}
         value = conf.get(role, conf.get("default"))
@@ -171,7 +171,7 @@ class Router:
         self._missing_key_check([spec])
         pconf = self.config.providers[spec.provider]
         options = self._registry.build_options(spec, pconf, role, force_thinking, flex=self.flex)
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "api_key": str(self.env.get(pconf["env_key"], "")).strip(),
             "endpoint": pconf["endpoint"],
             "rps": float(pconf["rps"]),
@@ -190,29 +190,29 @@ class Router:
         conf = self.config.providers.get(spec.provider, {}).get("batch") or {}
         col = self._collectors.get(spec.alias)
         if col is None:
-            kw: Dict[str, Any] = {k: conf[k] for k in ("linger_s", "poll_s", "max_requests") if conf.get(k) is not None}
+            kw: dict[str, Any] = {k: conf[k] for k in ("linger_s", "poll_s", "max_requests") if conf.get(k) is not None}
             if self.sleep is not None:
                 kw["sleep"] = self.sleep
             col = BatchCollector(backend_cls(impl, get=self.get_transport), **kw)
             self._collectors[spec.alias] = col
         return col
 
-    def batch_jobs(self) -> List[Dict[str, Any]]:
+    def batch_jobs(self) -> list[dict[str, Any]]:
         return [j for c in self._collectors.values() for j in c.jobs]
 
-    def for_model(self, alias: str, role: str, *, task_role: Optional[str] = None) -> RoleProvider:
+    def for_model(self, alias: str, role: str, *, task_role: str | None = None) -> RoleProvider:
         if alias not in self.config.models:
             raise L10nError(f"unknown model alias '{alias}'; known: {', '.join(self.config.models)}")
         return RoleProvider(self, self.config.models[alias], role, task_role=task_role)
 
-    def for_role(self, role: str, *, task_role: Optional[str] = None) -> RoleProvider:
+    def for_role(self, role: str, *, task_role: str | None = None) -> RoleProvider:
         return RoleProvider(self, self.config.role_model(role), role, task_role=task_role)
 
-    def jury(self, tier: str, *, task_role: Optional[str] = None) -> List[Member]:
+    def jury(self, tier: str, *, task_role: str | None = None) -> list[Member]:
         return [
             Member(tier, i, spec.alias, spec.provider, spec.id, RoleProvider(self, spec, tier, task_role=task_role))
             for i, spec in enumerate(self.config.jury(tier))
         ]
 
-    def fake(self, alias: str) -> Optional[FakeProvider]:
+    def fake(self, alias: str) -> FakeProvider | None:
         return self._fakes.get(alias)

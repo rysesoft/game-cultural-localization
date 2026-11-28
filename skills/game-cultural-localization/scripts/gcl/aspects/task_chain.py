@@ -1,8 +1,8 @@
 """AOP TaskAspect chain for batch memoization, cache priming and parallel batch execution."""
-from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence, TypeVar, runtime_checkable
+from collections.abc import Callable, Sequence
+from typing import Any, Protocol, runtime_checkable
 
 from gcl.ports.storage import MemoRepository
 
@@ -10,28 +10,26 @@ __layer__ = "aspects"
 __pattern__ = "Decorator and Interceptor (AOP)"
 __owns__ = "memoization, cache priming and parallel execution around batched tasks"
 
-T = TypeVar("T")
-
 
 @runtime_checkable
 class TaskAspect(Protocol):
     """Interceptor wrapping single batch execution (e.g. memoization)."""
 
-    def wrap(self, tag: Any, fn: Callable[[Any], Dict[str, Any]]) -> Callable[[Any], Dict[str, Any]]: ...
+    def wrap(self, tag: Any, fn: Callable[[Any], dict[str, Any]]) -> Callable[[Any], dict[str, Any]]: ...
 
 
 class MemoizationTaskAspect:
     """Skips LLM calls for already completed batches via MemoRepository."""
 
-    def __init__(self, memo: Optional[MemoRepository]) -> None:
+    def __init__(self, memo: MemoRepository | None) -> None:
         self._memo = memo
 
-    def wrap(self, tag: Any, fn: Callable[[Any], Dict[str, Any]]) -> Callable[[Any], Dict[str, Any]]:
+    def wrap(self, tag: Any, fn: Callable[[Any], dict[str, Any]]) -> Callable[[Any], dict[str, Any]]:
         if self._memo is None:
             return fn
         memo = self._memo
 
-        def wrapped(batch: Any) -> Dict[str, Any]:
+        def wrapped(batch: Any) -> dict[str, Any]:
             k = memo.make_key(tag, batch)
             hit = memo.get(k)
             if hit is not None:
@@ -43,18 +41,18 @@ class MemoizationTaskAspect:
         return wrapped
 
 
-def run_batches_with_aspects(
+def run_batches_with_aspects[T](
     batches: Sequence[T],
-    fn: Callable[[T], Dict[str, Any]],
+    fn: Callable[[T], dict[str, Any]],
     *,
     workers: int = 1,
-    memo: Optional[MemoRepository] = None,
+    memo: MemoRepository | None = None,
     tag: Any = None,
     prime: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Execute batches through MemoizationTaskAspect and cache priming parallel pool."""
     call = MemoizationTaskAspect(memo).wrap(tag, fn)
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
     if int(workers) <= 1 or len(batches) <= 1:
         for b in batches:
             out.update(call(b))

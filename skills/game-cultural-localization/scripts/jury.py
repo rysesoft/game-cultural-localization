@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Tiered mixed-family jury CLI facade delegating to gcl.application.jury."""
-from __future__ import annotations
 
 import argparse
 import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Callable, Sequence
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -31,9 +31,9 @@ from warmup_loader import REGISTERS, load_warmup, render_warmup  # noqa: E402
 TOOL = "jury"
 
 
-def load_blind_slice(path: Path) -> Tuple[List[Dict[str, Any]], str]:
+def load_blind_slice(path: Path) -> tuple[list[dict[str, Any]], str]:
     """Entries {key, target, register, context...} of a blind slice; refuses any source column."""
-    entries: List[Dict[str, Any]] = []
+    entries: list[dict[str, Any]] = []
     source_file = path.name
     if path.suffix.lower() == ".json":
         data = load_json_data(path)
@@ -65,12 +65,12 @@ def load_blind_slice(path: Path) -> Tuple[List[Dict[str, Any]], str]:
     return entries, source_file
 
 
-def ban_hits(entries: Sequence[Dict[str, Any]], locale: str) -> Dict[str, List[Dict[str, str]]]:
+def ban_hits(entries: Sequence[dict[str, Any]], locale: str) -> dict[str, list[dict[str, str]]]:
     """Locale rule hits per key (target only)."""
     rules = lqa_linter.load_rules(locale)
     ids = {r.id for r in rules}
     rows = [Row(e["key"], "", e["target"], {"category": e.get("category") or e.get("register", "")}) for e in entries]
-    out: Dict[str, List[Dict[str, str]]] = {e["key"]: [] for e in entries}
+    out: dict[str, list[dict[str, str]]] = {e["key"]: [] for e in entries}
     for f in lqa_linter.lint_rows(rows, rules, lqa_linter.LintOptions(locale=locale, check_untranslated=False)):
         if f.code in ids:
             out[f.key].append({"rule": f.code, "severity": f.severity, "message": f.message})
@@ -78,11 +78,11 @@ def ban_hits(entries: Sequence[Dict[str, Any]], locale: str) -> Dict[str, List[D
 
 
 def build_system_prompt(
-    locale: str, entries: Sequence[Dict[str, Any]], pack_dir: Optional[Path], *, warmup: bool, warmup_count: int, shots: int, seed: int,
-) -> Tuple[str, Dict[str, Any]]:
+    locale: str, entries: Sequence[dict[str, Any]], pack_dir: Path | None, *, warmup: bool, warmup_count: int, shots: int, seed: int,
+) -> tuple[str, dict[str, Any]]:
     """Build critic prompt with language pack warm-up and contrastive few-shots."""
     warm, contrast = "", ""
-    info: Dict[str, Any] = {"warmup_lines": 0, "shots": 0, "langpack_version": None}
+    info: dict[str, Any] = {"warmup_lines": 0, "shots": 0, "langpack_version": None}
     if pack_dir is not None and pack_dir.is_dir():
         regs = sorted({e["register"] for e in entries}) or list(REGISTERS)
         if warmup and ((pack_dir / "warmup.jsonl").is_file() or (pack_dir / "local" / "warmup.jsonl").is_file()):
@@ -102,12 +102,12 @@ def build_system_prompt(
 
 
 def run_jury(
-    entries: Sequence[Dict[str, Any]], locale: str, router: Any, *, system: str, batch_size: Optional[int] = None,
-    budget_caps: bool = True, tm_lookup: Optional[Callable[[Dict[str, Any]], List[Dict[str, Any]]]] = None,
-    roundtrip_fn: Optional[Callable[[Sequence[Dict[str, Any]]], Dict[str, Dict[str, Any]]]] = None,
-    deliberator: Optional[Deliberator] = None, workers: int = 1, tally: Optional[EscalationTally] = None, memo: Any = None,
+    entries: Sequence[dict[str, Any]], locale: str, router: Any, *, system: str, batch_size: int | None = None,
+    budget_caps: bool = True, tm_lookup: Callable[[dict[str, Any]], list[dict[str, Any]]] | None = None,
+    roundtrip_fn: Callable[[Sequence[dict[str, Any]]], dict[str, dict[str, Any]]] | None = None,
+    deliberator: Deliberator | None = None, workers: int = 1, tally: EscalationTally | None = None, memo: Any = None,
     clean_light_pass: bool = False, item_memo: Any = None, salvage_truncated: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run J1-J3 escalation chain via gcl.application.jury.run_jury with target-only ban hits."""
     return _run_jury(
         entries, locale, router, system=system, batch_size=batch_size, budget_caps=budget_caps,
@@ -117,7 +117,7 @@ def run_jury(
     )
 
 
-def load_source_rows(path: Path, src_field: str, dst_field: Optional[str], key_field: str) -> Dict[str, str]:
+def load_source_rows(path: Path, src_field: str, dst_field: str | None, key_field: str) -> dict[str, str]:
     """key -> English source from the harness-side table (never shown to jurors)."""
     for col in ([dst_field] if dst_field else ["dst", "target"]):
         try:
@@ -186,7 +186,7 @@ def main() -> int:
         rt = router.config.roundtrip
         router.require(["roundtrip"])
 
-        def roundtrip_fn(lines: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        def roundtrip_fn(lines: Sequence[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             rows = [{"key": e["key"], "en": sources.get(e["key"], ""), "target": e["target"], "register": e["register"]} for e in lines]
             return roundtrip_evidence(rows, locale, router.for_role("roundtrip"), min_words=int(rt["min_words"]),
                                       registers=rt["registers"], threshold=threshold, workers=args.workers, memo=memo)
@@ -199,7 +199,7 @@ def main() -> int:
         tm = TranslationMemory(Path(args.tm))
         src_by_key = load_source_rows(Path(args.source_table), args.src_field, args.dst_field, args.key_field) if args.source_table else {}
 
-        def tm_lookup(entry: Dict[str, Any]) -> List[Dict[str, Any]]:
+        def tm_lookup(entry: dict[str, Any]) -> list[dict[str, Any]]:
             src = src_by_key.get(entry["key"], "")
             return tm.neighbors(locale, src if src else entry["target"], on="src" if src else "dst",
                                 category=str(entry.get("category") or ""), speaker=str(entry.get("speaker") or ""), exclude_key=entry["key"])
@@ -217,7 +217,7 @@ def main() -> int:
     return write_report(args, locale, out, source_file, info, router, res)
 
 
-def write_report(args: Any, locale: str, out: Path, source_file: str, info: Dict[str, Any], router: Any, res: Dict[str, Any]) -> int:
+def write_report(args: Any, locale: str, out: Path, source_file: str, info: dict[str, Any], router: Any, res: dict[str, Any]) -> int:
     """Write the verdict file and print summary; return exit code."""
     doc = {
         "locale": locale, "source_file": source_file, "langpack_version": info.get("langpack_version"),

@@ -1,5 +1,4 @@
 """P4: native critic prompts (tr-TR, de-DE), literal.md, template rendering and the house punctuation style."""
-from __future__ import annotations
 
 import re
 import unittest

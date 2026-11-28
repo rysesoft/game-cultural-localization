@@ -1,9 +1,8 @@
 """Unity Localization YAML StringTable reader and AssetTable guard."""
-from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from gcl.domain.errors import L10nError
 from gcl.domain.models import Row
@@ -44,7 +43,7 @@ def _quote_end(text: str, quote: str) -> int:
     return -1
 
 
-def _fold_flow(lines: List[str], double: bool) -> str:
+def _fold_flow(lines: list[str], double: bool) -> str:
     out, empties = lines[0].rstrip(" \t"), 0
     for ln in lines[1:]:
         s = ln.strip(" \t")
@@ -60,8 +59,8 @@ def _fold_flow(lines: List[str], double: bool) -> str:
     return out + "\n" * empties
 
 
-def _block_scalar(v: str, following: List[str], indent: int) -> Tuple[str, int]:
-    block: List[str] = []
+def _block_scalar(v: str, following: list[str], indent: int) -> tuple[str, int]:
+    block: list[str] = []
     for ln in following:
         if ln.strip() == "" or (len(ln) - len(ln.lstrip(" "))) > indent:
             block.append(ln)
@@ -76,7 +75,7 @@ def _block_scalar(v: str, following: List[str], indent: int) -> Tuple[str, int]:
     return text + ("" if v.endswith("-") else "\n"), len(block)
 
 
-def _yaml_scalar(value: str, following: List[str], indent: int, content_indent: Optional[int] = None) -> Tuple[str, int]:
+def _yaml_scalar(value: str, following: list[str], indent: int, content_indent: int | None = None) -> tuple[str, int]:
     """Decode single/multiline quoted, block or plain YAML scalar returning (text, lines_consumed)."""
     v = value.strip()
     if v[:1] in ("'", '"'):
@@ -97,7 +96,7 @@ def _yaml_scalar(value: str, following: List[str], indent: int, content_indent: 
     if len(v) >= 2 and v[0] == "'" and v[-1] == "'":
         return v[1:-1].replace("''", "'"), 0
     if v and content_indent is not None:
-        more: List[str] = []
+        more: list[str] = []
         for ln in following:
             if ln.strip() == "" or (len(ln) - len(ln.lstrip(" "))) > content_indent:
                 more.append(ln)
@@ -121,10 +120,10 @@ def is_unity_asset_table(text: str) -> bool:
     return bool(values) and all(_ASSET_GUID_RE.fullmatch(v) for v in values)
 
 
-def parse_unity_yaml(text: str) -> Dict[str, Any]:
+def parse_unity_yaml(text: str) -> dict[str, Any]:
     """Extract entries, locale and collection name from a Unity StringTable or SharedData."""
     lines, entries = text.splitlines(), []
-    cur: Optional[Dict[str, Any]] = None
+    cur: dict[str, Any] | None = None
     locale_code = name = None
     i = 0
     while i < len(lines):
@@ -150,7 +149,7 @@ def parse_unity_yaml(text: str) -> Dict[str, Any]:
     return {"entries": entries, "locale": locale_code, "name": name, "kind": kind}
 
 
-def load_unity_rows(path: Path, src_input: Optional[Path], shared_table: Optional[Path]) -> List[Row]:
+def load_unity_rows(path: Path, src_input: Path | None, shared_table: Path | None) -> list[Row]:
     """Load Row entries from a Unity Localization .asset table."""
     raw = read_text_bom(path)
     if is_unity_asset_table(raw):
@@ -167,7 +166,7 @@ def load_unity_rows(path: Path, src_input: Optional[Path], shared_table: Optiona
         if src_data["kind"] != "string_table":
             raise L10nError(f"{src_input}: no 'm_Localized' entries found in --src-input table")
         src_texts = {e["id"]: e["text"] or "" for e in src_data["entries"] if e["id"] is not None}
-    rows: List[Row] = []
+    rows: list[Row] = []
     for idx, e in enumerate(data["entries"]):
         if e["text"] is not None:
             eid = e["id"] or f"row_{idx}"

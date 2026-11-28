@@ -19,17 +19,16 @@ Usage:
 
 Exit codes: 0 set written, 1 set written but fewer usable pairs than --min-pairs,
 2 usage or input error (missing column, unknown locale, missing API key).
-Python 3.9+, standard library only.
+Python 3.15, standard library only.
 """
-
-from __future__ import annotations
 
 import argparse
 import json
 import random
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -46,12 +45,12 @@ DEFAULT_MIN_PAIRS = 30
 DEFAULT_SEED = 1234
 
 
-def load_reference_rows(path: Path, locale: str, src_field: str = "en", dst_field: Optional[str] = None,
-                        key_field: str = "key") -> List[Dict[str, Any]]:
+def load_reference_rows(path: Path, locale: str, src_field: str = "en", dst_field: str | None = None,
+                        key_field: str = "key") -> list[dict[str, Any]]:
     """Reference rows {key, en, native, register, speaker, archetype}; the target column is probed when not given."""
     candidates = [dst_field] if dst_field else [locale, "dst", "target", locale.split("-")[0]]
     rows = None
-    last: Optional[L10nError] = None
+    last: L10nError | None = None
     for col in candidates:
         try:
             rows = load_table(path, src_field, col, key_field)
@@ -70,7 +69,7 @@ def load_reference_rows(path: Path, locale: str, src_field: str = "en", dst_fiel
     return out
 
 
-def select_rows(rows: Sequence[Dict[str, Any]], limit: int, seed: int) -> List[Dict[str, Any]]:
+def select_rows(rows: Sequence[dict[str, Any]], limit: int, seed: int) -> list[dict[str, Any]]:
     """Seeded subset of at most `limit` rows, kept in input order (0 = all rows)."""
     if not limit or limit >= len(rows):
         return list(rows)
@@ -78,15 +77,15 @@ def select_rows(rows: Sequence[Dict[str, Any]], limit: int, seed: int) -> List[D
     return [rows[i] for i in idx]
 
 
-def build_contrastive(rows: Sequence[Dict[str, Any]], locale: str, robot_provider: Any, unknown_providers: Dict[str, Any],
-                      batch_size: Optional[int] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+def build_contrastive(rows: Sequence[dict[str, Any]], locale: str, robot_provider: Any, unknown_providers: dict[str, Any],
+                      batch_size: int | None = None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Generate robot and unknown lines and assemble the pairs. Returns (pairs, stats)."""
     src_rows = [{"key": r["key"], "source": r["en"], "register": r["register"]} for r in rows]
     robot = translate_rows(robot_provider, src_rows, locale, task="literal", system=render_prompt("literal", locale), batch_size=batch_size)
-    unknown: Dict[str, Dict[str, str]] = {}
+    unknown: dict[str, dict[str, str]] = {}
     for model_id, prov in unknown_providers.items():
         unknown[model_id] = translate_rows(prov, src_rows, locale, task="pass1", batch_size=batch_size)
-    pairs: List[Dict[str, Any]] = []
+    pairs: list[dict[str, Any]] = []
     dropped = {"robot_equals_native": 0, "robot_broke_placeholders": 0}
     for r in rows:
         rb = robot[r["key"]]
@@ -133,7 +132,7 @@ def main() -> int:
     if not rows:
         raise L10nError(f"{args.input}: no row has both an English source and a target")
     router = make_router(args, ["literal"] + ([] if args.no_unknown else ["pass1"]), default_budget_path(out))
-    unknown: Dict[str, Any] = {}
+    unknown: dict[str, Any] = {}
     if not args.no_unknown:
         aliases = [a.strip() for a in args.unknown_models.split(",") if a.strip()] if args.unknown_models else [router.config.role_model("pass1").alias]
         for alias in aliases:

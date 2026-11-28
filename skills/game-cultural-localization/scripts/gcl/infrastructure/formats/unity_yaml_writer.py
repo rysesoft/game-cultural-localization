@@ -1,9 +1,9 @@
 """Unity StringTable export writer and strict double-quoted YAML verifier."""
-from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 from gcl.domain.errors import L10nError
 from gcl.domain.locales import normalize_locale
@@ -47,7 +47,7 @@ def strict_dq(value: str) -> str:
     v = value.strip()
     if len(v) < 2 or v[0] != '"' or v[-1] != '"':
         raise ValueError("not a double quoted scalar on one line")
-    out: List[str] = []
+    out: list[str] = []
     i, end = 1, len(v) - 1
     while i < end:
         ch = v[i]
@@ -74,10 +74,10 @@ def strict_dq(value: str) -> str:
     return "".join(out)
 
 
-def check_written(text: str, written: Dict[str, str]) -> List[str]:
+def check_written(text: str, written: dict[str, str]) -> list[str]:
     """Return key ids whose rewritten m_Localized fails strict YAML decoding."""
-    seen: Dict[str, bool] = {}
-    cur: Optional[str] = None
+    seen: dict[str, bool] = {}
+    cur: str | None = None
     for ln in text.splitlines():
         m = _ENTRY_ID.match(ln)
         if m:
@@ -93,10 +93,10 @@ def check_written(text: str, written: Dict[str, str]) -> List[str]:
 
 
 def _append_missing_entries(
-    out: List[str],
-    missing: List[str],
-    id_texts: Dict[str, str],
-    written: Dict[str, str],
+    out: list[str],
+    missing: list[str],
+    id_texts: dict[str, str],
+    written: dict[str, str],
     quote_fn: Any = yaml_dq,
 ) -> None:
     idx = next((n for n, ln in enumerate(out) if _TABLE_DATA.match(ln)), None)
@@ -113,7 +113,7 @@ def _append_missing_entries(
                 break
             last = j
         j += 1
-    block: List[str] = []
+    block: list[str] = []
     for kid in missing:
         block += [f"{base}- m_Id: {kid}", f"{base}  m_Localized: {quote_fn(id_texts[kid])}", f"{base}  m_Metadata:", f"{base}    m_Items: []"]
         written[kid] = id_texts[kid]
@@ -122,8 +122,8 @@ def _append_missing_entries(
 
 def unity_rewrite(
     text: str,
-    id_texts: Dict[str, str],
-    written: Optional[Dict[str, str]] = None,
+    id_texts: dict[str, str],
+    written: dict[str, str] | None = None,
     quote_fn: Any = yaml_dq,
 ) -> str:
     """Replace m_Localized values for known ids and append entries for missing ids."""
@@ -155,7 +155,7 @@ def unity_rewrite(
     return nl.join(out)
 
 
-def unity_tables(template_dir: Path, locale: str) -> List[Path]:
+def unity_tables(template_dir: Path, locale: str) -> list[Path]:
     """Return every Unity StringTable under template_dir matching locale (excluding AssetTables)."""
     found = []
     for p in sorted(template_dir.rglob("*.asset")):
@@ -166,7 +166,7 @@ def unity_tables(template_dir: Path, locale: str) -> List[Path]:
     return found
 
 
-def shared_of(table: Path, text: str, override: Optional[Path]) -> Path:
+def shared_of(table: Path, text: str, override: Path | None) -> Path:
     if override is not None:
         return override
     m = re.search(r"m_SharedData: \{fileID: -?\d+, guid: (\w+)", text)
@@ -177,9 +177,9 @@ def shared_of(table: Path, text: str, override: Optional[Path]) -> Path:
     raise L10nError(f"{table}: its Shared Data asset was not found next to it, pass --shared-table")
 
 
-def assign_unity_keys(final: Dict[str, str], tables: Dict[Path, Tuple[str, Dict[str, str]]]) -> Dict[Path, Dict[str, str]]:
+def assign_unity_keys(final: dict[str, str], tables: dict[Path, tuple[str, dict[str, str]]]) -> dict[Path, dict[str, str]]:
     """Map localized keys to matching Unity table ids using Table:Key disambiguation."""
-    per_table: Dict[Path, Dict[str, str]] = {t: {} for t in tables}
+    per_table: dict[Path, dict[str, str]] = {t: {} for t in tables}
     labelled = {k.split(":", 1)[1]: k.split(":", 1)[0] for k in final if ":" in k}
     for key, text in final.items():
         hits = []
@@ -198,18 +198,18 @@ def assign_unity_keys(final: Dict[str, str], tables: Dict[Path, Tuple[str, Dict[
     return per_table
 
 
-def _unity_key_in(key: str, table: Tuple[str, Dict[str, str]]) -> bool:
+def _unity_key_in(key: str, table: tuple[str, dict[str, str]]) -> bool:
     collection, name_to_id = table
     return key in name_to_id or (":" in key and key.split(":", 1)[0] == collection and key.split(":", 1)[1] in name_to_id)
 
 
 def export_unity(
-    final: Dict[str, str],
+    final: dict[str, str],
     templates: Sequence[Path],
-    shared_override: Optional[Path],
+    shared_override: Path | None,
     out_dir: Path,
     quote_fn: Any = yaml_dq,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Write modified Unity StringTables after strict roundtrip YAML verification."""
     tables, texts = {}, {}
     for t in templates:
@@ -225,7 +225,7 @@ def export_unity(
     for t, id_texts in per_table.items():
         if not id_texts:
             continue
-        written: Dict[str, str] = {}
+        written: dict[str, str] = {}
         new = unity_rewrite(texts[t], id_texts, written, quote_fn=quote_fn)
         placed += len(id_texts)
         if new == texts[t]:

@@ -1,20 +1,18 @@
 """Observer / EventBus domain event definitions and bus protocol."""
-from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Protocol, Tuple, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 __layer__ = "ports"
 __pattern__ = "Observer"
 __owns__ = "domain event types and event bus interface"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DomainEvent:
     """Base immutable domain event."""
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LLMCallObserved(DomainEvent):
     """Emitted after each completed or failed provider invocation."""
     role: str
@@ -36,7 +34,7 @@ class LLMCallObserved(DomainEvent):
     error: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FallbackSwitched(DomainEvent):
     """Emitted when a role fails over to a backup model alias."""
     role: str
@@ -46,12 +44,12 @@ class FallbackSwitched(DomainEvent):
     note: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class StageCompleted(DomainEvent):
     """Emitted when a pipeline stage finishes."""
     stage: str
     batch_index: int
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 @runtime_checkable

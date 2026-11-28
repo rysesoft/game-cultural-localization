@@ -1,7 +1,7 @@
 """Segregated context view ports enforcing source blindness at the interface boundary."""
-from __future__ import annotations
 
-from typing import Dict, Protocol, Sequence, Any, runtime_checkable
+from collections.abc import Sequence
+from typing import Protocol, Any, runtime_checkable
 
 __layer__ = "ports"
 __pattern__ = "Interface Segregation"
@@ -23,9 +23,9 @@ class BlindContextView(Protocol):
 
     def build_system(self, base: str) -> str: ...
 
-    def line_fields(self, key: str) -> Dict[str, str]: ...
+    def line_fields(self, key: str) -> dict[str, str]: ...
 
-    def enrich_entries(self, items: Sequence[Dict[str, Any]], key_field: str = "key") -> int: ...
+    def enrich_entries(self, items: Sequence[dict[str, Any]], key_field: str = "key") -> int: ...
 
 
 @runtime_checkable
@@ -40,4 +40,4 @@ class WriterContextView(Protocol):
 
     def build_system(self, base: str) -> str: ...
 
-    def line_fields(self, key: str) -> Dict[str, str]: ...
+    def line_fields(self, key: str) -> dict[str, str]: ...

@@ -1,10 +1,11 @@
 """Builder Pattern orchestrating Phase 0 through Phase 3 via segregated PipelineHooks."""
-from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from itertools import batched
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from gcl.application.jury.policy import EscalationTally
 from gcl.domain.errors import L10nError
@@ -24,20 +25,20 @@ __owns__ = "stepwise Phase 0 to Phase 3 pipeline assembly with clean teardown"
 ITEMS_RESUME_FILE = "model_items.json"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _PromptBundle:
     """Run wide stable prompts assembled once per Phase 0 preparation."""
 
     pass1_system: str
-    wctx: Optional[WriterContextView]
-    bctx: Optional[BlindContextView]
+    wctx: WriterContextView | None
+    bctx: BlindContextView | None
     critic_base: str
     critic_system: str
-    critic_info: Dict[str, Any]
+    critic_info: dict[str, Any]
     p2_system: str
 
 
-@dataclass
+@dataclass(slots=True)
 class _RunEnv:
     """Internal runtime bundle assembled by LocalizationPipelineBuilder.prepare()."""
 
@@ -46,30 +47,30 @@ class _RunEnv:
     router: Any
     opts: JuryPipelineOptions
     state: PipelineState
-    rows: List[Any]
+    rows: list[Any]
     pack_dir: Path
     level: str
     tm: Any
     prompts: _PromptBundle
-    threshold: Optional[float]
+    threshold: float | None
     memo: Any
     item_memo: Any
     tally: EscalationTally
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _BatchArtifacts:
     """Intermediate per batch Phase 1 and Phase 2 jury outputs passed into Phase 2 rewrite."""
 
     n: int
     tag: str
     p1: Path
-    p1_rows: List[Dict[str, Any]]
+    p1_rows: list[dict[str, Any]]
     vpath: Path
-    verdict_doc: Dict[str, Any]
-    res: Dict[str, Any]
+    verdict_doc: dict[str, Any]
+    res: dict[str, Any]
     rec_start: int
-    jury_dup_to_canon: Dict[str, str]
+    jury_dup_to_canon: dict[str, str]
 
 
 class LocalizationPipelineBuilder:
@@ -78,15 +79,15 @@ class LocalizationPipelineBuilder:
     def __init__(self, hooks: PipelineHooks) -> None:
         self._h = hooks
 
-    def run(self, input_path: Path, locale: str, workdir: Path, router: Any, opts: JuryPipelineOptions) -> Dict[str, Any]:
+    def run(self, input_path: Path, locale: str, workdir: Path, router: Any, opts: JuryPipelineOptions) -> dict[str, Any]:
         env = self._prepare(input_path, locale, workdir, router, opts)
-        finals: List[Path] = []
-        batches: List[Dict[str, Any]] = []
-        halted: Optional[Dict[str, Any]] = None
+        finals: list[Path] = []
+        batches: list[dict[str, Any]] = []
+        halted: dict[str, Any] | None = None
         step = max(opts.batch_size, len(env.rows)) if (getattr(router, "batch", False) and opts.batch_size >= 200 and env.rows) else opts.batch_size
         try:
-            for i in range(0, len(env.rows), step):
-                batch_info, halted_info, final_path = self._run_batch(env, i // step + 1, env.rows[i:i + step])
+            for idx, batch_tuple in enumerate(batched(env.rows, step), start=1):
+                batch_info, halted_info, final_path = self._run_batch(env, idx, list(batch_tuple))
                 batches.append(batch_info)
                 if final_path is not None:
                     finals.append(final_path)
@@ -120,7 +121,7 @@ class LocalizationPipelineBuilder:
             state.say(f"Phase 0: resuming, {len(memo)} finished model batches in {RESUME_FILE}")
         return _RunEnv(locale, workdir, router, opts, state, rows, pack_dir, level, tm, prompts, threshold, memo, item_memo, EscalationTally())
 
-    def _open_tm(self, tm_path: Optional[Path], state: PipelineState) -> Any:
+    def _open_tm(self, tm_path: Path | None, state: PipelineState) -> Any:
         if tm_path is None:
             return None
         if not Path(tm_path).is_file():
@@ -129,7 +130,7 @@ class LocalizationPipelineBuilder:
         state.say(f"Phase 0: translation memory {Path(tm_path).name}")
         return tm
 
-    def _build_pass1_system(self, locale: str, pack_dir: Path, regs: List[str], state: PipelineState, opts: JuryPipelineOptions) -> str:
+    def _build_pass1_system(self, locale: str, pack_dir: Path, regs: list[str], state: PipelineState, opts: JuryPipelineOptions) -> str:
         warm = ""
         if pack_dir.is_dir() and ((pack_dir / "warmup.jsonl").is_file() or (pack_dir / "local" / "warmup.jsonl").is_file()):
             sample = self._h.load_warmup_sample(pack_dir, regs, 40, opts.seed)
@@ -142,7 +143,7 @@ class LocalizationPipelineBuilder:
         return sys_txt + "\n\n# Native warm-up (read aloud before translating)\n" + warm if warm else sys_txt
 
     def _prepare_prompts(
-        self, locale: str, rows: List[Any], pack_dir: Path, state: PipelineState, opts: JuryPipelineOptions, router: Any,
+        self, locale: str, rows: list[Any], pack_dir: Path, state: PipelineState, opts: JuryPipelineOptions, router: Any,
     ) -> _PromptBundle:
         regs = sorted({self._h.register_of(r) for r in rows}) or ["ui"]
         pass1_system = self._build_pass1_system(locale, pack_dir, regs, state, opts)
@@ -168,12 +169,12 @@ class LocalizationPipelineBuilder:
         p2_system, _unused_pick = self._h.build_pass2_systems(locale, pack_dir, regs, opts.seed)
         return _PromptBundle(pass1_system, wctx, bctx, critic_base, critic_system, critic_info, p2_system)
 
-    def _run_batch(self, env: _RunEnv, n: int, batch: List[Any]) -> tuple:
+    def _run_batch(self, env: _RunEnv, n: int, batch: list[Any]) -> tuple:
         tag = f"{env.locale}_{n:02d}"
         rec_start = len(env.router.budget.records)
         p1, p1_rows, targets, plan = self._phase1_batch(env, n, batch)
         verdict_doc, vpath, res, dup_map = self._phase2_jury(env, n, tag, p1, batch, targets, plan)
-        batch_info: Dict[str, Any] = {"batch": n, "verdicts": vpath.name, "stats": res["stats"]}
+        batch_info: dict[str, Any] = {"batch": n, "verdicts": vpath.name, "stats": res["stats"]}
         if res["halted"]:
             env.state.say(f"Phase 2: batch {n:02d} STOPPED by the budget cap at {res['halted']['stage']}. {res['halted']['reason']}")
             sources_map = {r.key: {"en": r.src, "target": targets[r.key]} for r in batch}
@@ -185,11 +186,11 @@ class LocalizationPipelineBuilder:
         batch_info.update({"rewrites": rpath.name, "final": final.name, "report": f"changes_{tag}.md", "unresolved": len(rep["unresolved"])})
         return batch_info, None, final
 
-    def _phase1_batch(self, env: _RunEnv, n: int, batch: List[Any]) -> tuple:
+    def _phase1_batch(self, env: _RunEnv, n: int, batch: list[Any]) -> tuple:
         opts = env.opts
         dedup_env = DedupEnv(env.locale, self._h.register_of, env.prompts.wctx, env.tm, self._h.parity, opts)
         plan = plan_pass1_batch(batch, dedup_env)
-        translated: Dict[str, str] = {}
+        translated: dict[str, str] = {}
         if plan.canon_payloads:
             translated = self._h.translate_rows(
                 env.router.for_role("pass1"), plan.canon_payloads, env.locale, task="pass1",
@@ -204,7 +205,7 @@ class LocalizationPipelineBuilder:
         p1_rows = [{"key": r.key, "category": r.meta.get("category", ""), "speaker": r.meta.get("speaker", ""), opts.src_field: r.src, env.locale: targets[r.key]} for r in batch]
         p1.write_text(json.dumps(p1_rows, ensure_ascii=False, indent=2), encoding="utf-8")
         rag = sum(1 for pr in plan.canon_payloads if pr.get("tm"))
-        notes: List[str] = []
+        notes: list[str] = []
         if env.tm is not None:
             notes.append(f"TM neighbours for {rag}")
         if plan.tm_count:
@@ -216,7 +217,7 @@ class LocalizationPipelineBuilder:
         return p1, p1_rows, targets, plan
 
     def _phase2_jury(
-        self, env: _RunEnv, n: int, tag: str, p1: Path, batch: List[Any], targets: Dict[str, str], plan: Pass1BatchPlan,
+        self, env: _RunEnv, n: int, tag: str, p1: Path, batch: list[Any], targets: dict[str, str], plan: Pass1BatchPlan,
     ) -> tuple:
         opts = env.opts
         blind = env.workdir / f"blind_{tag}.json"
@@ -227,7 +228,7 @@ class LocalizationPipelineBuilder:
         critic_system = env.prompts.critic_system
         src_by_key = {r.key: r.src for r in batch}
         jplan = plan_jury_batch(jentries, plan.tm_verdicts)
-        raw_res: Optional[Dict[str, Any]] = None
+        raw_res: dict[str, Any] | None = None
         if jplan.unique_entries:
             rt_cfg = env.router.config.roundtrip
             rt_fn = lambda lines: self._h.roundtrip_evidence(
@@ -283,9 +284,9 @@ class LocalizationPipelineBuilder:
         env.state.say(f"Phase 2: batch {art.n:02d} change report changes_{art.tag}.md ({rep['changed']} changes, {len(rep['unresolved'])} unresolved)")
         return final, rep, rpath
 
-    def _finalize(self, env: _RunEnv, finals: List[Path], batches: List[Dict[str, Any]], halted: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def _finalize(self, env: _RunEnv, finals: list[Path], batches: list[dict[str, Any]], halted: dict[str, Any] | None) -> dict[str, Any]:
         if halted:
-            summary: Dict[str, Any] = {
+            summary: dict[str, Any] = {
                 "errors": 0, "warnings": 0, "high": 0, "warn": 0, "missing_glyphs": 0,
                 "full_width_fallbacks": 0, "passed": False, "halted": True,
             }

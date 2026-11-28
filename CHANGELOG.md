@@ -2,6 +2,17 @@
 
 All notable changes to this plugin are documented here. The version number lives in `plugin.json` and `scripts/l10n_common.py`.
 
+## [3.3.0] 2026-11-28
+
+Native Python 3.15 language and standard library modernization across all `scripts/`, `gcl/` and `tests/` modules, zero external dependencies.
+
+### Changed
+- Removed legacy `from __future__ import annotations`, legacy `typing` collection/union imports (`Dict`, `List`, `Tuple`, `Optional`, `Union`, `TypeVar`, `Generic`) and string quoted annotations in favor of Python 3.15 PEP 649 deferred evaluation, PEP 604 `|` unions and PEP 695 `[T]` and `type` syntax.
+- Converted all 43 `@dataclass` classes across `gcl/`, outer CLI modules and tests to `slots=True` to eliminate per instance `__dict__` overhead.
+- Replaced `JuryTier`, `LineStatus`, `ThinkingEffort` and `ServiceTier` plain constants with `enum.StrEnum` and updated tier/error/task dispatch (`status_for`, `RuleAppliesSpec`, `FakeProvider`) to `match / case`.
+- Adopted C backed Python 3.12 to 3.15 stdlib primitives (`itertools.batched`, `Path.walk()`, `hashlib.file_digest` and native `compression.zstd` for `.zst` `AtomicJsonMemoRepository` caches) plus `concurrent.futures.InterpreterPoolExecutor` parallelism in multi batch `orchestrator_stub.phase3_gate`.
+- Added automated AST enforcement (`scripts/dev/py315_audit.py` invoked by `verify_architecture.py`) banning `from __future__ import annotations`, legacy `typing` aliases, unslotted `@dataclass`, `os.walk`, quoted type annotations and old `Python 3.8..3.14` doc headers.
+
 ## [3.2.0] 2026-11-28
 
 Phase M cost, token and request optimization suite on top of the SOLID, OOP and AOP architecture under `skills/game-cultural-localization/scripts/gcl/`, targeting Python 3.15 with zero external dependencies.

@@ -1,5 +1,4 @@
 """Shared helpers for the test-suite (stdlib unittest only)."""
-from __future__ import annotations
 
 import json
 import os
@@ -7,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 TESTS_DIR = Path(__file__).resolve().parent
 ROOT = TESTS_DIR.parent
@@ -20,7 +19,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 
-def run_cli(script: str, *args: str, utf8: bool = True, env_extra: Optional[Dict[str, str]] = None, cwd: Optional[Path] = None) -> Tuple[int, str, str]:
+def run_cli(script: str, *args: str, utf8: bool = True, env_extra: dict[str, str] | None = None, cwd: Path | None = None) -> tuple[int, str, str]:
     """Run a script in a fresh interpreter with stdout/stderr captured as a pipe (no console)."""
     cmd = [PY]
     if utf8:

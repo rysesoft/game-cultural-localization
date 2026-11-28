@@ -1,11 +1,10 @@
 """P9: jury.py (J1-J3 tiers, A4 agreement rule, critical shortcut, budget caps, B3.4 verdicts)."""
-from __future__ import annotations
 
 import json
 import re
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -34,7 +33,7 @@ SCENARIO = {"scores": [
 ]}
 
 
-def slice_doc(extra_fillers: int = 16) -> Dict[str, Any]:
+def slice_doc(extra_fillers: int = 16) -> dict[str, Any]:
     entries = [
         {"key": "OK", "category": "ui", "target": "Kaydet"},
         {"key": "LIGHT", "category": "ui", "target": "Ayarları aç"},
@@ -47,7 +46,7 @@ def slice_doc(extra_fillers: int = 16) -> Dict[str, Any]:
     return {"locale": "tr-TR", "source_file": "pass1_tr-TR_01.json", "blind": True, "entries": entries}
 
 
-def run(scenario: Dict[str, Any], doc: Dict[str, Any], caps: bool = True, sample: Any = (0, 0), **kw: Any) -> Dict[str, Any]:
+def run(scenario: dict[str, Any], doc: dict[str, Any], caps: bool = True, sample: Any = (0, 0), **kw: Any) -> dict[str, Any]:
     """sample = (min_judged, min_escalated) of the budget caps, None keeps the bundled config."""
     router = Router(load_providers_config(), dry_run=True, scenario=FakeScenario(scenario))
     if sample is not None:
@@ -116,7 +115,7 @@ class EverydayWordTests(unittest.TestCase):
         esc = {x["key"]: x for x in run(three, slice_doc())["verdicts"]}["ESC"]
         self.assertEqual((esc["final_tier"], esc["status"], esc["score"]), ("J3", "rewrite", 3))   # J3 agrees, Pass 2 rewrites it
         import pass2_rewrite as p2
-        rows: List[Dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
         real = p2.pass2_candidates
 
         def spy(provider, rws, locale, **kw):
@@ -143,7 +142,7 @@ class EverydayWordTests(unittest.TestCase):
             self.assertEqual(len(memo), 2)                                              # a new batch, not the old answer
 
 
-def mock_dict(d: Dict[str, Any], key: str, value: Any) -> Any:
+def mock_dict(d: dict[str, Any], key: str, value: Any) -> Any:
     from unittest import mock
     return mock.patch.dict(d, {key: value})
 
@@ -181,7 +180,7 @@ class RunTests(unittest.TestCase):
         self.assertEqual(v["OK"]["evidence"]["roundtrip"], {"applied": False, "reason": "not_needed"})
 
     def test_roundtrip_evidence_only_for_j3_lines(self):
-        seen: List[str] = []
+        seen: list[str] = []
 
         def rt(lines):
             seen.extend(e["key"] for e in lines)

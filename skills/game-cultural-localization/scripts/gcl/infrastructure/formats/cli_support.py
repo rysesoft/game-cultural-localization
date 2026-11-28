@@ -1,10 +1,9 @@
 """Shared CLI argument parsing, exit code boundary and JSON/text reporting helpers."""
-from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from gcl.domain.errors import EXIT_USAGE, L10nError, __version__
 
@@ -45,7 +44,7 @@ def resolve_input(ap: Any, args: Any, name: str = "input") -> str:
     return value
 
 
-def emit_report(text: str, payload: Dict[str, Any], json_opt: Any, output: Optional[str]) -> None:
+def emit_report(text: str, payload: dict[str, Any], json_opt: Any, output: str | None) -> None:
     """Print or write text and optional JSON report."""
     if json_opt:
         body = json.dumps(payload, ensure_ascii=False, indent=2)

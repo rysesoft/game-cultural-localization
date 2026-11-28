@@ -1,10 +1,9 @@
 """Shared domain exceptions and CLI exit code constants."""
-from __future__ import annotations
 
 __layer__ = "domain"
 __pattern__ = "Domain Exceptions"
 __owns__ = "exit codes, version string and core exception hierarchy"
-__version__ = "3.2.0"
+__version__ = "3.3.0"
 MIN_PYTHON = (3, 15)
 
 EXIT_OK = 0
@@ -14,7 +13,6 @@ EXIT_USAGE = 2
 
 class L10nError(Exception):
     """A usage or input error that ends CLI tools with EXIT_USAGE (2)."""
-
 
 class ProviderError(L10nError):
     """A provider call failed after retries or hit a non retryable HTTP status."""

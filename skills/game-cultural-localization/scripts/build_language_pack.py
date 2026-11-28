@@ -31,10 +31,8 @@ Usage:
 
 Exit codes: 0 pack built, 1 pack built but a source could not be loaded (not cached, download
 failed, hash mismatch) or no row survived, 2 usage or input error.
-Python 3.9+, standard library only.
+Python 3.15, standard library only.
 """
-
-from __future__ import annotations
 
 import argparse
 import hashlib
@@ -48,7 +46,8 @@ import urllib.parse
 import urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -89,7 +88,7 @@ KNOWN_LIMITS = [
 # Manifest
 # --------------------------------------------------------------------------- #
 
-def load_manifest(path: Path) -> Dict[str, Any]:
+def load_manifest(path: Path) -> dict[str, Any]:
     """Load and structurally validate sources.manifest.json (policy problems are layer 1 drops, not errors)."""
     data = load_json_data(path)
     if not isinstance(data, dict) or not isinstance(data.get("sources"), list):
@@ -129,7 +128,7 @@ _PROP_ESC = {"n": "\n", "t": "\t", "r": "\r", "f": "\f"}
 
 
 def _prop_unescape(s: str) -> str:
-    def repl(m: "re.Match[str]") -> str:
+    def repl(m: re.Match[str]) -> str:
         c = m.group(1)
         if c.startswith("u") and len(c) == 5:
             return chr(int(c[1:], 16))
@@ -137,9 +136,9 @@ def _prop_unescape(s: str) -> str:
     return re.sub(r"\\(u[0-9a-fA-F]{4}|.)", repl, s)
 
 
-def parse_properties(text: str) -> Dict[str, str]:
+def parse_properties(text: str) -> dict[str, str]:
     """Java .properties: key = value, '#' / '!' comments, backslash line continuation, \\uXXXX escapes."""
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     buf = ""
     for raw in text.splitlines():
         line = raw.lstrip()
@@ -156,9 +155,9 @@ def parse_properties(text: str) -> Dict[str, str]:
     return out
 
 
-def flatten_json(obj: Any, prefix: str = "") -> Dict[str, str]:
+def flatten_json(obj: Any, prefix: str = "") -> dict[str, str]:
     """Nested JSON object -> {'a.b.c': 'text'} (lists are indexed, non-strings skipped)."""
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     if isinstance(obj, dict):
         for k, v in obj.items():
             out.update(flatten_json(v, f"{prefix}.{k}" if prefix else str(k)))
@@ -170,9 +169,9 @@ def flatten_json(obj: Any, prefix: str = "") -> Dict[str, str]:
     return out
 
 
-def parse_openttd(text: str) -> Dict[str, str]:
+def parse_openttd(text: str) -> dict[str, str]:
     """OpenTTD lang/*.txt: 'STR_NAME   :text' lines; case variants (STR_X.case) and pragmas are skipped."""
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     for line in text.splitlines():
         m = re.match(r"^(STR_[A-Z0-9_]+)\s*:(.*)$", line)
         if m:
@@ -184,12 +183,12 @@ _FTL_MSG = re.compile(r"^([A-Za-z][\w-]*)\s*=\s?(.*)$")
 _FTL_ATTR = re.compile(r"^\s+\.([A-Za-z][\w-]*)\s*=\s?(.*)$")
 
 
-def parse_ftl(text: str) -> Dict[str, str]:
+def parse_ftl(text: str) -> dict[str, str]:
     """Fluent .ftl: messages, multi-line values and attributes (msg.attr); select expressions are skipped."""
-    out: Dict[str, str] = {}
-    base: Optional[str] = None
-    key: Optional[str] = None
-    buf: List[str] = []
+    out: dict[str, str] = {}
+    base: str | None = None
+    key: str | None = None
+    buf: list[str] = []
 
     def flush() -> None:
         if key is None:
@@ -230,7 +229,7 @@ def parse_ftl(text: str) -> Dict[str, str]:
     return out
 
 
-def _paired(fmt: str, target_text: str, en_text: str) -> List[Tuple[str, str, str, Dict[str, Any]]]:
+def _paired(fmt: str, target_text: str, en_text: str) -> list[tuple[str, str, str, dict[str, Any]]]:
     parser = {"properties": parse_properties, "openttd": parse_openttd, "ftl": parse_ftl}.get(fmt)
     if fmt == "json_nested":
         try:
@@ -257,7 +256,7 @@ def cache_path(cache_dir: Path, source_id: str, url: str) -> Path:
     return cache_dir.joinpath(source_id, *safe)
 
 
-def fetch_file(entry_url: Optional[str], entry_path: Optional[str], base_dir: Path, cache_dir: Path, source_id: str,
+def fetch_file(entry_url: str | None, entry_path: str | None, base_dir: Path, cache_dir: Path, source_id: str,
                offline: bool, refresh: bool) -> bytes:
     """Return the bytes of a corpus file from a local path, the cache, or (online) a download into the cache."""
     if entry_path:
@@ -287,6 +286,11 @@ def fetch_file(entry_url: Optional[str], entry_path: Optional[str], base_dir: Pa
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def file_sha256(path: Path) -> str:
+    with path.open("rb") as fh:
+        return hashlib.file_digest(fh, "sha256").hexdigest()
 
 
 # --------------------------------------------------------------------------- #
@@ -344,7 +348,7 @@ def norm_words(text: str) -> str:
 # Layers
 # --------------------------------------------------------------------------- #
 
-def layer2_mechanical(cands: List[Dict[str, Any]], locale: str) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+def layer2_mechanical(cands: list[dict[str, Any]], locale: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Empty, fuzzy, untranslated, length ratio, ban list / technical (lqa_linter), duplicate within one source.
 
     Identical pairs from different sources stay until layer 4, they are the evidence of cross-source agreement.
@@ -352,8 +356,8 @@ def layer2_mechanical(cands: List[Dict[str, Any]], locale: str) -> Tuple[List[Di
     the heuristics), its rule hits are listed under 'reference_exempt' so a rule that fights the studio voice shows up.
     """
     reasons: Counter = Counter()
-    stage: List[Dict[str, Any]] = []
-    ref_ratio: List[str] = []
+    stage: list[dict[str, Any]] = []
+    ref_ratio: list[str] = []
     for c in cands:
         en, tx = c["en"], c["text"]
         if not tx.strip() or not en.strip():
@@ -377,15 +381,15 @@ def layer2_mechanical(cands: List[Dict[str, Any]], locale: str) -> Tuple[List[Di
     index = {k: i for i, k in enumerate(row_keys)}
     rows = [Row(row_keys[i], c["en"], c["text"], {"category": c["register"]}) for i, c in enumerate(stage)]
     findings = lqa_linter.lint_rows(rows, rules, lqa_linter.LintOptions(locale=locale, check_untranslated=False))
-    banned: Dict[int, List[str]] = {}
+    banned: dict[int, list[str]] = {}
     broken = set()
     for f in findings:
         if f.code in rule_ids:
             banned.setdefault(index[f.key], []).append(f.code)
         elif f.severity == "ERR":
             broken.add(index[f.key])
-    kept: List[Dict[str, Any]] = []
-    ref_hits: List[Dict[str, str]] = []
+    kept: list[dict[str, Any]] = []
+    ref_hits: list[dict[str, str]] = []
     seen = set()
     for i, c in enumerate(stage):
         if i in banned:
@@ -408,7 +412,7 @@ def layer2_mechanical(cands: List[Dict[str, Any]], locale: str) -> Tuple[List[Di
                                        "by_rule": dict(sorted(Counter(h["rule"] for h in ref_hits).items()))}}
 
 
-def layer3_mt(cands: List[Dict[str, Any]], locale: str, provider: Any, min_words: int, bulk_limit: int = BULK_COMMIT_ROWS) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+def layer3_mt(cands: list[dict[str, Any]], locale: str, provider: Any, min_words: int, bulk_limit: int = BULK_COMMIT_ROWS) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Bulk-commit suspicion and (with a provider) verbatim back-translation detection; the reference is exempt."""
     reasons: Counter = Counter()
     per_commit = Counter((c["source"], c["commit"]) for c in cands if c.get("commit") and not c.get("reference"))
@@ -433,15 +437,15 @@ def layer3_mt(cands: List[Dict[str, Any]], locale: str, provider: Any, min_words
                   "bulk_commits": sorted(f"{s}:{c}" for s, c in bulk), "dropped": dict(sorted(reasons.items()))}
 
 
-def layer4_consistency(cands: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+def layer4_consistency(cands: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Label short terms trusted (3+ sources agree), disputed (sources disagree) or single; drop disputed rows."""
-    groups: Dict[str, Dict[str, set]] = defaultdict(lambda: defaultdict(set))
+    groups: dict[str, dict[str, set]] = defaultdict(lambda: defaultdict(set))
     for c in cands:
         if word_count(c["en"]) <= CONSISTENCY_MAX_WORDS:
             groups[norm_words(c["en"])][c["source"]].add(norm_words(c["text"]))
-    labels: Dict[str, str] = {}
-    ref_render: Dict[str, set] = {}
-    examples: List[Dict[str, Any]] = []
+    labels: dict[str, str] = {}
+    ref_render: dict[str, set] = {}
+    examples: list[dict[str, Any]] = []
     counts: Counter = Counter()
     for term, by_src in groups.items():
         renderings = set().union(*by_src.values())
@@ -454,7 +458,7 @@ def layer4_consistency(cands: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]
         else:
             labels[term] = "single"
         counts[labels[term]] += 1
-    kept: List[Dict[str, Any]] = []
+    kept: list[dict[str, Any]] = []
     dropped = 0
     for c in cands:
         term = norm_words(c["en"]) if word_count(c["en"]) <= CONSISTENCY_MAX_WORDS else None
@@ -474,8 +478,8 @@ def layer4_consistency(cands: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]
                   "examples_bundle": examples}
 
 
-def layer5_jury(cands: List[Dict[str, Any]], locale: str, members: Optional[Sequence[Any]], pass_min: int,
-                seed: int, sample_size: int) -> Tuple[List[Dict[str, Any]], Dict[str, Any], List[Dict[str, Any]]]:
+def layer5_jury(cands: list[dict[str, Any]], locale: str, members: Sequence[Any] | None, pass_min: int,
+                seed: int, sample_size: int) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
     """J1 pre-screen: keep a line only when all three members score >= pass_min. Returns kept, stats, sample rows."""
     if not members:
         return cands, {"applied": False, "in": len(cands), "out": len(cands), "dropped": {}}, []
@@ -504,10 +508,10 @@ def layer5_jury(cands: List[Dict[str, Any]], locale: str, members: Optional[Sequ
 # Build
 # --------------------------------------------------------------------------- #
 
-def load_reference(path: Path, locale: str, src_field: str, dst_field: Optional[str]) -> List[Dict[str, Any]]:
+def load_reference(path: Path, locale: str, src_field: str, dst_field: str | None) -> list[dict[str, Any]]:
     """Professional EN + target table (key, en, <locale>|dst, category, speaker, archetype)."""
     candidates = [dst_field] if dst_field else [locale, "dst", "target", locale.split("-")[0]]
-    last: Optional[L10nError] = None
+    last: L10nError | None = None
     for col in candidates:
         try:
             rows = load_table(path, src_field, col, "key")
@@ -525,13 +529,13 @@ def load_reference(path: Path, locale: str, src_field: str, dst_field: Optional[
     return out
 
 
-def collect_sources(manifest: Dict[str, Any], manifest_path: Path, locale: str, cache_dir: Path, offline: bool, refresh: bool,
-                    lock: bool) -> Tuple[List[Dict[str, Any]], Dict[str, Any], List[Dict[str, Any]], bool]:
+def collect_sources(manifest: dict[str, Any], manifest_path: Path, locale: str, cache_dir: Path, offline: bool, refresh: bool,
+                    lock: bool) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]], bool]:
     """Layer 1: select sources and parse their files. Returns candidates, layer stats, source records, manifest changed."""
-    cands: List[Dict[str, Any]] = []
-    dropped: List[Dict[str, Any]] = []
-    not_available: List[str] = []
-    records: List[Dict[str, Any]] = []
+    cands: list[dict[str, Any]] = []
+    dropped: list[dict[str, Any]] = []
+    not_available: list[str] = []
+    records: list[dict[str, Any]] = []
     changed = False
     sources_in = 0
     for src in manifest["sources"]:
@@ -554,7 +558,7 @@ def collect_sources(manifest: Dict[str, Any], manifest_path: Path, locale: str, 
             dropped.append({"id": sid, "reason": reason})
             continue
         file_records = []
-        rows: List[Tuple[str, str, str, Dict[str, Any]]] = []
+        rows: list[tuple[str, str, str, dict[str, Any]]] = []
         try:
             for f in files:
                 data = fetch_file(f.get("url"), f.get("path"), manifest_path.parent, cache_dir, sid, offline, refresh)
@@ -604,7 +608,7 @@ def collect_sources(manifest: Dict[str, Any], manifest_path: Path, locale: str, 
     return cands, stats, records, changed
 
 
-def dedupe_across_sources(cands: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
+def dedupe_across_sources(cands: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
     """Keep one copy of a target text: reference first, then bundle, then local class (stable otherwise)."""
     rank = {True: 0, False: 1}
     ordered = sorted(enumerate(cands), key=lambda ic: (rank[bool(ic[1].get("reference"))], 0 if ic[1]["license_class"] == "bundle" else 1, ic[0]))
@@ -619,12 +623,12 @@ def dedupe_across_sources(cands: List[Dict[str, Any]]) -> Tuple[List[Dict[str, A
     return [c for i, c in enumerate(cands) if i in keep_idx], len(cands) - len(keep_idx)
 
 
-def _jsonl(rows: Sequence[Dict[str, Any]]) -> str:
+def _jsonl(rows: Sequence[dict[str, Any]]) -> str:
     return "".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in rows)
 
 
-def write_pack(pack: Path, locale: str, kept: List[Dict[str, Any]], records: List[Dict[str, Any]], filters: Dict[str, Any],
-               sample: List[Dict[str, Any]], min_words: int, registers: Sequence[str], has_reference: bool) -> Dict[str, Any]:
+def write_pack(pack: Path, locale: str, kept: list[dict[str, Any]], records: list[dict[str, Any]], filters: dict[str, Any],
+               sample: list[dict[str, Any]], min_words: int, registers: Sequence[str], has_reference: bool) -> dict[str, Any]:
     """Write warm-up files split by license class, manifest, trust card, threshold stub and LICENSES.md."""
     local_dir = pack / "local"
     local_dir.mkdir(parents=True, exist_ok=True)
@@ -694,20 +698,21 @@ def write_pack(pack: Path, locale: str, kept: List[Dict[str, Any]], records: Lis
 
 
 def build_pack(manifest_path: Path, locale: str, langpack_dir: Path, cache_dir: Path, *, offline: bool = False, refresh: bool = False,
-               references: Sequence[Path] = (), src_field: str = "en", dst_field: Optional[str] = None, router: Optional[Router] = None,
+               references: Sequence[Path] = (), src_field: str = "en", dst_field: str | None = None, router: Router | None = None,
                mt_check: bool = False, jury_screen: bool = False, min_words: int = 6, registers: Sequence[str] = (),
                pass_min: int = 4, seed: int = DEFAULT_SEED, sample_size: int = DEFAULT_SAMPLE, lock_hashes: bool = False,
-               reference_license: str = "proprietary (studio owned)", reference_attribution: str = "") -> Dict[str, Any]:
+               reference_license: str = "proprietary (studio owned)", reference_attribution: str = "") -> dict[str, Any]:
     """Run layers 1 to 5 and write langpack_dir/<locale>/. Returns {'manifest', 'load_failures', 'pack_dir'}."""
     manifest = load_manifest(manifest_path)
-    ref_rows: List[Dict[str, Any]] = []
-    ref_records: List[Dict[str, Any]] = []
+    ref_rows: list[dict[str, Any]] = []
+    ref_records: list[dict[str, Any]] = []
     for ref in references:
         rows = load_reference(Path(ref), locale, src_field, dst_field)
         ref_rows.extend(rows)
+        ref_digest = file_sha256(Path(ref))
         ref_records.append({"id": REFERENCE_ID, "name": "Studio reference translation", "license": reference_license,
-                            "license_class": "bundle", "version": sha256(Path(ref).read_bytes())[:12], "attribution": reference_attribution,
-                            "homepage": "", "files": [{"file": Path(ref).name, "sha256": sha256(Path(ref).read_bytes()), "pinned": True, "rows": len(rows)}],
+                            "license_class": "bundle", "version": ref_digest[:12], "attribution": reference_attribution,
+                            "homepage": "", "files": [{"file": Path(ref).name, "sha256": ref_digest, "pinned": True, "rows": len(rows)}],
                             "rows": len(rows), "hashes_pinned": True})
     cands, l1, records, changed = collect_sources(manifest, manifest_path, locale, cache_dir, offline, refresh, lock_hashes)
     if changed:

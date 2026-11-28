@@ -1,10 +1,9 @@
 """Strategy + Registry for rich text tag parsing, parity and visual width calculation."""
-from __future__ import annotations
 
 import re
 import unicodedata
 from collections import Counter
-from typing import Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 from gcl.domain.errors import L10nError
 from gcl.domain.models import Tag
@@ -16,7 +15,7 @@ __layer__ = "infrastructure"
 __pattern__ = "Strategy and Registry"
 __owns__ = "TMP, HTML and BBCode rich text tag strategies plus East Asian visual width"
 
-TAG_STYLES: Tuple[str, ...] = ("auto", "tmp", "html", "bbcode")
+TAG_STYLES: tuple[str, ...] = ("auto", "tmp", "html", "bbcode")
 TMP_TAGS = frozenset(
     "align allcaps alpha b br color cspace font font-weight gradient i indent line-height line-indent link "
     "lowercase margin mark mspace nobr noparse page pos rotate s size smallcaps space sprite strikethrough "
@@ -59,7 +58,7 @@ def norm_tag(tag: str) -> str:
 class ConfiguredTagStrategy:
     """Declarative tag extraction and stripping strategy."""
 
-    def __init__(self, style: str, *, angle_tags: Optional[frozenset], allow_all_angle: bool, include_bbcode: bool) -> None:
+    def __init__(self, style: str, *, angle_tags: frozenset | None, allow_all_angle: bool, include_bbcode: bool) -> None:
         self.style = style
         self._angle_tags = angle_tags
         self._allow_all_angle = allow_all_angle
@@ -68,8 +67,8 @@ class ConfiguredTagStrategy:
     def _keep_angle(self, name: str) -> bool:
         return self._allow_all_angle or (self._angle_tags is not None and name in self._angle_tags)
 
-    def extract(self, text: str) -> List[Tag]:
-        found: List[Tuple[int, Tag]] = []
+    def extract(self, text: str) -> list[Tag]:
+        found: list[tuple[int, Tag]] = []
         if self._allow_all_angle or self._angle_tags is not None:
             for m in ANGLE_TAG_RE.finditer(text):
                 name = m.group("name").lower()
@@ -99,7 +98,7 @@ class TagRegistry:
     """OCP registry mapping rich text styles to strategies."""
 
     def __init__(self) -> None:
-        self._strategies: Dict[str, TagStrategy] = {}
+        self._strategies: dict[str, TagStrategy] = {}
 
     def register(self, strategy: TagStrategy) -> None:
         self._strategies[strategy.style] = strategy
@@ -121,7 +120,7 @@ for _tstrat in (
     DEFAULT_TAG_REGISTRY.register(_tstrat)
 
 
-def extract_tags(text: str, style: str = "auto", registry: TagRegistry = DEFAULT_TAG_REGISTRY) -> List[Tag]:
+def extract_tags(text: str, style: str = "auto", registry: TagRegistry = DEFAULT_TAG_REGISTRY) -> list[Tag]:
     return registry.get(style).extract(text)
 
 
@@ -129,9 +128,9 @@ def strip_tags(text: str, style: str = "auto", registry: TagRegistry = DEFAULT_T
     return registry.get(style).strip(text)
 
 
-def tag_structure_error(tags: Sequence[Tag]) -> Optional[str]:
+def tag_structure_error(tags: Sequence[Tag]) -> str | None:
     """Validate nesting of open and closing tags."""
-    stack: List[Tag] = []
+    stack: list[Tag] = []
     for t in tags:
         if t.raw.rstrip(">]").endswith("/") or t.name in VOID_TAGS:
             continue
@@ -146,9 +145,9 @@ def tag_structure_error(tags: Sequence[Tag]) -> Optional[str]:
     return f"unclosed tag {stack[-1].raw}" if stack else None
 
 
-def compare_tags(src_tags: Sequence[Tag], dst_tags: Sequence[Tag]) -> List[str]:
+def compare_tags(src_tags: Sequence[Tag], dst_tags: Sequence[Tag]) -> list[str]:
     """Return parity errors between two tag sequences."""
-    problems: List[str] = []
+    problems: list[str] = []
     sc, dc = Counter(t.norm for t in src_tags), Counter(t.norm for t in dst_tags)
     if sc != dc:
         problems.append(f"rich-text tags src={dict(sc)} vs dst={dict(dc)}")
@@ -158,7 +157,7 @@ def compare_tags(src_tags: Sequence[Tag], dst_tags: Sequence[Tag]) -> List[str]:
     return problems
 
 
-def parity_problems(src: str, dst: str, ph_style: str = "auto", tag_style: str = "auto") -> List[str]:
+def parity_problems(src: str, dst: str, ph_style: str = "auto", tag_style: str = "auto") -> list[str]:
     """Combined placeholder and rich text tag parity problems against source."""
     if not str(src).strip() or not str(dst).strip():
         return []

@@ -1,11 +1,11 @@
 """SQLite translation memory repository with trigram Dice similarity retrieval."""
-from __future__ import annotations
 
 import re
 import sqlite3
 import unicodedata
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 from gcl.domain.errors import L10nError
 from gcl.ports.storage import TMQuery, TMSegment
@@ -35,13 +35,12 @@ CREATE INDEX IF NOT EXISTS grams_seg ON grams(seg_id);
 CREATE INDEX IF NOT EXISTS seg_lookup ON segments(locale, status, category, speaker);
 """
 
-
 def normalize(text: str) -> str:
     """Normalize with NFC, collapsed whitespace and case folding."""
     return re.sub(r"\s+", " ", unicodedata.normalize("NFC", text)).strip().casefold()
 
 
-def trigrams(text: str) -> List[str]:
+def trigrams(text: str) -> list[str]:
     """Return sorted unique character trigrams of padded normalized text."""
     t = f"  {normalize(text)} "
     return sorted({t[i:i + 3] for i in range(len(t) - 2)})
@@ -61,14 +60,14 @@ class SqliteTMRepository:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._gram_cache: Dict[Tuple[str, int], FrozenSet[str]] = {}
+        self._gram_cache: dict[tuple[str, int], frozenset[str]] = {}
         try:
             self.db = sqlite3.connect(str(self.path))
             self.db.executescript(SCHEMA)
         except sqlite3.DatabaseError as exc:
             raise L10nError(f"{path}: not a usable SQLite translation memory ({exc})")
 
-    def _seg_grams(self, side: str, seg_id: int, text: str) -> FrozenSet[str]:
+    def _seg_grams(self, side: str, seg_id: int, text: str) -> frozenset[str]:
         ckey = (side, seg_id)
         cached = self._gram_cache.get(ckey)
         if cached is None:
@@ -76,7 +75,7 @@ class SqliteTMRepository:
             self._gram_cache[ckey] = cached
         return cached
 
-    def __enter__(self) -> "SqliteTMRepository":
+    def __enter__(self) -> SqliteTMRepository:
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -112,7 +111,7 @@ class SqliteTMRepository:
         self.db.executemany("INSERT INTO grams(gram, seg_id) VALUES (?, ?)", grams)
         return "inserted"
 
-    def _update_existing(self, row: Tuple[int, str, str], seg: TMSegment) -> str:
+    def _update_existing(self, row: tuple[int, str, str], seg: TMSegment) -> str:
         seg_id, old_status, old_dst = row
         if old_status == "approved" and seg.status == "candidate":
             return "kept"
@@ -139,7 +138,7 @@ class SqliteTMRepository:
             origin=str(kw.get("origin", "")),
         ))
 
-    def query_neighbors(self, query: TMQuery) -> List[Dict[str, Any]]:
+    def query_neighbors(self, query: TMQuery) -> list[dict[str, Any]]:
         """Retrieve closest segments matching TMQuery sorted by category/speaker tier then Dice score."""
         if query.on not in ("src", "dst"):
             raise L10nError("neighbors(on=...) must be 'src' or 'dst'")
@@ -159,8 +158,8 @@ class SqliteTMRepository:
         scored.sort(key=lambda t: t[:4])
         return [t[4] for t in scored[: query.k]]
 
-    def _score_candidates(self, rows: Sequence[Tuple[Any, ...]], grams: Sequence[str], query: TMQuery) -> List[Tuple[Any, ...]]:
-        scored: List[Tuple[Any, ...]] = []
+    def _score_candidates(self, rows: Sequence[tuple[Any, ...]], grams: Sequence[str], query: TMQuery) -> list[tuple[Any, ...]]:
+        scored: list[tuple[Any, ...]] = []
         qset = frozenset(grams)
         if not qset:
             return scored
@@ -186,7 +185,7 @@ class SqliteTMRepository:
             }))
         return scored
 
-    def exact_approved(self, locale: str, src: str, *, category: str = "", speaker: str = "") -> Optional[Dict[str, Any]]:
+    def exact_approved(self, locale: str, src: str, *, category: str = "", speaker: str = "") -> dict[str, Any] | None:
         """Return an unambiguous context compatible approved TM match for src, else None."""
         norm = normalize(src)
         if not norm:
@@ -208,7 +207,7 @@ class SqliteTMRepository:
             "speaker": spk, "status": status, "similarity": 1.0, "match": "exact",
         }
 
-    def neighbors(self, locale: str, text: str, **kw: Any) -> List[Dict[str, Any]]:
+    def neighbors(self, locale: str, text: str, **kw: Any) -> list[dict[str, Any]]:
         """Legacy keyword compatible wrapper around query_neighbors(TMQuery)."""
         bad = set(kw) - _NEIGHBOR_KW
         if bad:
@@ -222,9 +221,9 @@ class SqliteTMRepository:
             statuses=tuple(kw.get("statuses", ("approved",))),
         ))
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         rows = self.db.execute("SELECT locale, status, COUNT(*) FROM segments GROUP BY locale, status ORDER BY locale, status").fetchall()
-        out: Dict[str, Dict[str, int]] = {}
+        out: dict[str, dict[str, int]] = {}
         for loc, status, n in rows:
             out.setdefault(loc, {})[status] = n
         return {"segments": sum(n for _l, _s, n in rows), "by_locale": out}

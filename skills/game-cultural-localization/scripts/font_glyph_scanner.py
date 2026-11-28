@@ -5,7 +5,7 @@ Reads the Unicode 'cmap' table (formats 0, 4, 6, 12 and 13) and the advance widt
 ('head', 'hhea', 'hmtx') of .ttf / .otf fonts, every sub-font of a .ttc TrueType
 Collection and .woff (zlib) files, plus text-serialized Unity TextMeshPro FontAsset
 .asset files, then resolves every character of the target strings along the font chain
-the way TextMesh Pro does.  Pure Python 3.9+ standard library.
+the way TextMesh Pro does.  Pure Python 3.15 standard library.
 
 Font chain
   * The order of --font is the fallback order, the first font is the primary.
@@ -38,8 +38,6 @@ rich-text tags and {placeholders}.  --also-upper additionally scans the
 upper-cased text (for runtime .ToUpper() / <uppercase> buttons, e.g. Turkish İ).
 """
 
-from __future__ import annotations
-
 import argparse
 import bisect
 import os
@@ -49,7 +47,8 @@ import sys
 import unicodedata
 import zlib
 from pathlib import Path
-from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple
+from collections.abc import Callable
+from typing import Any, NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -74,10 +73,10 @@ class FontInfo(NamedTuple):
     dynamic: bool = False
     has_fallbacks: bool = False
     sub_fonts: int = 1
-    atlas_glyphs: Optional[int] = None   # tmp-asset: characters baked into m_CharacterTable
-    multi_atlas: Optional[bool] = None   # tmp-asset: m_IsMultiAtlasTexturesEnabled
-    source_font: Optional[str] = None    # dynamic tmp-asset: the resolved source font file
-    fallback_of: Optional[str] = None    # the font whose fallback table brought this one into the chain
+    atlas_glyphs: int | None = None   # tmp-asset: characters baked into m_CharacterTable
+    multi_atlas: bool | None = None   # tmp-asset: m_IsMultiAtlasTexturesEnabled
+    source_font: str | None = None    # dynamic tmp-asset: the resolved source font file
+    fallback_of: str | None = None    # the font whose fallback table brought this one into the chain
     coverage_known: bool = True          # False when a source font or a fallback of this font could not be resolved
 
 
@@ -96,14 +95,14 @@ def _u(fmt: str, data: bytes, off: int, what: str) -> tuple:
         raise FontParseError(f"truncated or malformed font while reading {what} at offset {off}")
 
 
-def parse_cmap_table(table: bytes) -> Set[int]:
+def parse_cmap_table(table: bytes) -> set[int]:
     """Parse a standalone 'cmap' table (bytes starting at the cmap header) into mapped code points."""
     _ver, num_sub = _u(">HH", table, 0, "cmap header")
-    offsets: Set[int] = set()
+    offsets: set[int] = set()
     for i in range(num_sub):
         _pid, _eid, rel = _u(">HHI", table, 4 + i * 8, "cmap encoding record")
         offsets.add(rel)
-    cps: Set[int] = set()
+    cps: set[int] = set()
     for off in sorted(offsets):
         if off + 2 > len(table):
             raise FontParseError(f"cmap subtable offset {off} beyond table size {len(table)}")
@@ -209,7 +208,7 @@ def cmap_glyph_id(table: bytes, cp: int) -> int:
         recs = [struct.unpack_from(">HHI", table, 4 + i * 8) for i in range(num_sub)]
     except struct.error:
         return 0
-    seen: Set[int] = set()
+    seen: set[int] = set()
     for pid, eid, off in sorted(recs, key=lambda r: _CMAP_PREFERENCE.get((r[0], r[1]), 9 if r[0] == 1 else 8)):
         if off in seen:
             continue
@@ -226,12 +225,12 @@ def cmap_glyph_id(table: bytes, cp: int) -> int:
 class SfntFace(NamedTuple):
     """The tables of one sfnt face that the scanner reads (head, hhea and hmtx may be absent)."""
     cmap: bytes
-    head: Optional[bytes] = None
-    hhea: Optional[bytes] = None
-    hmtx: Optional[bytes] = None
+    head: bytes | None = None
+    hhea: bytes | None = None
+    hmtx: bytes | None = None
 
 
-def _face_advance_em(face: SfntFace, gid: int) -> Optional[float]:
+def _face_advance_em(face: SfntFace, gid: int) -> float | None:
     if not (face.head and face.hhea and face.hmtx):
         return None
     try:
@@ -248,14 +247,14 @@ def _face_advance_em(face: SfntFace, gid: int) -> Optional[float]:
 class SfntFont:
     """A .ttf/.otf/.ttc/.woff file, the code points it maps and the advance width of each one."""
 
-    def __init__(self, path: Path, kind: str, faces: List[SfntFace]) -> None:
+    def __init__(self, path: Path, kind: str, faces: list[SfntFace]) -> None:
         self.path, self.kind, self.faces = path, kind, faces
-        self.cps: Set[int] = set()
+        self.cps: set[int] = set()
         for face in faces:
             self.cps |= parse_cmap_table(face.cmap)
         self.info = FontInfo(str(path), kind, len(self.cps), sub_fonts=len(faces))
 
-    def advance_em(self, cp: int) -> Optional[float]:
+    def advance_em(self, cp: int) -> float | None:
         """Advance width of the code point as a fraction of the em, None when unmapped or without metrics."""
         for face in self.faces:
             gid = cmap_glyph_id(face.cmap, cp)
@@ -268,7 +267,7 @@ def _sfnt_face_at(data: bytes, base: int, label: str) -> SfntFace:
     sfnt_ver, num_tables = _u(">IH", data, base, f"{label} sfnt header")
     if sfnt_ver not in _SFNT_VERSIONS:
         raise FontParseError(f"{label}: not a TrueType/OpenType font (sfnt version 0x{sfnt_ver:08X})")
-    found: Dict[bytes, bytes] = {}
+    found: dict[bytes, bytes] = {}
     for i in range(num_tables):
         tag, _csum, offset, length = _u(">4sIII", data, base + 12 + i * 16, f"{label} table record")
         if tag in _METRIC_TABLES and tag not in found:
@@ -304,7 +303,7 @@ def load_font_file(font_path: Path) -> SfntFont:
         return SfntFont(font_path, "ttc", faces)
     if magic == b"wOFF":
         _sig, _flavor, _length, num_tables = _u(">4sIIH", data, 0, "woff header")
-        found: Dict[bytes, bytes] = {}
+        found: dict[bytes, bytes] = {}
         for i in range(num_tables):
             tag, offset, comp_len, orig_len, _csum = _u(">4sIIII", data, 44 + i * 20, "woff table record")
             if tag in _METRIC_TABLES and tag not in found:
@@ -325,7 +324,7 @@ def load_font_file(font_path: Path) -> SfntFont:
     return SfntFont(font_path, "ttf/otf", [_sfnt_face_at(data, 0, font_path.name)])
 
 
-def parse_font_file(font_path: Path) -> Tuple[Set[int], FontInfo]:
+def parse_font_file(font_path: Path) -> tuple[set[int], FontInfo]:
     """Return (code points, info) for .ttf/.otf/.ttc/.woff; raise FontParseError when unreadable."""
     font = load_font_file(font_path)
     return font.cps, font.info
@@ -344,15 +343,15 @@ _GUID_RE = re.compile(r"guid:\s*([0-9A-Fa-f]{32})")
 class TmpAssetData(NamedTuple):
     """What the scanner reads from a text-serialized TMP FontAsset."""
     path: Path
-    unicodes: Set[int]
-    char_glyph: Dict[int, Tuple[int, float]]     # unicode -> (glyph index, character scale)
-    glyph_advance: Dict[int, float]              # glyph index -> m_HorizontalAdvance x glyph scale
+    unicodes: set[int]
+    char_glyph: dict[int, tuple[int, float]]     # unicode -> (glyph index, character scale)
+    glyph_advance: dict[int, float]              # glyph index -> m_HorizontalAdvance x glyph scale
     point_size: float
     face_scale: float
     mode: int                                    # m_AtlasPopulationMode, 0 static, 1 dynamic, 2 dynamic OS
-    multi_atlas: Optional[bool]
-    source_guids: Tuple[str, ...]
-    fallbacks: Tuple[Tuple[int, Optional[str]], ...]   # (fileID, guid) of every non-empty fallback slot
+    multi_atlas: bool | None
+    source_guids: tuple[str, ...]
+    fallbacks: tuple[tuple[int, str | None], ...]   # (fileID, guid) of every non-empty fallback slot
 
 
 def _font_asset_doc(txt: str) -> str:
@@ -371,9 +370,9 @@ def _font_asset_doc(txt: str) -> str:
     return txt
 
 
-def _top_level(doc: str) -> Dict[str, Tuple[str, str]]:
+def _top_level(doc: str) -> dict[str, tuple[str, str]]:
     """Top level keys of a MonoBehaviour body, key -> (inline value, the indented block below it)."""
-    out: Dict[str, Tuple[str, str]] = {}
+    out: dict[str, tuple[str, str]] = {}
     matches = list(_TOP_KEY_RE.finditer(doc))
     for i, m in enumerate(matches):
         end = matches[i + 1].start() if i + 1 < len(matches) else len(doc)
@@ -398,7 +397,7 @@ def read_tmp_asset(asset_path: Path) -> TmpAssetData:
     def block(key: str) -> str:
         return keys.get(key, ("", ""))[1]
 
-    char_glyph: Dict[int, Tuple[int, float]] = {}
+    char_glyph: dict[int, tuple[int, float]] = {}
     if "m_CharacterTable" in keys:
         for entry in re.split(r"\n  - ", block("m_CharacterTable")):
             u = re.search(r"m_Unicode:\s*(\d+)", entry)
@@ -410,7 +409,7 @@ def read_tmp_asset(asset_path: Path) -> TmpAssetData:
         unicodes = {int(m) for m in re.findall(r"\bm_Unicode:\s*(\d+)", doc)}
     if not unicodes and "m_glyphInfoList" in doc:
         unicodes = {int(m) for m in re.findall(r"^\s*-\s*id:\s*(\d+)\s*$", doc, re.MULTILINE)}
-    glyph_advance: Dict[int, float] = {}
+    glyph_advance: dict[int, float] = {}
     for entry in re.split(r"\n  - ", block("m_GlyphTable")):
         i = re.search(r"m_Index:\s*(\d+)", entry)
         a = re.search(r"m_HorizontalAdvance:\s*" + _NUM, entry)
@@ -420,7 +419,7 @@ def read_tmp_asset(asset_path: Path) -> TmpAssetData:
     face = block("m_FaceInfo")
     mode_txt = inline("m_AtlasPopulationMode")
     multi_txt = inline("m_IsMultiAtlasTexturesEnabled")
-    guids: List[str] = []
+    guids: list[str] = []
     for key in ("m_SourceFontFile", "m_SourceFontFile_EditorRef"):
         m = _GUID_RE.search(inline(key))
         if m:
@@ -445,7 +444,7 @@ def read_tmp_asset(asset_path: Path) -> TmpAssetData:
     )
 
 
-def parse_tmp_asset(asset_path: Path) -> Tuple[Set[int], FontInfo]:
+def parse_tmp_asset(asset_path: Path) -> tuple[set[int], FontInfo]:
     """Return (baked code points, info) of a TMP FontAsset without following its source font or fallbacks."""
     d = read_tmp_asset(asset_path)
     dynamic = d.mode in (1, 2)
@@ -461,10 +460,10 @@ def parse_tmp_asset(asset_path: Path) -> Tuple[Set[int], FontInfo]:
 
 _META_GUID_RE = re.compile(rb"(?m)^guid:\s*([0-9A-Fa-f]{32})")
 _INDEXED_SUFFIXES = (".asset", ".ttf", ".otf", ".ttc", ".otc")
-_GUID_INDEXES: Dict[str, Dict[str, Path]] = {}
+_GUID_INDEXES: dict[str, dict[str, Path]] = {}
 
 
-def find_assets_dir(path: Path) -> Optional[Path]:
+def find_assets_dir(path: Path) -> Path | None:
     """The nearest folder named Assets above the path, preferring one that sits next to ProjectSettings."""
     candidates = [p for p in path.resolve().parents if p.name.lower() == "assets"]
     for p in candidates:
@@ -473,24 +472,24 @@ def find_assets_dir(path: Path) -> Optional[Path]:
     return candidates[0] if candidates else None
 
 
-def guid_index(assets_dir: Path) -> Dict[str, Path]:
+def guid_index(assets_dir: Path) -> dict[str, Path]:
     """GUID -> file for every font asset and font file under the Assets folder (built once per folder)."""
     key = os.path.normcase(str(assets_dir))
     if key not in _GUID_INDEXES:
-        index: Dict[str, Path] = {}
-        for root, _dirs, files in os.walk(assets_dir):
+        index: dict[str, Path] = {}
+        for root, _dirs, files in Path(assets_dir).walk():
             for name in files:
                 low = name.lower()
                 if not low.endswith(".meta") or not low[:-5].endswith(_INDEXED_SUFFIXES):
                     continue
                 try:
-                    with open(os.path.join(root, name), "rb") as fh:
+                    with (root / name).open("rb") as fh:
                         head = fh.read(1024)
                 except OSError:
                     continue
                 m = _META_GUID_RE.search(head)
                 if m:
-                    index.setdefault(m.group(1).decode("ascii").lower(), Path(root) / name[:-5])
+                    index.setdefault(m.group(1).decode("ascii").lower(), root / name[:-5])
         _GUID_INDEXES[key] = index
     return _GUID_INDEXES[key]
 
@@ -502,16 +501,16 @@ def guid_index(assets_dir: Path) -> Dict[str, Path]:
 class ChainFont:
     """One font of the chain, what it covers, how wide each glyph is and which fonts it falls back to."""
 
-    def __init__(self, path: Path, info: FontInfo, cps: Set[int], advance: Callable[[int], Optional[float]],
-                 fallback_paths: Optional[List[Path]] = None, notes: Optional[List[Tuple[str, str]]] = None) -> None:
+    def __init__(self, path: Path, info: FontInfo, cps: set[int], advance: Callable[[int], float | None],
+                 fallback_paths: list[Path] | None = None, notes: list[tuple[str, str]] | None = None) -> None:
         self.path, self.info, self.cps, self.advance = path, info, cps, advance
-        self.fallback_paths: List[Path] = fallback_paths or []
-        self.notes: List[Tuple[str, str]] = notes or []  # (code, message)
+        self.fallback_paths: list[Path] = fallback_paths or []
+        self.notes: list[tuple[str, str]] = notes or []  # (code, message)
 
 
 class ChainEntry(NamedTuple):
     font: ChainFont
-    parent: Optional[ChainFont]   # the font whose fallback table brought this one in, None for a --font entry
+    parent: ChainFont | None   # the font whose fallback table brought this one in, None for a --font entry
     depth: int
 
 
@@ -523,8 +522,8 @@ class FontChain:
     """Loads fonts once each and lays out the order in which TMP searches them."""
 
     def __init__(self) -> None:
-        self._fonts: Dict[str, ChainFont] = {}
-        self._files: Dict[str, SfntFont] = {}
+        self._fonts: dict[str, ChainFont] = {}
+        self._files: dict[str, SfntFont] = {}
 
     def font_file(self, path: Path) -> SfntFont:
         key = _key(path)
@@ -552,7 +551,7 @@ class FontChain:
         dynamic = d.mode in (1, 2)
         if not d.unicodes and not dynamic:
             raise FontParseError(f"{path}: no 'm_Unicode' character table found; is this a text-serialized TMP FontAsset?")
-        notes: List[Tuple[str, str]] = []
+        notes: list[tuple[str, str]] = []
         if dynamic and d.multi_atlas is False:
             notes.append(("dynamic_single_atlas", "dynamic atlas with Multi Atlas Textures off, once the atlas texture is full new characters are dropped"))
         elif not dynamic:
@@ -564,7 +563,7 @@ class FontChain:
             known = False
             notes.append(("outside_unity_project", "no Assets folder above the asset, so its source font and fallback table are not followed"))
         cps = set(d.unicodes)
-        source: Optional[SfntFont] = None
+        source: SfntFont | None = None
         if dynamic and assets_dir is not None:
             for guid in d.source_guids:
                 p = index.get(guid)
@@ -580,7 +579,7 @@ class FontChain:
                 notes.append(("unresolved_source_font", "dynamic atlas whose source font file was not found, only its baked characters are counted"))
             else:
                 cps |= source.cps
-        fallback_paths: List[Path] = []
+        fallback_paths: list[Path] = []
         if assets_dir is not None:
             for file_id, guid in d.fallbacks:
                 p = index.get(guid) if guid else None
@@ -590,7 +589,7 @@ class FontChain:
                 else:
                     fallback_paths.append(p)
 
-        def advance(cp: int) -> Optional[float]:
+        def advance(cp: int) -> float | None:
             glyph = d.char_glyph.get(cp)
             if glyph is not None and glyph[0] in d.glyph_advance and d.point_size > 0:
                 return d.glyph_advance[glyph[0]] * glyph[1] * d.face_scale / d.point_size
@@ -603,12 +602,12 @@ class FontChain:
                         multi_atlas=d.multi_atlas, source_font=str(source.path) if source else None, coverage_known=known)
         return ChainFont(path, info, cps, advance, fallback_paths, notes)
 
-    def search_order(self, roots: List[ChainFont]) -> List[ChainEntry]:
+    def search_order(self, roots: list[ChainFont]) -> list[ChainEntry]:
         """Every font in TMP search order, each --font followed by its fallback table (depth first, every font once)."""
-        order: List[ChainEntry] = []
-        seen: Set[str] = set()
+        order: list[ChainEntry] = []
+        seen: set[str] = set()
         for root in roots:
-            stack: List[ChainEntry] = [ChainEntry(root, None, 0)]
+            stack: list[ChainEntry] = [ChainEntry(root, None, 0)]
             while stack:
                 entry = stack.pop()
                 key = _key(entry.font.path)
@@ -616,7 +615,7 @@ class FontChain:
                     continue
                 seen.add(key)
                 order.append(entry)
-                children: List[ChainFont] = []
+                children: list[ChainFont] = []
                 for fb in entry.font.fallback_paths:
                     try:
                         children.append(self.load(fb))
@@ -629,15 +628,15 @@ class FontChain:
 
 
 class ChainResult(NamedTuple):
-    served: Dict[int, Optional[int]]          # code point -> index in the search order, None when missing
-    missing: List[int]
-    full_width: List[Tuple[int, int, float]]  # (code point, index in the search order, advance in em)
+    served: dict[int, int | None]          # code point -> index in the search order, None when missing
+    missing: list[int]
+    full_width: list[tuple[int, int, float]]  # (code point, index in the search order, advance in em)
 
 
-def resolve_chars(order: List[ChainEntry], cps: Any, check_full_width: bool, threshold: float = FULL_WIDTH_EM) -> ChainResult:
+def resolve_chars(order: list[ChainEntry], cps: Any, check_full_width: bool, threshold: float = FULL_WIDTH_EM) -> ChainResult:
     """Find the font that serves every code point and the full width fallbacks among them."""
-    served: Dict[int, Optional[int]] = {}
-    wide: List[Tuple[int, int, float]] = []
+    served: dict[int, int | None] = {}
+    wide: list[tuple[int, int, float]] = []
     for cp in sorted(cps):
         idx = next((i for i, e in enumerate(order) if cp in e.font.cps), None)
         served[cp] = idx
@@ -653,9 +652,9 @@ def resolve_chars(order: List[ChainEntry], cps: Any, check_full_width: bool, thr
 # Target characters
 # --------------------------------------------------------------------------- #
 
-def collect_target_chars(input_path: Path, dst_field: str, also_upper: bool = False, placeholder_style: str = "auto") -> Dict[int, Tuple[str, str, int]]:
+def collect_target_chars(input_path: Path, dst_field: str, also_upper: bool = False, placeholder_style: str = "auto") -> dict[int, tuple[str, str, int]]:
     """Map code point -> (char, first key, occurrence count) for every renderable character in the targets."""
-    chars: Dict[int, Tuple[str, str, int]] = {}
+    chars: dict[int, tuple[str, str, int]] = {}
     for key, text in load_target_rows(input_path, dst_field):
         cleaned = strip_tags(text)
         for ph in extract_placeholders(cleaned, placeholder_style).top:
@@ -697,7 +696,7 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def _resolve_locale(explicit: Optional[str], dst_field: str) -> Optional[str]:
+def _resolve_locale(explicit: str | None, dst_field: str) -> str | None:
     if explicit:
         return normalize_locale(explicit)[0]  # an unknown locale is a usage error (exit 2)
     try:
@@ -706,7 +705,7 @@ def _resolve_locale(explicit: Optional[str], dst_field: str) -> Optional[str]:
         return None
 
 
-def _sample(chars: List[str], limit: int = 60) -> str:
+def _sample(chars: list[str], limit: int = 60) -> str:
     text = "".join(chars)
     return text if len(text) <= limit else text[:limit] + " ..."
 
@@ -733,14 +732,14 @@ def main() -> int:
     level = "WARN" if lenient else "ERR"
     warnings = [(e.font, code, msg) for e in order for code, msg in e.font.notes]
     served_count = [0] * len(order)
-    served_chars: List[List[str]] = [[] for _ in order]
+    served_chars: list[list[str]] = [[] for _ in order]
     for cp, idx in result.served.items():
         if idx is not None:
             served_count[idx] += 1
             served_chars[idx].append(used[cp][0])
     limit = args.max_report
 
-    def cut(items: List[Any]) -> List[Any]:
+    def cut(items: list[Any]) -> list[Any]:
         return items if limit is None else items[:limit]
 
     lines = ["Font Coverage Report:"]
@@ -757,7 +756,7 @@ def main() -> int:
         lines.append(f"  {n + 1}. {'  ' * e.depth}{e.font.path.name}: {i.glyphs} code points ({', '.join(desc)}), serves {served_count[n]}")
     lines.append(f"  Unique target characters used: {len(used)}")
     lines.append(f"  Missing characters (tofu)     : {len(missing)}" + (" [WARN, part of the font chain could not be resolved, pass --strict to fail]" if lenient and missing else ""))
-    blocks: Dict[str, int] = {}
+    blocks: dict[str, int] = {}
     for cp in missing:
         blocks[_block_name(used[cp][0])] = blocks.get(_block_name(used[cp][0]), 0) + 1
     for cp in cut(missing):

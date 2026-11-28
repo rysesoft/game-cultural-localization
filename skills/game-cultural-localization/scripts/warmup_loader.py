@@ -20,10 +20,8 @@ Usage:
 
 Exit codes: 0 sample has the requested size, 1 fewer matching lines than requested
 (the sample is still written), 2 usage or input error.
-Python 3.9+, standard library only.
+Python 3.15, standard library only.
 """
-
-from __future__ import annotations
 
 import argparse
 import json
@@ -31,7 +29,8 @@ import random
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -57,13 +56,13 @@ def clean_text(text: str) -> str:
     return "\n".join(l.strip() for l in out.splitlines()).strip()
 
 
-def read_pack_lines(pack_dir: Path, include_local: bool = True) -> List[Dict[str, Any]]:
+def read_pack_lines(pack_dir: Path, include_local: bool = True) -> list[dict[str, Any]]:
     """Read warmup.jsonl (+ local/warmup.jsonl). Raises L10nError when the pack has no warm-up file."""
     main = pack_dir / "warmup.jsonl"
     local = pack_dir / "local" / "warmup.jsonl"
     if not main.is_file() and not (include_local and local.is_file()):
         raise L10nError(f"{pack_dir}: no warmup.jsonl; build the pack with build_language_pack.py first")
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for path in ([main] if main.is_file() else []) + ([local] if include_local and local.is_file() else []):
         for n, line in enumerate(read_text_bom(path).splitlines(), start=1):
             if not line.strip():
@@ -78,11 +77,11 @@ def read_pack_lines(pack_dir: Path, include_local: bool = True) -> List[Dict[str
     return rows
 
 
-def sample_warmup(rows: Sequence[Dict[str, Any]], registers: Optional[Sequence[str]] = None, count: int = DEFAULT_COUNT,
-                  seed: int = DEFAULT_SEED) -> List[Dict[str, Any]]:
+def sample_warmup(rows: Sequence[dict[str, Any]], registers: Sequence[str] | None = None, count: int = DEFAULT_COUNT,
+                  seed: int = DEFAULT_SEED) -> list[dict[str, Any]]:
     """Seeded, source-balanced sample of cleaned lines of the given registers (all registers when None)."""
     regs = set(registers) if registers else set(REGISTERS)
-    pool: Dict[str, List[Dict[str, Any]]] = {}
+    pool: dict[str, list[dict[str, Any]]] = {}
     seen = set()
     ordered = sorted(rows, key=lambda r: (str(r.get("source", "")), str(r.get("key", "")), r["text"]))
     for r in ordered:
@@ -96,13 +95,13 @@ def sample_warmup(rows: Sequence[Dict[str, Any]], registers: Optional[Sequence[s
                "license_class": r.get("license_class", "bundle"), "consistency": r.get("consistency", "single")}
         pool.setdefault(rec["source"], []).append(rec)
     rng = random.Random(seed)
-    queues: List[List[Dict[str, Any]]] = []
+    queues: list[list[dict[str, Any]]] = []
     for src in sorted(pool, key=lambda s: (s != REFERENCE_SOURCE, s)):
         items = list(pool[src])
         rng.shuffle(items)
         items.sort(key=lambda it: 0 if it["consistency"] in ("trusted", "reference_agrees") else 1)  # stable: keeps the shuffle inside groups
         queues.append(items)
-    picked: List[Dict[str, Any]] = []
+    picked: list[dict[str, Any]] = []
     while len(picked) < count and any(queues):
         for q in queues:
             if q and len(picked) < count:
@@ -110,8 +109,8 @@ def sample_warmup(rows: Sequence[Dict[str, Any]], registers: Optional[Sequence[s
     return picked
 
 
-def load_warmup(pack_dir: Path, registers: Optional[Sequence[str]] = None, count: int = DEFAULT_COUNT, seed: int = DEFAULT_SEED,
-                include_local: bool = True) -> List[Dict[str, Any]]:
+def load_warmup(pack_dir: Path, registers: Sequence[str] | None = None, count: int = DEFAULT_COUNT, seed: int = DEFAULT_SEED,
+                include_local: bool = True) -> list[dict[str, Any]]:
     """Read a pack and return the seeded warm-up sample (see sample_warmup)."""
     return sample_warmup(read_pack_lines(Path(pack_dir), include_local), registers, count, seed)
 
@@ -121,11 +120,11 @@ def one_line(text: str) -> str:
     return " / ".join(l.strip() for l in text.splitlines() if l.strip())
 
 
-def render_warmup(entries: Sequence[Dict[str, Any]]) -> str:
+def render_warmup(entries: Sequence[dict[str, Any]]) -> str:
     """Prompt block: one line per sample, grouped by register, multi-line texts joined with ' / '."""
     if not entries:
         return ""
-    out: List[str] = []
+    out: list[str] = []
     for reg in REGISTERS:
         group = [e for e in entries if e.get("register") == reg]
         if not group:
@@ -135,7 +134,7 @@ def render_warmup(entries: Sequence[Dict[str, Any]]) -> str:
     return "\n".join(out)
 
 
-def check_registers(values: Sequence[str]) -> List[str]:
+def check_registers(values: Sequence[str]) -> list[str]:
     """Validate register names (exit 2 on unknown ones)."""
     for v in values:
         if v not in REGISTERS:

@@ -9,7 +9,7 @@ Use this runbook whenever you localize or overhaul a game locale, whatever the e
 | 2 | Blind native ear critique and Pass 2 colloquial rewrite | `make_blind_slice.py`, then `native-ear-critic` (or the jury), `validate_critique.py`, `game-culturalizer` | `blind_<locale>_<batch>.json`, `critique_<locale>_<batch>.json`, `final_<locale>_<batch>.json` |
 | 3 | Automated LQA, UI overflow and font gate | `lqa_linter.py --fail-on-error`, `ui_expansion_checker.py --fail-on-high`, `font_glyph_scanner.py` | reports (`--json`), exit codes `0`, `checksums_after.txt` |
 
-All commands below run from the plugin's `skills/game-cultural-localization/` folder (`<plugin_dir>` is `~/.gemini/config/plugins/game-cultural-localization` or `<project>/.agents/plugins/game-cultural-localization`). Every script is pure Python 3.9+ standard library, reads UTF-8 with or without BOM and prints UTF-8 on any console. Flag details are in [scripts/CLI_REFERENCE.md](../scripts/CLI_REFERENCE.md).
+All commands below run from the plugin's `skills/game-cultural-localization/` folder (`<plugin_dir>` is `~/.gemini/config/plugins/game-cultural-localization` or `<project>/.agents/plugins/game-cultural-localization`). Every script is pure Python 3.15 standard library, reads UTF-8 with or without BOM and prints UTF-8 on any console. Flag details are in [scripts/CLI_REFERENCE.md](../scripts/CLI_REFERENCE.md).
 
 ### Shared file conventions
 

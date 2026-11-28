@@ -1,5 +1,4 @@
 """Persistence adapters and repositories for context views, batch memoization and SQLite TM."""
-from __future__ import annotations
 
 from .context_views import BlindContextAdapter, WriterContextAdapter
 from .memo_store import AtomicJsonMemoRepository, BatchMemo

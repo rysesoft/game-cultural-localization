@@ -1,11 +1,10 @@
 """P10: deliberate.py (anonymous rationales, evidence package, one re-vote, majority, unresolved)."""
-from __future__ import annotations
 
 import json
 import re
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -43,8 +42,8 @@ class SpyProvider:
         self.model = model
         self.score = score
         self.odd = list(odd)
-        self.payloads: List[Dict[str, Any]] = []
-        self.systems: List[str] = []
+        self.payloads: list[dict[str, Any]] = []
+        self.systems: list[str] = []
 
     def complete(self, system: str, user: str, **kw: Any) -> ChatResult:
         _i, p = split_envelope(user)
@@ -59,7 +58,7 @@ class Seat:
         self.index, self.family, self.provider = index, family, provider
 
 
-def seats(scores: List[int], odd: Any = ((), (), ())) -> List[Seat]:
+def seats(scores: list[int], odd: Any = ((), (), ())) -> list[Seat]:
     fams = ("anthropic", "deepseek", "google")
     models = ("claude-opus-5-5", "deepseek-v4-pro", "gemini-4-carbon")
     return [Seat(i, fams[i], SpyProvider(models[i], s, odd[i])) for i, s in enumerate(scores)]
@@ -135,7 +134,7 @@ class IntegrationTests(unittest.TestCase):
         {"key": "DIS", "tier": "J3", "family": "deepseek", "score": 3, "issue_type": "translationese", "reason": "calque"}],
         "deliberate": [{"key": "DIS", "family": "google", "score": 3, "reason": "fine, a calque"}]}
 
-    def _doc(self) -> Dict[str, Any]:
+    def _doc(self) -> dict[str, Any]:
         entries = [dict(ENTRY)] + [{"key": f"F{i}", "target": f"Menü {i}", "category": "ui"} for i in range(19)]
         return {"locale": "tr-TR", "entries": entries}
 
@@ -175,7 +174,7 @@ class IntegrationTests(unittest.TestCase):
         # run alone, deliberate.py read no context map before, and like jury.py it never read --config
         import os
         from unittest import mock
-        seen: Dict[str, Any] = {}
+        seen: dict[str, Any] = {}
 
         def spy(doc, entries, router, locale, system):
             seen["system"], seen["entries"] = system, entries

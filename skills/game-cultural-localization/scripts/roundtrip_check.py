@@ -22,10 +22,8 @@ Usage:
 Exit codes: check mode 0 no calque suspect, 1 at least one line at or above the threshold.
 Calibrate mode 0 threshold written, 1 written but weak (fewer than 5 lines per class or
 balanced accuracy below 0.75). 2 usage or input error.
-Python 3.9+, standard library only.
+Python 3.15, standard library only.
 """
-
-from __future__ import annotations
 
 import argparse
 import difflib
@@ -33,7 +31,8 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -49,7 +48,7 @@ WEAK_MIN_PER_CLASS = 5
 WEAK_MIN_ACCURACY = 0.75
 
 
-def _words(text: str) -> List[str]:
+def _words(text: str) -> list[str]:
     return re.findall(r"\w+", text.casefold())
 
 
@@ -62,7 +61,7 @@ def calque_score(english: str, back: str) -> float:
     return round((w + c) / 2.0, 4)
 
 
-def eligible(target: str, register: str, min_words: int, registers: Sequence[str]) -> Tuple[bool, str]:
+def eligible(target: str, register: str, min_words: int, registers: Sequence[str]) -> tuple[bool, str]:
     """(applies, reason when it does not)."""
     if register not in registers:
         return False, "register"
@@ -71,12 +70,12 @@ def eligible(target: str, register: str, min_words: int, registers: Sequence[str
     return True, ""
 
 
-def roundtrip_evidence(rows: Sequence[Dict[str, Any]], locale: str, provider: Any, *, min_words: int, registers: Sequence[str],
-                       threshold: float, batch_size: Optional[int] = None, workers: int = 1, memo: Any = None,
-                       salvage_truncated: bool = False) -> Dict[str, Dict[str, Any]]:
+def roundtrip_evidence(rows: Sequence[dict[str, Any]], locale: str, provider: Any, *, min_words: int, registers: Sequence[str],
+                       threshold: float, batch_size: int | None = None, workers: int = 1, memo: Any = None,
+                       salvage_truncated: bool = False) -> dict[str, dict[str, Any]]:
     """rows [{key, en, target, register}] -> key -> {applied, calque_score, back, suspect} (model calls only for eligible rows)."""
-    out: Dict[str, Dict[str, Any]] = {}
-    todo: List[Tuple[str, Dict[str, Any]]] = []
+    out: dict[str, dict[str, Any]] = {}
+    todo: list[tuple[str, dict[str, Any]]] = []
     for i, r in enumerate(rows):
         ok, why = eligible(str(r.get("target", "")), str(r.get("register", "")), min_words, registers)
         if not ok or not str(r.get("en", "")).strip():
@@ -92,7 +91,7 @@ def roundtrip_evidence(rows: Sequence[Dict[str, Any]], locale: str, provider: An
     return out
 
 
-def best_threshold(native: Sequence[float], robot: Sequence[float]) -> Tuple[float, float]:
+def best_threshold(native: Sequence[float], robot: Sequence[float]) -> tuple[float, float]:
     """Threshold t (robot >= t, native < t) with the best balanced accuracy, midpoint between neighbours. Returns (t, accuracy)."""
     values = sorted(set(native) | set(robot))
     cands = [0.0] + [round((a + b) / 2.0, 4) for a, b in zip(values, values[1:])] + [1.0001]
@@ -106,13 +105,13 @@ def best_threshold(native: Sequence[float], robot: Sequence[float]) -> Tuple[flo
     return best
 
 
-def calibrate(contrastive: Dict[str, Any], locale: str, provider: Any, *, min_words: int, registers: Sequence[str],
-              batch_size: Optional[int] = None) -> Dict[str, Any]:
+def calibrate(contrastive: dict[str, Any], locale: str, provider: Any, *, min_words: int, registers: Sequence[str],
+              batch_size: int | None = None) -> dict[str, Any]:
     """Score native and robot lines of a contrastive set and derive the threshold."""
     pairs = contrastive.get("pairs")
     if not isinstance(pairs, list):
         raise L10nError("contrastive set has no 'pairs' list")
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for p in pairs:
         if not all(isinstance(p.get(k), str) for k in ("key", "en", "native", "robot")):
             raise L10nError("every contrastive pair needs string fields key, en, native and robot")
@@ -131,7 +130,7 @@ def calibrate(contrastive: Dict[str, Any], locale: str, provider: Any, *, min_wo
             "min_words": min_words, "registers": list(registers)}
 
 
-def load_threshold(locale: str, langpack_dir: Path) -> Tuple[float, str]:
+def load_threshold(locale: str, langpack_dir: Path) -> tuple[float, str]:
     """Threshold of the pack (roundtrip_threshold.json) or the default."""
     path = langpack_dir / locale / "roundtrip_threshold.json"
     if path.is_file():
@@ -141,10 +140,10 @@ def load_threshold(locale: str, langpack_dir: Path) -> Tuple[float, str]:
     return DEFAULT_ROUNDTRIP_THRESHOLD, "default"
 
 
-def load_check_rows(path: Path, locale: str, src_field: str, dst_field: Optional[str], key_field: str) -> List[Dict[str, Any]]:
+def load_check_rows(path: Path, locale: str, src_field: str, dst_field: str | None, key_field: str) -> list[dict[str, Any]]:
     """Rows {key, en, target, register} of a translated table (target column probed when not given)."""
     candidates = [dst_field] if dst_field else ["dst", locale, "target"]
-    last: Optional[L10nError] = None
+    last: L10nError | None = None
     for col in candidates:
         try:
             rows = load_table(path, src_field, col, key_field)

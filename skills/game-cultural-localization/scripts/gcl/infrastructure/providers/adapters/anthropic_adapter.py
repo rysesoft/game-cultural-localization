@@ -1,7 +1,6 @@
 """Anthropic Messages API adapter with prompt cache_control and SSE stream assembly."""
-from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from gcl.domain.errors import ProviderError, StreamInterrupted
 from gcl.domain.models import RawVendorReply, TokenUsage
@@ -17,15 +16,15 @@ JSON_ONLY_HINT = "Reply with one JSON object only. No Markdown fences, no prose 
 ANTHROPIC_VERSION = "2023-06-01"
 
 
-def _int_or_none(v: Any) -> Optional[int]:
+def _int_or_none(v: Any) -> int | None:
     return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
-def assemble_stream(text: str, label: str = "anthropic") -> Dict[str, Any]:
+def assemble_stream(text: str, label: str = "anthropic") -> dict[str, Any]:
     """Reassemble Anthropic Messages SSE events into one message payload."""
-    message: Dict[str, Any] = {}
-    blocks: Dict[int, Dict[str, Any]] = {}
-    usage: Dict[str, Any] = {}
+    message: dict[str, Any] = {}
+    blocks: dict[int, dict[str, Any]] = {}
+    usage: dict[str, Any] = {}
     finished = False
     for event in sse_events(text, label):
         kind = event.get("type")
@@ -62,12 +61,12 @@ class AnthropicProvider(HttpProvider):
     name = "anthropic"
     capabilities = ProviderCapabilities(supports_streaming=True, supports_cache_control=True)
 
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self) -> dict[str, str]:
         return {"x-api-key": self._key, "anthropic-version": ANTHROPIC_VERSION, "content-type": "application/json"}
 
-    def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> Dict[str, Any]:
+    def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> dict[str, Any]:
         sys_text = system + ("\n\n" + JSON_ONLY_HINT if json_mode else "")
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": self.model,
             "system": [{"type": "text", "text": sys_text, "cache_control": {"type": "ephemeral"}}],
             "messages": [{"role": "user", "content": user}],
@@ -80,10 +79,10 @@ class AnthropicProvider(HttpProvider):
             body["output_config"] = {"effort": effort.strip().lower()}
         return body
 
-    def _decode(self, text: str, headers: Dict[str, str]) -> Dict[str, Any]:
+    def _decode(self, text: str, headers: dict[str, str]) -> dict[str, Any]:
         return assemble_stream(text, f"{self.name}/{self.model}") if self._is_stream(text, headers) else super()._decode(text, headers)
 
-    def parse_reply(self, data: Dict[str, Any]) -> RawVendorReply:
+    def parse_reply(self, data: dict[str, Any]) -> RawVendorReply:
         blocks = data.get("content")
         if not isinstance(blocks, list):
             raise ProviderError(f"anthropic/{self.model}: response has no 'content' list")

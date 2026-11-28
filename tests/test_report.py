@@ -1,11 +1,10 @@
 """P13: report_changes.py (B3.8 developer report, JSON + Markdown in the house punctuation style)."""
-from __future__ import annotations
 
 import json
 import re
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -18,13 +17,13 @@ import text_style  # noqa: E402
 NASTY = "Calque: English order; the mentor — sounds like a manual – rewrite."
 
 
-def votes(key: str, tier: str, scores: List[int], issue: str = "translationese") -> List[Dict[str, Any]]:
+def votes(key: str, tier: str, scores: list[int], issue: str = "translationese") -> list[dict[str, Any]]:
     fams = ("anthropic", "deepseek", "google")
     return [{"key": key, "tier": tier, "member": i, "family": fams[i], "model": f"m{i}", "score": s,
              "issue_type": issue if s < 5 else "none", "reason": NASTY if s < 5 else "", "suggested": ""} for i, s in enumerate(scores)]
 
 
-def verdict(key: str, status: str, tier: str, score: int, vs: List[Dict[str, Any]], ban: bool = False, calque: bool = False) -> Dict[str, Any]:
+def verdict(key: str, status: str, tier: str, score: int, vs: list[dict[str, Any]], ban: bool = False, calque: bool = False) -> dict[str, Any]:
     return {"key": key, "final_tier": tier, "score": score, "status": status, "votes": vs,
             "evidence": {"ban_hits": [{"rule": "TR-X", "severity": "WARN", "message": "m"}] if ban else [], "tm_neighbors": [],
                          "roundtrip": {"applied": calque, "calque_score": 0.95, "suspect": calque} if calque else {"applied": False}},
@@ -95,7 +94,7 @@ class UnitTests(unittest.TestCase):
 
 
 class ReportTests(unittest.TestCase):
-    def _build(self, td: Path) -> Dict[str, Any]:
+    def _build(self, td: Path) -> dict[str, Any]:
         return rcg.build_report(VERDICTS, "tr-TR", "01", rewrites=REWRITES, sources={}, pack_dir=make_pack(td),
                                 budget={"calls": 12, "errors": 0, "input_tokens": 1000, "output_tokens": 200, "latency_ms": 0,
                                         "cost_usd": 0.0123, "priced": False, "unpriced_models": ["gemini-4-hydrogen"]})

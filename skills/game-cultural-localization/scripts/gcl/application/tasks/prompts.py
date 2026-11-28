@@ -1,7 +1,8 @@
 """Prompt templates, chunking budgets and cache priming utilities for batched LLM tasks."""
-from __future__ import annotations
 
-from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple, TypeVar
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from itertools import batched
+from typing import Any
 
 __layer__ = "application"
 __pattern__ = "Policy Constants and Chunking"
@@ -9,15 +10,14 @@ __owns__ = "task system prompts, everyday word rules, batch row/char budgets and
 
 KEYED_ATTEMPTS = 3
 SPLIT_DEPTH = 2
-T = TypeVar("T")
 
-ISSUE_TYPES: Tuple[str, ...] = (
+ISSUE_TYPES: tuple[str, ...] = (
     "translationese", "register", "tense", "regional_leak", "gender_leak",
     "ui_verb", "placeholder_grammar", "terminology", "other", "none",
 )
-REGISTERS: Tuple[str, ...] = ("ui", "tutorial", "dialogue_casual", "dialogue_formal")
+REGISTERS: tuple[str, ...] = ("ui", "tutorial", "dialogue_casual", "dialogue_formal")
 
-DEFAULT_SYSTEM: Dict[str, str] = {
+DEFAULT_SYSTEM: dict[str, str] = {
     "pass1": (
         "You are a senior game localizer. Translate each source line into natural, native {locale} as a real player "
         "would say or read it. Keep every placeholder, tag and leading or trailing space exactly. Reply with JSON only."
@@ -52,7 +52,7 @@ EVERYDAY_CHECK = (
     "the three jurors list a word of the same line, the line scores 3 at most. "
 )
 
-INSTRUCTIONS: Dict[str, str] = {
+INSTRUCTIONS: dict[str, str] = {
     "pass1": 'Translate every row. Reply with {"rows": [{"key": "...", "target": "..."}]} and nothing else.',
     "literal": 'Translate every row literally. Reply with {"rows": [{"key": "...", "target": "..."}]} and nothing else.',
     "roundtrip": 'Back-translate every row into English. Reply with {"rows": [{"key": "...", "back": "..."}]} and nothing else.',
@@ -87,28 +87,28 @@ INSTRUCTIONS: Dict[str, str] = {
     ),
 }
 
-BATCH_ROWS: Dict[str, int] = {
+BATCH_ROWS: dict[str, int] = {
     "pass1": 100, "literal": 100, "roundtrip": 100, "jury": 100, "pairwise": 50, "pass2": 30, "pick": 50, "deliberate": 25,
 }
-BATCH_CHARS: Dict[str, int] = {
+BATCH_CHARS: dict[str, int] = {
     "pass1": 20000, "literal": 20000, "roundtrip": 20000, "jury": 24000,
     "pairwise": 24000, "pass2": 10000, "pick": 24000, "deliberate": 16000,
 }
 BATCH_WORKERS = 64
 
 
-def chunked(items: Sequence[T], size: int) -> Iterator[List[T]]:
+def chunked[T](items: Sequence[T], size: int) -> Iterator[list[T]]:
     """Yield consecutive slices of at most size items."""
     step = max(1, int(size))
-    for i in range(0, len(items), step):
-        yield list(items[i:i + step])
+    for batch in batched(items, step):
+        yield list(batch)
 
 
-def chunked_budget(items: Sequence[T], size: int, max_chars: int, text_of: Callable[[T], str]) -> List[List[T]]:
+def chunked_budget[T](items: Sequence[T], size: int, max_chars: int, text_of: Callable[[T], str]) -> list[list[T]]:
     """Consecutive slices bounded by both item count and total text character budget."""
     step, cap = max(1, int(size)), max(1, int(max_chars))
-    out: List[List[T]] = []
-    cur: List[T] = []
+    out: list[list[T]] = []
+    cur: list[T] = []
     used = 0
     for it in items:
         n = len(text_of(it))
@@ -122,7 +122,7 @@ def chunked_budget(items: Sequence[T], size: int, max_chars: int, text_of: Calla
     return out
 
 
-def _text_len(*fields: str) -> Callable[[Dict[str, Any]], str]:
+def _text_len(*fields: str) -> Callable[[dict[str, Any]], str]:
     return lambda item: "".join(str(item.get(f, "")) for f in fields)
 
 
@@ -133,7 +133,7 @@ def primes(provider: Any) -> bool:
     return not batched
 
 
-def system_for(task: str, locale: str, template: Optional[str] = None) -> str:
+def system_for(task: str, locale: str, template: str | None = None) -> str:
     """Select caller prompt template or default English instruction formatted for locale."""
     return template if template else DEFAULT_SYSTEM[task].format(locale=locale)
 
@@ -146,9 +146,9 @@ def word_count(text: str) -> int:
     return len(words)
 
 
-def ordered_unique(items: Iterable[T]) -> List[T]:
+def ordered_unique[T](items: Iterable[T]) -> list[T]:
     """Deduplicate items while keeping first occurrence order."""
-    seen: List[T] = []
+    seen: list[T] = []
     for it in items:
         if it not in seen:
             seen.append(it)

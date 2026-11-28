@@ -1,9 +1,8 @@
 """Critique schema validator and CritiqueValidatorPort adapter."""
-from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 from gcl.domain.errors import L10nError
 from gcl.domain.locales import normalize_locale
@@ -18,23 +17,23 @@ __layer__ = "infrastructure"
 __pattern__ = "Validator and Port Adapter"
 __owns__ = "critique schema checking, slice loading and CritiqueValidatorPort implementation"
 
-ISSUE_TYPES: Tuple[str, ...] = (
+ISSUE_TYPES: tuple[str, ...] = (
     "translationese", "register", "tense", "regional_leak", "gender_leak",
     "ui_verb", "placeholder_grammar", "terminology", "other",
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CritiqueValidationContext:
     """Context passed to entry and summary validators."""
 
-    slice_targets: Optional[Dict[str, str]]
+    slice_targets: dict[str, str] | None
     ph_style: str
     tag_style: str
-    sources: Optional[Dict[str, str]] = None
+    sources: dict[str, str] | None = None
 
 
-def load_slice_targets(path: Path) -> Dict[str, str]:
+def load_slice_targets(path: Path) -> dict[str, str]:
     """Load key -> target from a blind slice JSON or table."""
     if path.suffix.lower() == ".json":
         data = load_json_data(path)
@@ -44,9 +43,9 @@ def load_slice_targets(path: Path) -> Dict[str, str]:
     return {r.key: r.dst for r in rows}
 
 
-def _check_entry_tokens(key: str, it: Any, suggested: str, where: str, ctx: CritiqueValidationContext) -> List[str]:
+def _check_entry_tokens(key: str, it: Any, suggested: str, where: str, ctx: CritiqueValidationContext) -> list[str]:
     assert ctx.slice_targets is not None
-    problems: List[str] = []
+    problems: list[str] = []
     original = ctx.slice_targets[key]
     source = (ctx.sources or {}).get(key) or ""
     if source.strip():
@@ -63,7 +62,7 @@ def _check_entry_tokens(key: str, it: Any, suggested: str, where: str, ctx: Crit
     return problems
 
 
-def _validate_entry(e: Any, idx: int, seen: Set[str], ctx: CritiqueValidationContext) -> Tuple[List[str], int, int]:
+def _validate_entry(e: Any, idx: int, seen: set[str], ctx: CritiqueValidationContext) -> tuple[list[str], int, int]:
     where = f"entries[{idx}]"
     if not isinstance(e, dict):
         return [f"{where}: must be an object"], 0, 0
@@ -71,7 +70,7 @@ def _validate_entry(e: Any, idx: int, seen: Set[str], ctx: CritiqueValidationCon
     if not isinstance(key, str) or not key:
         return [f"{where}: 'key' must be a non-empty string"], 0, 0
     where = f"entries[{idx}] ({key})"
-    probs: List[str] = [f"{where}: duplicate key"] if key in seen else []
+    probs: list[str] = [f"{where}: duplicate key"] if key in seen else []
     seen.add(key)
     flagged, critical = 0, 0
     score = e.get("score")
@@ -98,10 +97,10 @@ def _validate_entry(e: Any, idx: int, seen: Set[str], ctx: CritiqueValidationCon
     return probs, flagged, critical
 
 
-def _validate_summary(summary: Any, flagged: int, critical: int, slice_targets: Optional[Dict[str, str]]) -> List[str]:
+def _validate_summary(summary: Any, flagged: int, critical: int, slice_targets: dict[str, str] | None) -> list[str]:
     if not isinstance(summary, dict):
         return ["'summary' must be an object"]
-    probs: List[str] = []
+    probs: list[str] = []
     for k in ("total", "flagged", "critical"):
         v = summary.get(k)
         if not isinstance(v, int) or isinstance(v, bool) or v < 0:
@@ -119,12 +118,12 @@ def _validate_summary(summary: Any, flagged: int, critical: int, slice_targets: 
 
 def validate(
     data: Any,
-    slice_targets: Optional[Dict[str, str]],
+    slice_targets: dict[str, str] | None,
     ph_style: str,
     tag_style: str,
-    locale_expected: Optional[str],
-    sources: Optional[Dict[str, str]] = None,
-) -> List[str]:
+    locale_expected: str | None,
+    sources: dict[str, str] | None = None,
+) -> list[str]:
     """Validate critique document against schema and optional slice/source token parity."""
     if not isinstance(data, dict):
         return ["top level must be a JSON object"]
@@ -141,7 +140,7 @@ def validate(
     if not isinstance(entries, list):
         return problems + ["'entries' must be a list"]
     ctx = CritiqueValidationContext(slice_targets, ph_style, tag_style, sources)
-    seen: Set[str] = set()
+    seen: set[str] = set()
     flagged, critical = 0, 0
     for idx, e in enumerate(entries):
         ep, fl, cr = _validate_entry(e, idx, seen, ctx)
@@ -160,12 +159,12 @@ class DefaultCritiqueValidatorAdapter:
         *,
         locale: str,
         source_file: str,
-        entry: Dict[str, Any],
-        target_by_key: Dict[str, str],
-        sources_by_key: Dict[str, str],
+        entry: dict[str, Any],
+        target_by_key: dict[str, str],
+        sources_by_key: dict[str, str],
         ph_style: str,
         tag_style: str,
-    ) -> List[str]:
+    ) -> list[str]:
         doc = {
             "locale": locale, "source_file": source_file, "entries": [entry],
             "summary": {"total": 1, "flagged": 1, "critical": 1 if entry["score"] <= 2 else 0},

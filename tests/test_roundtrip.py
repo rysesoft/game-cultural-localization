@@ -1,11 +1,10 @@
 """P6: roundtrip_check.py (back-translation calque score, eligibility, calibration from the contrastive set)."""
-from __future__ import annotations
 
 import json
 import re
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -21,7 +20,7 @@ REGS = ("dialogue_casual", "dialogue_formal")
 LONG_EN = "Take your time kid, the generator is not going anywhere tonight."
 
 
-def contrastive(n: int) -> Dict[str, Any]:
+def contrastive(n: int) -> dict[str, Any]:
     pairs = []
     for i in range(n):
         en = f"Take your time kid, generator number {i} is not going anywhere tonight."

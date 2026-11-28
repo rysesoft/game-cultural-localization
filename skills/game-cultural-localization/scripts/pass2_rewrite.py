@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Pass 2 candidate tournament CLI facade delegating to gcl.application.rewrite."""
-from __future__ import annotations
 
 import argparse
 import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -34,10 +34,10 @@ _VALIDATOR = DefaultCritiqueValidatorAdapter()
 _PARITY = DefaultTokenParityAdapter()
 
 
-def load_source_table(path: Path, src_field: str, dst_field: Optional[str], key_field: str, locale: str) -> Dict[str, Dict[str, Any]]:
+def load_source_table(path: Path, src_field: str, dst_field: str | None, key_field: str, locale: str) -> dict[str, dict[str, Any]]:
     """Load source and Pass 1 targets keyed by key."""
     candidates = [dst_field] if dst_field else ["dst", locale, "target"]
-    last: Optional[L10nError] = None
+    last: L10nError | None = None
     for col in candidates:
         try:
             rows = load_table(path, src_field, col, key_field)
@@ -46,7 +46,7 @@ def load_source_table(path: Path, src_field: str, dst_field: Optional[str], key_
             last = exc
     else:
         raise L10nError(f"{path}: no target column (tried {', '.join(str(c) for c in candidates)}), pass --dst-field") from last
-    out: Dict[str, Dict[str, Any]] = {}
+    out: dict[str, dict[str, Any]] = {}
     for r in rows:
         cat = str(r.meta.get("category") or "")
         out[r.key] = {
@@ -59,12 +59,12 @@ def load_source_table(path: Path, src_field: str, dst_field: Optional[str], key_
 
 
 def rewrite_lines(
-    verdicts: Sequence[Dict[str, Any]], sources: Dict[str, Dict[str, Any]], locale: str, router: Any, *,
+    verdicts: Sequence[dict[str, Any]], sources: dict[str, dict[str, Any]], locale: str, router: Any, *,
     pass2_system: str, pick_system: str, n: int = 3, seed: int = 1234, ph_style: str = "auto",
     tag_style: str = "auto", statuses: Sequence[str] = DEFAULT_STATUSES, source_file: str = "",
-    workers: int = 1, context: Optional[ContextPack] = None, memo: Any = None,
+    workers: int = 1, context: ContextPack | None = None, memo: Any = None,
     tiered: bool = False, unanimous_skip_recheck: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Generate Pass 2 candidates, pick blind with J1, validate and recheck."""
     ctx = context if context is not None and context.text else None
     opts = TournamentOptions(
@@ -80,7 +80,7 @@ def rewrite_lines(
     )
 
 
-def build_systems(locale: str, pack_dir: Path, registers: Sequence[str], *, warmup: bool, seed: int) -> Tuple[str, str]:
+def build_systems(locale: str, pack_dir: Path, registers: Sequence[str], *, warmup: bool, seed: int) -> tuple[str, str]:
     """Return (pass2 system prompt, critic system prompt) with pack warm-up and few-shots."""
     warm, contrast = "", ""
     if pack_dir.is_dir():

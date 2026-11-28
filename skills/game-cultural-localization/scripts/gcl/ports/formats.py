@@ -1,9 +1,9 @@
 """Ports for table formats, placeholder strategies, tag strategies and lint handlers."""
-from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple, runtime_checkable
+from collections.abc import Sequence
+from typing import Any, Protocol, runtime_checkable
 
 from gcl.domain.models import Finding, PlaceholderSet, Row, Tag
 
@@ -12,38 +12,38 @@ __pattern__ = "Strategy Ports"
 __owns__ = "table format, token parser and lint handler protocols"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TableLoadOptions:
     """Explicit table loading options without hidden format branching."""
     src_field: str = "en"
     dst_field: str = "dst"
     key_field: str = "key"
     target_only: bool = False
-    delimiter: Optional[str] = None
-    src_input: Optional[Path] = None
-    shared_table: Optional[Path] = None
+    delimiter: str | None = None
+    src_input: Path | None = None
+    shared_table: Path | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ExportResult:
     """Summary returned by writing localized texts back into a game table format."""
-    files: Tuple[str, ...]
+    files: tuple[str, ...]
     placed: int
-    keys: Tuple[str, ...]
+    keys: tuple[str, ...]
     unchanged: int = 0
-    not_placed: Tuple[str, ...] = ()
+    not_placed: tuple[str, ...] = ()
 
 
 @runtime_checkable
 class TableFormatStrategy(Protocol):
     """Strategy handling one localization file suffix."""
-    suffixes: Tuple[str, ...]
+    suffixes: tuple[str, ...]
 
-    def read_rows(self, path: Path, options: TableLoadOptions) -> List[Row]: ...
+    def read_rows(self, path: Path, options: TableLoadOptions) -> list[Row]: ...
 
     def write_export(
         self,
-        final_texts: Dict[str, str],
+        final_texts: dict[str, str],
         template: Path,
         out_dir: Path,
         *,
@@ -65,7 +65,7 @@ class TagStrategy(Protocol):
     """Strategy extracting and stripping rich text tags for one engine markup style."""
     style: str
 
-    def extract(self, text: str) -> List[Tag]: ...
+    def extract(self, text: str) -> list[Tag]: ...
 
     def strip(self, text: str) -> str: ...
 
@@ -74,17 +74,17 @@ class TagStrategy(Protocol):
 class LintCheck(Protocol):
     """One deterministic check in the LQA Chain of Responsibility."""
 
-    def check_row(self, row: Row, context: Any) -> List[Finding]: ...
+    def check_row(self, row: Row, context: Any) -> list[Finding]: ...
 
 
 @runtime_checkable
 class TokenParityPort(Protocol):
     """Application facing port checking placeholder, rich tag and glossary parity."""
 
-    def placeholder_problems(self, src: str, dst: str, style: str = "auto", extra_regex: Any = None) -> List[str]: ...
+    def placeholder_problems(self, src: str, dst: str, style: str = "auto", extra_regex: Any = None) -> list[str]: ...
 
-    def tag_problems(self, src: str, dst: str, style: str = "auto") -> List[str]: ...
+    def tag_problems(self, src: str, dst: str, style: str = "auto") -> list[str]: ...
 
-    def glossary_problems(self, src: str, dst: str, glossary: Sequence[Any]) -> List[str]: ...
+    def glossary_problems(self, src: str, dst: str, glossary: Sequence[Any]) -> list[str]: ...
 
-    def parity_problems(self, src: str, dst: str, ph_style: str = "auto", tag_style: str = "auto") -> List[str]: ...
+    def parity_problems(self, src: str, dst: str, ph_style: str = "auto", tag_style: str = "auto") -> list[str]: ...

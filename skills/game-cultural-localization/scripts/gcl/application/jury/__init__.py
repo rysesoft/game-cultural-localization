@@ -1,5 +1,4 @@
 """Blind mixed family jury policy, anonymized deliberation and escalation Chain of Responsibility."""
-from __future__ import annotations
 
 from .deliberation import (
     GENERIC_NAMES, LABELS, anonymize, decide, decide_line, deliberate_line, deliberate_lines,

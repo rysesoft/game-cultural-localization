@@ -15,15 +15,13 @@ Usage:
 
 Exit codes: 0 config, keys and pings OK, 1 a fallback model had to be used,
 2 config error, missing API key, or a model failed without a fallback.
-Python 3.9+, standard library only.
+Python 3.15, standard library only.
 """
-
-from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -35,7 +33,7 @@ from providers import JURY_TIERS, OPTIONAL_SINGLE_ROLES, SINGLE_ROLES, FakeScena
 TOOL = "providers_check"
 
 
-def parse_roles(raw: str) -> List[str]:
+def parse_roles(raw: str) -> list[str]:
     """Split and validate a comma separated role list."""
     roles = [r.strip() for r in raw.split(",") if r.strip()]
     known = SINGLE_ROLES + OPTIONAL_SINGLE_ROLES + JURY_TIERS
@@ -67,14 +65,14 @@ def main() -> int:
                     budget_log=Path(args.budget_log) if args.budget_log else None)
     router.require(roles)
     lines = [f"Providers check: {args.input} ({'dry run, fake provider' if args.dry_run else 'live keys'})"]
-    role_rows: List[Dict[str, Any]] = []
+    role_rows: list[dict[str, Any]] = []
     for role in roles:
         specs = cfg.jury(role) if role in JURY_TIERS else [cfg.role_model(role)]
         desc = ", ".join(f"{s.alias}={s.id} [{s.provider}]" for s in specs)
         lines.append(f"  {role:<9} {desc}")
         role_rows.append({"role": role, "models": [{"alias": s.alias, "id": s.id, "provider": s.provider,
                                                      "env_key": cfg.env_key(s)} for s in specs]})
-    pings: List[Dict[str, Any]] = []
+    pings: list[dict[str, Any]] = []
     if args.ping:
         for spec in cfg.specs_for_roles(roles):
             role = next(r for r in roles if spec in (cfg.jury(r) if r in JURY_TIERS else [cfg.role_model(r)]))

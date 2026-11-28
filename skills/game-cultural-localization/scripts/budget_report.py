@@ -27,13 +27,12 @@ exceeds --max-cost, 2 usage or input error (no log, broken line).
 Python 3.15, standard library only.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from collections.abc import Iterable, Sequence
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -47,7 +46,7 @@ TOOL = "budget_report"
 PRICE_NOT_SET = "price not set (fiyat girilmedi)"
 
 
-def find_logs(path: Path) -> List[Path]:
+def find_logs(path: Path) -> list[Path]:
     """A budget file, or every budget*.jsonl below a folder (sorted)."""
     if path.is_file():
         return [path]
@@ -59,9 +58,9 @@ def find_logs(path: Path) -> List[Path]:
     raise L10nError(f"budget log not found: {path}")
 
 
-def read_records(paths: Sequence[Path]) -> List[Dict[str, Any]]:
+def read_records(paths: Sequence[Path]) -> list[dict[str, Any]]:
     """Parse JSON lines; every record needs role, provider, model and numeric token fields."""
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for p in paths:
         for n, line in enumerate(read_text_bom(p).splitlines(), start=1):
             if not line.strip():
@@ -82,7 +81,7 @@ def read_records(paths: Sequence[Path]) -> List[Dict[str, Any]]:
     return out
 
 
-Prices = Dict[str, Tuple[Optional[float], ...]]
+type Prices = dict[str, tuple[float | None, ...]]
 
 
 def price_table(config: Any) -> Prices:
@@ -98,7 +97,7 @@ def price_table(config: Any) -> Prices:
 
 
 def cost_of(model: str, tin: float, tout: float, prices: Prices, cache_read: float = 0, cache_write: float = 0,
-            batch: bool = False, flex: bool = False) -> Optional[float]:
+            batch: bool = False, flex: bool = False) -> float | None:
     """USD cost, None when the model or one of its prices is unknown.
 
     tin is the whole prompt. The cached parts are taken out of it and priced with their own rates. A batched call
@@ -115,9 +114,9 @@ def cost_of(model: str, tin: float, tout: float, prices: Prices, cache_read: flo
     return cost * mult
 
 
-def aggregate(records: Iterable[Dict[str, Any]], keys: Sequence[str], prices: Prices) -> List[Dict[str, Any]]:
+def aggregate(records: Iterable[dict[str, Any]], keys: Sequence[str], prices: Prices) -> list[dict[str, Any]]:
     """Group records by the given fields; cost is summed per model so mixed groups stay exact."""
-    groups: Dict[Tuple[str, ...], Dict[str, Any]] = {}
+    groups: dict[tuple[str, ...], dict[str, Any]] = {}
     for r in records:
         gk = tuple(str(r.get(k, "")) for k in keys)
         g = groups.setdefault(gk, {**{k: v for k, v in zip(keys, gk)}, "calls": 0, "errors": 0, "input_tokens": 0, "output_tokens": 0,
@@ -155,7 +154,7 @@ def aggregate(records: Iterable[Dict[str, Any]], keys: Sequence[str], prices: Pr
     return out
 
 
-def project(totals: Dict[str, Any], rows: int, project_rows: int, project_locales: int) -> Dict[str, Any]:
+def project(totals: dict[str, Any], rows: int, project_rows: int, project_locales: int) -> dict[str, Any]:
     """Scale the measured per-line usage to project_rows x project_locales lines."""
     factor = project_rows * project_locales / float(rows)
     return {"measured_rows": rows, "project_rows": project_rows, "project_locales": project_locales,
@@ -181,7 +180,7 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def _fmt_cost(g: Dict[str, Any]) -> str:
+def _fmt_cost(g: dict[str, Any]) -> str:
     return f"${g['cost_usd']:.4f}" if g["priced"] else (f"${g['cost_usd']:.4f} + {PRICE_NOT_SET}" if g["cost_usd"] else PRICE_NOT_SET)
 
 

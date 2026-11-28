@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Multi-language LQA linter CLI facade delegating to gcl.application.gates and gcl.infrastructure."""
-from __future__ import annotations
 
 import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from collections.abc import Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -27,7 +26,7 @@ TOOL = "lqa_linter"
 _PARITY = DefaultTokenParityAdapter()
 
 
-def lint_rows(rows: Sequence[Row], rules: Sequence[Rule], opt: LintOptions) -> List[Finding]:
+def lint_rows(rows: Sequence[Row], rules: Sequence[Rule], opt: LintOptions) -> list[Finding]:
     """Lint rows via Chain of Responsibility and return findings in input order."""
     return _lint_rows(rows, rules, opt, _PARITY)
 
@@ -100,7 +99,7 @@ def main() -> int:
     if cfg_rules:
         extra_dirs.append(Path(cfg_rules))
     if args.no_builtin_rules:
-        custom_files: List[Path] = []
+        custom_files: list[Path] = []
         for d in extra_dirs:
             paths = [d] if d.is_file() else sorted(d.glob("*.json")) if d.is_dir() else []
             if not paths and not d.exists():
@@ -111,7 +110,7 @@ def main() -> int:
         rules = load_rules(locale, variant, extra_dirs)
 
     gl_path = pick(args.glossary, cfg, "glossary", None)
-    glossary: List[GlossaryTerm] = load_glossary(Path(gl_path), locale) if gl_path else []
+    glossary: list[GlossaryTerm] = load_glossary(Path(gl_path), locale) if gl_path else []
 
     opt = LintOptions(
         locale=locale, placeholder_style=ph_style, tag_style=tag_style, placeholder_regex=ph_regex,

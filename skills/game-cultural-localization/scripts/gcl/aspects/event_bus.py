@@ -1,10 +1,9 @@
 """In process Observer / EventBus and thread safe JSONL budget telemetry subscriber."""
-from __future__ import annotations
 
 import json
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from gcl.ports.events import DomainEvent, EventSubscriber, LLMCallObserved
 
@@ -18,7 +17,7 @@ class InMemoryEventBus:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._subscribers: List[EventSubscriber] = []
+        self._subscribers: list[EventSubscriber] = []
 
     def subscribe(self, subscriber: EventSubscriber) -> None:
         with self._lock:
@@ -35,12 +34,12 @@ class InMemoryEventBus:
 class BudgetLog:
     """Thread safe JSONL writer recording one record per provider invocation."""
 
-    def __init__(self, path: Optional[Path] = None) -> None:
+    def __init__(self, path: Path | None = None) -> None:
         self.path = Path(path) if path else None
-        self.records: List[Dict[str, Any]] = []
+        self.records: list[dict[str, Any]] = []
         self._lock = threading.Lock()
 
-    def write(self, record: Dict[str, Any]) -> None:
+    def write(self, record: dict[str, Any]) -> None:
         with self._lock:
             self.records.append(record)
             if self.path is not None:
@@ -58,7 +57,7 @@ class BudgetLogSubscriber:
     def handle(self, event: DomainEvent) -> None:
         if not isinstance(event, LLMCallObserved):
             return
-        rec: Dict[str, Any] = {
+        rec: dict[str, Any] = {
             "role": event.role, "provider": event.provider, "alias": event.alias, "model": event.model,
             "input_tokens": event.input_tokens, "output_tokens": event.output_tokens,
             "latency_ms": event.latency_ms, "ok": event.ok,

@@ -3,14 +3,13 @@
 
 Python 3.15, standard library only.
 """
-from __future__ import annotations
 
 import argparse
 import ast
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 SCRIPTS_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = SCRIPTS_ROOT.parent.parent.parent
@@ -19,7 +18,7 @@ NAV_PATH = REPO_ROOT / "docs" / "architecture" / "NAVIGATION.md"
 LAYER_ORDER = ("domain", "ports", "aspects", "application", "infrastructure", "composition")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ModuleInfo:
     module: str
     rel_path: str
@@ -27,10 +26,10 @@ class ModuleInfo:
     pattern: str
     owns: str
     lines: int
-    classes: Tuple[str, ...]
+    classes: tuple[str, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FacadeInfo:
     script: str
     lines: int
@@ -46,7 +45,7 @@ def _string_attr(tree: ast.Module, name: str) -> str:
     return ""
 
 
-def _public_classes(tree: ast.Module) -> Tuple[str, ...]:
+def _public_classes(tree: ast.Module) -> tuple[str, ...]:
     return tuple(n.name for n in tree.body if isinstance(n, ast.ClassDef) and not n.name.startswith("_"))
 
 
@@ -54,10 +53,10 @@ def _clean_cell(text: str) -> str:
     return text.replace(":", ".").replace(";", ",").replace("—", "-").replace("–", "-").replace("|", "/").strip()
 
 
-def scan_gcl_modules(gcl_root: Path = GCL_ROOT) -> List[ModuleInfo]:
+def scan_gcl_modules(gcl_root: Path = GCL_ROOT) -> list[ModuleInfo]:
     if not gcl_root.is_dir():
         return []
-    out: List[ModuleInfo] = []
+    out: list[ModuleInfo] = []
     for path in sorted(gcl_root.rglob("*.py")):
         if path.name == "__init__.py":
             continue
@@ -78,8 +77,8 @@ def scan_gcl_modules(gcl_root: Path = GCL_ROOT) -> List[ModuleInfo]:
     return out
 
 
-def scan_facades(scripts_root: Path = SCRIPTS_ROOT) -> List[FacadeInfo]:
-    out: List[FacadeInfo] = []
+def scan_facades(scripts_root: Path = SCRIPTS_ROOT) -> list[FacadeInfo]:
+    out: list[FacadeInfo] = []
     for path in sorted(scripts_root.glob("*.py")):
         if path.name.endswith(".workflow.py") or path.name == "__init__.py":
             continue
@@ -91,7 +90,7 @@ def scan_facades(scripts_root: Path = SCRIPTS_ROOT) -> List[FacadeInfo]:
 
 
 def render_navigation(modules: Sequence[ModuleInfo], facades: Sequence[FacadeInfo]) -> str:
-    lines: List[str] = [
+    lines: list[str] = [
         "# Codebase Navigation Map",
         "",
         "Generated automatically by `scripts/dev/sync_navigation.py`. Never edit manually.",
@@ -149,7 +148,7 @@ def sync(check: bool = False, nav_path: Path = NAV_PATH) -> int:
     return 0
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Generate or verify docs/architecture/NAVIGATION.md")
     ap.add_argument("--check", action="store_true", help="Exit 1 when NAVIGATION.md is stale or missing")
     args = ap.parse_args(argv)

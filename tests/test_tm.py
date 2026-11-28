@@ -1,5 +1,4 @@
 """P11: tm.py (SQLite TM, character n-gram neighbours with category and speaker tiers, approval flow back)."""
-from __future__ import annotations
 
 import json
 import re

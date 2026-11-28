@@ -1,5 +1,4 @@
 """P1: providers package, providers.config.json, fake provider, router, budget log, providers_check CLI."""
-from __future__ import annotations
 
 import json
 import os
@@ -8,7 +7,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 from unittest import mock
 
 import sys as _sys
@@ -32,18 +31,18 @@ EXPECTED_IDS = {
 }
 
 
-def bundled_config_dict() -> Dict[str, Any]:
+def bundled_config_dict() -> dict[str, Any]:
     return json.loads((SCRIPTS / "providers.config.json").read_text(encoding="utf-8"))
 
 
 class ScriptedTransport:
     """Fake HTTP transport: returns queued (status, body, headers) and records every request."""
 
-    def __init__(self, replies: List[Tuple[int, Any, Dict[str, str]]]) -> None:
+    def __init__(self, replies: list[tuple[int, Any, dict[str, str]]]) -> None:
         self.replies = list(replies)
-        self.requests: List[Dict[str, Any]] = []
+        self.requests: list[dict[str, Any]] = []
 
-    def __call__(self, url: str, headers: Dict[str, str], body: bytes, timeout: float) -> Tuple[int, bytes, Dict[str, str]]:
+    def __call__(self, url: str, headers: dict[str, str], body: bytes, timeout: float) -> tuple[int, bytes, dict[str, str]]:
         self.requests.append({"url": url, "headers": dict(headers), "body": json.loads(body.decode("utf-8"))})
         status, data, hdrs = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
         if isinstance(data, Exception):
@@ -55,7 +54,7 @@ class ScriptedTransport:
 ANTHROPIC_OK = {"content": [{"type": "text", "text": "{\"ok\": true}"}], "usage": {"input_tokens": 12, "output_tokens": 3}}
 
 
-def sse(*events: Dict[str, Any]) -> bytes:
+def sse(*events: dict[str, Any]) -> bytes:
     """A Server-Sent Events body the way the Messages API streams it."""
     return "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in events).encode("utf-8")
 
@@ -164,7 +163,7 @@ class ConfigTests(unittest.TestCase):
 class HttpAdapterTests(unittest.TestCase):
     def _make(self, name: str, replies, **kw):
         t = ScriptedTransport(replies)
-        sleeps: List[float] = []
+        sleeps: list[float] = []
         endpoint = {"anthropic": "https://api.anthropic.com/v1/messages", "google": "https://generativelanguage.googleapis.com/v1beta",
                     "deepseek": "https://api.deepseek.com/chat/completions"}[name]
         p = get_provider(name, kw.pop("model", "m-1"), api_key="secret-key-123", endpoint=endpoint, transport=t, sleep=sleeps.append, **kw)
@@ -426,7 +425,7 @@ class HttpAdapterTests(unittest.TestCase):
 
 class _MockApi(BaseHTTPRequestHandler):
     """Local stand-in for the three vendor APIs (127.0.0.1 only)."""
-    seen: List[Dict[str, Any]] = []
+    seen: list[dict[str, Any]] = []
     first_429 = True
 
     def log_message(self, *a):  # keep test output clean
@@ -552,7 +551,7 @@ class RouterAndFakeTests(unittest.TestCase):
 
     def test_rate_limiter_spacing(self):
         now = [0.0]
-        slept: List[float] = []
+        slept: list[float] = []
 
         def sleep(s: float) -> None:
             slept.append(s)

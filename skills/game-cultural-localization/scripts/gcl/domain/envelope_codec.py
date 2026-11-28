@@ -1,11 +1,10 @@
 """Pure domain prompt envelope codec, tolerant JSON extraction, hashes and token estimates."""
-from __future__ import annotations
 
 import hashlib
 import json
 import re
 import unicodedata
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from .errors import L10nError
 
@@ -18,12 +17,12 @@ JSON_ONLY_HINT = "Reply with one JSON object only. No Markdown fences, no prose 
 _FENCE_RE = re.compile(r"^```[a-zA-Z]*\s*|\s*```$", re.MULTILINE)
 
 
-def envelope(instruction: str, payload: Dict[str, Any]) -> str:
+def envelope(instruction: str, payload: dict[str, Any]) -> str:
     """Build a user prompt combining instruction, separator and JSON payload."""
     return instruction.rstrip() + PAYLOAD_SEP + json.dumps(payload, ensure_ascii=False)
 
 
-def split_envelope(user: str) -> Tuple[str, Optional[Dict[str, Any]]]:
+def split_envelope(user: str) -> tuple[str, dict[str, Any] | None]:
     """Inverse of envelope() returning (instruction, payload_or_None)."""
     if PAYLOAD_SEP not in user:
         return user, None
@@ -61,7 +60,7 @@ def prompt_hash(system: str, user: str) -> str:
     return hashlib.sha256((system + "\x00" + user).encode("utf-8")).hexdigest()[:16]
 
 
-def salvage_keyed_items(text: str, reply_field: str) -> List[Dict[str, Any]]:
+def salvage_keyed_items(text: str, reply_field: str) -> list[dict[str, Any]]:
     """Recover complete JSON object items from a truncated keyed list response."""
     cleaned = _FENCE_RE.sub("", text.strip())
     m = re.search(rf'"{re.escape(reply_field)}"\s*:\s*\[', cleaned)
@@ -69,7 +68,7 @@ def salvage_keyed_items(text: str, reply_field: str) -> List[Dict[str, Any]]:
         return []
     decoder = json.JSONDecoder()
     pos, n = m.end(), len(cleaned)
-    items: List[Dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
     while pos < n:
         while pos < n and cleaned[pos] in " \t\r\n,":
             pos += 1

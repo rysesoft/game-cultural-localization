@@ -3,13 +3,12 @@
 
 Python 3.15, standard library only. Exit 0 clean, Exit 1 contract violations found.
 """
-from __future__ import annotations
 
 import ast
 import re
 import sys
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from collections.abc import Iterable, Sequence
 
 DEV_DIR = Path(__file__).resolve().parent
 SCRIPTS_ROOT = DEV_DIR.parent
@@ -22,9 +21,10 @@ if str(DEV_DIR) not in sys.path:
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
+import py315_audit  # type: ignore # noqa: E402
 import sync_navigation as nav  # type: ignore # noqa: E402
 
-ALLOWED_IMPORTS: Dict[str, Set[str]] = {
+ALLOWED_IMPORTS: dict[str, set[str]] = {
     "domain": {"domain"},
     "ports": {"domain", "ports"},
     "aspects": {"domain", "ports", "aspects"},
@@ -53,7 +53,7 @@ _COLON_RE = re.compile(r"(?<=\S):(?=[*_]*(?:\s|$))")
 _TABLE_SEP_RE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$")
 
 
-def _prose_punctuation_problems(markdown: str) -> List[str]:
+def _prose_punctuation_problems(markdown: str) -> list[str]:
     try:
         import text_style
         return [f"line {n}: {msg}" for n, msg in text_style.punctuation_problems(markdown)]
@@ -61,7 +61,7 @@ def _prose_punctuation_problems(markdown: str) -> List[str]:
         text = markdown.replace("\r\n", "\n")
         for rx in (_FENCE_RE, _INLINE_CODE_RE, _URL_RE):
             text = rx.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
-        probs: List[str] = []
+        probs: list[str] = []
         for idx, ln in enumerate(text.split("\n"), start=1):
             if _TABLE_SEP_RE.match(ln):
                 continue
@@ -73,7 +73,7 @@ def _prose_punctuation_problems(markdown: str) -> List[str]:
         return probs
 
 
-def _resolve_module(current_mod: str, is_pkg: bool, level: int, target: Optional[str]) -> str:
+def _resolve_module(current_mod: str, is_pkg: bool, level: int, target: str | None) -> str:
     if level == 0:
         return target or ""
     parts = current_mod.split(".")
@@ -85,7 +85,7 @@ def _resolve_module(current_mod: str, is_pkg: bool, level: int, target: Optional
     return ".".join(prefix)
 
 
-def _layer_of(mod: str) -> Optional[str]:
+def _layer_of(mod: str) -> str | None:
     parts = mod.split(".")
     if len(parts) >= 2 and parts[0] == "gcl" and parts[1] in ALLOWED_IMPORTS:
         return parts[1]
@@ -101,8 +101,8 @@ def _string_attr(tree: ast.Module, name: str) -> str:
     return ""
 
 
-def _imported_targets(tree: ast.AST, mod: str, is_pkg: bool) -> List[Tuple[str, Tuple[str, ...]]]:
-    out: List[Tuple[str, Tuple[str, ...]]] = []
+def _imported_targets(tree: ast.AST, mod: str, is_pkg: bool) -> list[tuple[str, tuple[str, ...]]]:
+    out: list[tuple[str, tuple[str, ...]]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -114,8 +114,8 @@ def _imported_targets(tree: ast.AST, mod: str, is_pkg: bool) -> List[Tuple[str, 
     return out
 
 
-def _check_clean_code(tree: ast.AST, rel: str, line_count: int) -> List[str]:
-    issues: List[str] = []
+def _check_clean_code(tree: ast.AST, rel: str, line_count: int) -> list[str]:
+    issues: list[str] = []
     if line_count > MAX_FILE_LINES:
         issues.append(f"{rel}: {line_count} lines exceeds limit {MAX_FILE_LINES}")
     for node in ast.walk(tree):
@@ -132,10 +132,10 @@ def _check_clean_code(tree: ast.AST, rel: str, line_count: int) -> List[str]:
     return issues
 
 
-def _find_cycles(edges: Dict[str, Set[str]]) -> List[str]:
-    state: Dict[str, int] = {}
-    stack: List[str] = []
-    cycles: List[str] = []
+def _find_cycles(edges: dict[str, set[str]]) -> list[str]:
+    state: dict[str, int] = {}
+    stack: list[str] = []
+    cycles: list[str] = []
 
     def dfs(u: str) -> None:
         state[u] = 1
@@ -157,9 +157,25 @@ def _find_cycles(edges: Dict[str, Set[str]]) -> List[str]:
     return cycles
 
 
-def verify(check_nav: bool = True) -> List[str]:
-    errors: List[str] = []
-    edges: Dict[str, Set[str]] = {}
+def _check_python_315_compliance() -> list[str]:
+    issues: list[str] = []
+    tests_root = REPO_ROOT / "tests"
+    targets: list[tuple[Path, bool]] = [
+        (p, False) for p in sorted(SCRIPTS_ROOT.rglob("*.py")) if not p.name.endswith(".workflow.py")
+    ]
+    if tests_root.is_dir():
+        targets.extend((p, True) for p in sorted(tests_root.rglob("*.py")))
+    for path, is_test in targets:
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        src = path.read_text(encoding="utf-8-sig")
+        tree = ast.parse(src, filename=str(path))
+        issues.extend(py315_audit.check_modern_python(tree, src, rel, is_test=is_test))
+    return issues
+
+
+def verify(check_nav: bool = True) -> list[str]:
+    errors: list[str] = []
+    edges: dict[str, set[str]] = {}
     if GCL_ROOT.is_dir():
         for path in sorted(GCL_ROOT.rglob("*.py")):
             rel_gcl = path.relative_to(GCL_ROOT)
@@ -199,7 +215,8 @@ def verify(check_nav: bool = True) -> List[str]:
                         errors.append(f"{rel}:{node.lineno}: hardcoded vendor literal {node.value!r} breaks OCP")
         for cyc in _find_cycles(edges):
             errors.append(f"cyclic import detected: {cyc}")
-    doc_files: List[Path] = []
+    errors.extend(_check_python_315_compliance())
+    doc_files: list[Path] = []
     if DOCS_ARCH.is_dir():
         doc_files.extend(sorted(DOCS_ARCH.rglob("*.md")))
     gcl_agents = GCL_ROOT / "AGENTS.md"
@@ -215,13 +232,13 @@ def verify(check_nav: bool = True) -> List[str]:
     return errors
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     errs = verify(check_nav=("--no-nav" not in (argv or sys.argv[1:])))
     if errs:
         for e in errs:
             print(f"FAIL: {e}", file=sys.stderr)
         return 1
-    print("Architecture verification OK (layers, cycles, blindness, OCP, Clean Code, navigation, docs style)")
+    print("Architecture verification OK (layers, cycles, blindness, OCP, Clean Code, Python 3.15, navigation, docs style)")
     return 0
 
 

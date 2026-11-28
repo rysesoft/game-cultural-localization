@@ -1,11 +1,10 @@
 """P8: budget_report.py (aggregation by role, provider, model, cost from the config prices, projection)."""
-from __future__ import annotations
 
 import json
 import re
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -17,7 +16,7 @@ from l10n_common import L10nError  # noqa: E402
 from providers import envelope, load_providers_config, Router  # noqa: E402
 
 
-def rec(role: str, provider: str, model: str, tin: int, tout: int, ms: int = 100, **extra: Any) -> Dict[str, Any]:
+def rec(role: str, provider: str, model: str, tin: int, tout: int, ms: int = 100, **extra: Any) -> dict[str, Any]:
     return {"role": role, "provider": provider, "model": model, "input_tokens": tin, "output_tokens": tout, "latency_ms": ms, "ok": True, **extra}
 
 
@@ -31,7 +30,7 @@ RECORDS = [
 ]
 
 
-def write_log(path: Path, records: List[Dict[str, Any]]) -> Path:
+def write_log(path: Path, records: list[dict[str, Any]]) -> Path:
     return write_text(path, "".join(json.dumps(r) + "\n" for r in records))
 
 

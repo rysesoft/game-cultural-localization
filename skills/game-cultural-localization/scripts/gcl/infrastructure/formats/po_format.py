@@ -1,9 +1,8 @@
 """Gettext PO table parsing and export Strategy implementation."""
-from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from gcl.domain.models import Row
 from gcl.ports.formats import ExportResult, TableLoadOptions
@@ -18,7 +17,7 @@ _PO_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "a": "\a",
 
 
 def _po_unescape(s: str) -> str:
-    def repl(m: "re.Match[str]") -> str:
+    def repl(m: re.Match[str]) -> str:
         c = m.group(1)
         if c in _PO_ESCAPES:
             return _PO_ESCAPES[c]
@@ -35,7 +34,7 @@ def _po_quoted(line: str, prefix_re: str) -> str:
     return m.group(1) if m else ""
 
 
-def _finalize_entry(entry: Optional[Dict[str, Any]], rows: List[Row]) -> None:
+def _finalize_entry(entry: dict[str, Any] | None, rows: list[Row]) -> None:
     if entry is None:
         return
     msgid, plural, msgstr = entry["msgid"], entry["plural"], entry["msgstr"]
@@ -53,16 +52,16 @@ def _finalize_entry(entry: Optional[Dict[str, Any]], rows: List[Row]) -> None:
         rows.append(Row(f"{base_key}|[{idx}]", msgid if idx == 0 else plural, msgstr.get(idx, ""), meta))
 
 
-def _ensure_cur(cur: Optional[Dict[str, Any]], pending_ctxt: Optional[str]) -> Dict[str, Any]:
+def _ensure_cur(cur: dict[str, Any] | None, pending_ctxt: str | None) -> dict[str, Any]:
     return cur if cur is not None else {"msgid": "", "plural": None, "msgstr": {}, "ctxt": pending_ctxt, "fuzzy": False}
 
 
-def parse_po(raw: str) -> List[Row]:
+def parse_po(raw: str) -> list[Row]:
     """Parse gettext PO text into Row entries supporting plurals, fuzzy and msgctxt."""
-    rows: List[Row] = []
-    cur: Optional[Dict[str, Any]] = None
-    pending_flags: List[str] = []
-    pending_ctxt: Optional[str] = None
+    rows: list[Row] = []
+    cur: dict[str, Any] | None = None
+    pending_flags: list[str] = []
+    pending_ctxt: str | None = None
     state: Any = None
     for line in raw.splitlines():
         s = line.strip()
@@ -106,7 +105,7 @@ def po_quote(text: str) -> str:
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t") + '"'
 
 
-def export_po(final: Dict[str, str], template: Path, out_dir: Path) -> Dict[str, Any]:
+def export_po(final: dict[str, str], template: Path, out_dir: Path) -> dict[str, Any]:
     """Update msgstr entries in a PO template, clearing fuzzy when filled."""
     raw = read_text_bom(template)
     nl = "\r\n" if "\r\n" in raw else "\n"
@@ -135,10 +134,10 @@ class PoTableFormat:
     """TableFormatStrategy for .po files."""
     suffixes = (".po",)
 
-    def read_rows(self, path: Path, options: TableLoadOptions) -> List[Row]:
+    def read_rows(self, path: Path, options: TableLoadOptions) -> list[Row]:
         rows = parse_po(read_text_bom(path))
         return [Row(r.key, "", r.dst, r.meta) for r in rows] if options.target_only else rows
 
-    def write_export(self, final_texts: Dict[str, str], template: Path, out_dir: Path, *, dst_field: str, key_field: str) -> ExportResult:
+    def write_export(self, final_texts: dict[str, str], template: Path, out_dir: Path, *, dst_field: str, key_field: str) -> ExportResult:
         res = export_po(final_texts, template, out_dir)
         return ExportResult(tuple(res["files"]), int(res["placed"]), tuple(sorted(res["keys"])))

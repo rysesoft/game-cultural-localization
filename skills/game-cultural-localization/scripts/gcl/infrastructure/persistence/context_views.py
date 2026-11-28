@@ -1,7 +1,7 @@
 """Segregated Adapter views exposing either BlindContextView or WriterContextView."""
-from __future__ import annotations
 
-from typing import Any, Dict, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 __layer__ = "infrastructure"
 __pattern__ = "Interface Segregation Adapter"
@@ -29,10 +29,10 @@ class BlindContextAdapter:
     def build_system(self, base: str) -> str:
         return str(self._pack.system(base, writer=False))
 
-    def line_fields(self, key: str) -> Dict[str, str]:
+    def line_fields(self, key: str) -> dict[str, str]:
         return dict(self._pack.line(key, writer=False))
 
-    def enrich_entries(self, items: Sequence[Dict[str, Any]], key_field: str = "key") -> int:
+    def enrich_entries(self, items: Sequence[dict[str, Any]], key_field: str = "key") -> int:
         return int(self._pack.enrich(items, key_field=key_field, writer=False))
 
 
@@ -53,5 +53,5 @@ class WriterContextAdapter:
     def build_system(self, base: str) -> str:
         return str(self._pack.system(base, writer=True))
 
-    def line_fields(self, key: str) -> Dict[str, str]:
+    def line_fields(self, key: str) -> dict[str, str]:
         return dict(self._pack.line(key, writer=True))

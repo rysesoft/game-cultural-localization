@@ -1,5 +1,4 @@
 """Tests for the Antigravity workflow template, the orchestrator stub and the CLI surface (--help/--version)."""
-from __future__ import annotations
 
 import ast
 import json

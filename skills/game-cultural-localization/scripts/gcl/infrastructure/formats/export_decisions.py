@@ -1,8 +1,8 @@
 """Export final translation loading, decision application and parity hold back workflow."""
-from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 from gcl.domain.errors import L10nError
 from gcl.infrastructure.tokens.rich_tags import parity_problems
@@ -18,7 +18,7 @@ __owns__ = "final batch loading, developer decision application and parity hold 
 DECISIONS = ("accept", "reject", "")
 
 
-def collect_inputs(inp: Path, locale: str, changes: Sequence[str]) -> Tuple[List[Path], List[Path]]:
+def collect_inputs(inp: Path, locale: str, changes: Sequence[str]) -> tuple[list[Path], list[Path]]:
     """Collect final_batch_*.json files and corresponding change report JSONs."""
     if inp.is_dir():
         finals = sorted(inp.glob("final_batch_*.json"))
@@ -38,12 +38,12 @@ def collect_inputs(inp: Path, locale: str, changes: Sequence[str]) -> Tuple[List
 def load_finals(
     paths: Sequence[Path],
     locale: str,
-    dst_field: Optional[str],
+    dst_field: str | None,
     key_field: str,
-    sources: Optional[Dict[str, str]] = None,
-) -> Dict[str, str]:
+    sources: dict[str, str] | None = None,
+) -> dict[str, str]:
     """Merge key -> target texts across final files while collecting optional source lines."""
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     for p in paths:
         rows = None
         for col in ([dst_field] if dst_field else [locale, "dst", "target"]):
@@ -64,9 +64,9 @@ def load_finals(
     return out
 
 
-def apply_decisions(final: Dict[str, str], reports: Sequence[Path]) -> Dict[str, Any]:
+def apply_decisions(final: dict[str, str], reports: Sequence[Path]) -> dict[str, Any]:
     """Apply developer accept/reject decisions to final (mutating final for caller compatibility)."""
-    stats: Dict[str, Any] = {"accepted": 0, "rejected": 0, "undecided": [], "unknown": []}
+    stats: dict[str, Any] = {"accepted": 0, "rejected": 0, "undecided": [], "unknown": []}
     for path in reports:
         rep = load_json_data(path)
         lines = rep.get("lines") if isinstance(rep, dict) else None
@@ -93,9 +93,9 @@ def apply_decisions(final: Dict[str, str], reports: Sequence[Path]) -> Dict[str,
     return stats
 
 
-def hold_back_broken(final: Dict[str, str], sources: Dict[str, str], ph_style: str, tag_style: str) -> Dict[str, List[str]]:
+def hold_back_broken(final: dict[str, str], sources: dict[str, str], ph_style: str, tag_style: str) -> dict[str, list[str]]:
     """Remove keys whose target placeholders or tags differ from source and return reasons."""
-    held: Dict[str, List[str]] = {}
+    held: dict[str, list[str]] = {}
     for key in list(final):
         problems = parity_problems(sources.get(key, ""), final[key], ph_style, tag_style)
         if problems:
@@ -107,14 +107,14 @@ def hold_back_broken(final: Dict[str, str], sources: Dict[str, str], ph_style: s
 def dispatch_non_unity_export(
     registry: TableFormatRegistry,
     templates: Sequence[Path],
-    final: Dict[str, str],
+    final: dict[str, str],
     out_dir: Path,
     *,
     dst_field: str,
     key_field: str,
-) -> Tuple[List[str], int, set]:
+) -> tuple[list[str], int, set]:
     """Export all non-Unity templates through the Strategy Registry."""
-    files: List[str] = []
+    files: list[str] = []
     placed = 0
     placed_keys: set = set()
     for t in templates:

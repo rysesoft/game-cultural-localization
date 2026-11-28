@@ -1,11 +1,10 @@
 """P5: build_contrastive_set.py (native / robot / unknown pairs, B3.5)."""
-from __future__ import annotations
 
 import json
 import re
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -28,10 +27,10 @@ REF = ("key,en,tr-TR,category,speaker,archetype\n"
 class SpyProvider:
     """Records system prompts and answers with a fixed mapping or a marker."""
 
-    def __init__(self, model: str, mapping: Dict[str, str] = None) -> None:
+    def __init__(self, model: str, mapping: dict[str, str] = None) -> None:
         self.model = model
         self.mapping = mapping or {}
-        self.systems: List[str] = []
+        self.systems: list[str] = []
 
     def complete(self, system: str, user: str, **kw: Any) -> ChatResult:
         self.systems.append(system)
@@ -41,7 +40,7 @@ class SpyProvider:
 
 
 class BuildTests(unittest.TestCase):
-    def _rows(self, td: Path) -> List[Dict[str, Any]]:
+    def _rows(self, td: Path) -> list[dict[str, Any]]:
         return bcs.load_reference_rows(write_text(td / "ref.csv", REF), "tr-TR")
 
     def test_reference_loading_and_registers(self):

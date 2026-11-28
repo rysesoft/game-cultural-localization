@@ -1,5 +1,4 @@
 """Provider adapters, HTTP retry transport, batch coalescing and AOP factory."""
-from __future__ import annotations
 
 from .adapters import (
     AnthropicProvider, DeepSeekProvider, FakeProvider, FakeScenario, FromLegacy, GoogleProvider, LegacyAdapter, as_legacy,

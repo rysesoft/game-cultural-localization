@@ -1,5 +1,4 @@
 """Stdlib urllib transport, SSE reassembly, unified HTTP retry engine and HttpProvider base."""
-from __future__ import annotations
 
 import json
 import os
@@ -8,7 +7,8 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from gcl.domain.errors import MissingKeyError, ModelNotFoundError, PermanentProviderError, ProviderError, StreamInterrupted
 from gcl.domain.models import ChatRequest, ChatResult, RawVendorReply, TokenUsage
@@ -30,23 +30,23 @@ GOOGLE_MAX_OUTPUT = 65536
 OFFLINE_ENV = "GCL_OFFLINE"
 STREAM_DONE = {"__done__": True}
 
-Transport = Callable[[str, Dict[str, str], bytes, float], Tuple[int, bytes, Dict[str, str]]]
-GetTransport = Callable[[str, Dict[str, str], float], Tuple[int, bytes, Dict[str, str]]]
+type Transport = Callable[[str, dict[str, str], bytes, float], tuple[int, bytes, dict[str, str]]]
+type GetTransport = Callable[[str, dict[str, str], float], tuple[int, bytes, dict[str, str]]]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HttpRequestOptions:
     """Parameter object grouping retry and decode policy for HTTP requests."""
     sleep: Callable[[float], None] = time.sleep
     timeout: float = DEFAULT_TIMEOUT_S
     max_attempts: int = MAX_ATTEMPTS
     label: str = "provider"
-    before_attempt: Optional[Callable[[], Any]] = None
+    before_attempt: Callable[[], Any] | None = None
     secrets: Sequence[str] = ()
-    decode: Optional[Callable[[str, Dict[str, str]], Dict[str, Any]]] = None
+    decode: Callable[[str, dict[str, str]], dict[str, Any]] | None = None
 
 
-def _urlopen_request(req: urllib.request.Request, timeout: float) -> Tuple[int, bytes, Dict[str, str]]:
+def _urlopen_request(req: urllib.request.Request, timeout: float) -> tuple[int, bytes, dict[str, str]]:
     if os.environ.get(OFFLINE_ENV, "") == "1":
         raise ProviderError(f"network access is disabled ({OFFLINE_ENV}=1); use --dry-run")
     try:
@@ -63,16 +63,16 @@ def _urlopen_request(req: urllib.request.Request, timeout: float) -> Tuple[int, 
         return int(exc.code), raw, ({k.lower(): v for k, v in exc.headers.items()} if exc.headers else {})
 
 
-def urllib_transport(url: str, headers: Dict[str, str], body: bytes, timeout: float) -> Tuple[int, bytes, Dict[str, str]]:
+def urllib_transport(url: str, headers: dict[str, str], body: bytes, timeout: float) -> tuple[int, bytes, dict[str, str]]:
     return _urlopen_request(urllib.request.Request(url, data=body, headers=headers, method="POST"), timeout)
 
 
-def urllib_get(url: str, headers: Dict[str, str], timeout: float) -> Tuple[int, bytes, Dict[str, str]]:
+def urllib_get(url: str, headers: dict[str, str], timeout: float) -> tuple[int, bytes, dict[str, str]]:
     clean = {k: v for k, v in headers.items() if k.lower() != "content-type"}
     return _urlopen_request(urllib.request.Request(url, headers=clean, method="GET"), timeout)
 
 
-def json_object(text: str, label: str) -> Dict[str, Any]:
+def json_object(text: str, label: str) -> dict[str, Any]:
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
@@ -82,10 +82,10 @@ def json_object(text: str, label: str) -> Dict[str, Any]:
     return data
 
 
-def sse_events(text: str, label: str = "provider") -> List[Dict[str, Any]]:
+def sse_events(text: str, label: str = "provider") -> list[dict[str, Any]]:
     """Decode Server Sent Events frames into ordered dicts."""
-    events: List[Dict[str, Any]] = []
-    data: List[str] = []
+    events: list[dict[str, Any]] = []
+    data: list[str] = []
 
     def flush() -> None:
         if not data:
@@ -113,7 +113,7 @@ def sse_events(text: str, label: str = "provider") -> List[Dict[str, Any]]:
     return events
 
 
-def _execute_with_retry(send_once: Callable[[], Tuple[int, bytes, Dict[str, str]]], opts: HttpRequestOptions, *, check_not_found: bool) -> Any:
+def _execute_with_retry(send_once: Callable[[], tuple[int, bytes, dict[str, str]]], opts: HttpRequestOptions, *, check_not_found: bool) -> Any:
     last = "no attempt made"
     for attempt in range(opts.max_attempts):
         if opts.before_attempt is not None:
@@ -155,7 +155,7 @@ def _execute_with_retry(send_once: Callable[[], Tuple[int, bytes, Dict[str, str]
     raise ProviderError(f"{opts.label}: giving up after {opts.max_attempts} attempts ({last})")
 
 
-def send_json(url: str, headers: Dict[str, str], payload: Dict[str, Any], transport: Transport, opts: Optional[HttpRequestOptions] = None) -> Dict[str, Any]:
+def send_json(url: str, headers: dict[str, str], payload: dict[str, Any], transport: Transport, opts: HttpRequestOptions | None = None) -> dict[str, Any]:
     o = opts or HttpRequestOptions()
     decode = o.decode or (lambda txt, _h: json_object(txt, o.label))
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -163,7 +163,7 @@ def send_json(url: str, headers: Dict[str, str], payload: Dict[str, Any], transp
     return _execute_with_retry(lambda: transport(url, headers, body, o.timeout), eff, check_not_found=True)
 
 
-def fetch_text(url: str, headers: Dict[str, str], get: GetTransport, opts: Optional[HttpRequestOptions] = None) -> str:
+def fetch_text(url: str, headers: dict[str, str], get: GetTransport, opts: HttpRequestOptions | None = None) -> str:
     o = opts or HttpRequestOptions()
     return str(_execute_with_retry(lambda: get(url, headers, o.timeout), o, check_not_found=False))
 
@@ -174,7 +174,7 @@ class HttpProvider:
     name = "http"
     capabilities = ProviderCapabilities()
 
-    def __init__(self, model: str, api_key: str, endpoint: str, *, rps: float = 5.0, transport: Optional[Transport] = None, **kw: Any) -> None:
+    def __init__(self, model: str, api_key: str, endpoint: str, *, rps: float = 5.0, transport: Transport | None = None, **kw: Any) -> None:
         if not api_key:
             raise MissingKeyError(f"{self.name}: empty API key")
         self.model, self.family, self._key = model, self.name, api_key
@@ -196,23 +196,23 @@ class HttpProvider:
     def _url(self) -> str:
         return self.endpoint
 
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self) -> dict[str, str]:
         raise NotImplementedError
 
-    def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> Dict[str, Any]:
+    def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> dict[str, Any]:
         raise NotImplementedError
 
-    def _decode(self, text: str, headers: Dict[str, str]) -> Dict[str, Any]:
+    def _decode(self, text: str, headers: dict[str, str]) -> dict[str, Any]:
         return json_object(text, f"{self.name}/{self.model}")
 
     @staticmethod
-    def _is_stream(text: str, headers: Dict[str, str]) -> bool:
+    def _is_stream(text: str, headers: dict[str, str]) -> bool:
         return "text/event-stream" in headers.get("content-type", "") or text.lstrip().startswith(("event:", "data:", ":"))
 
-    def parse_reply(self, data: Dict[str, Any]) -> RawVendorReply:
+    def parse_reply(self, data: dict[str, Any]) -> RawVendorReply:
         raise NotImplementedError
 
-    def _parse(self, data: Dict[str, Any]) -> Tuple[str, Optional[int], Optional[int], int, int]:
+    def _parse(self, data: dict[str, Any]) -> tuple[str, int | None, int | None, int, int]:
         rep = self.parse_reply(data)
         u = rep.usage
         return rep.text, u.input_tokens or None, u.output_tokens or None, u.cache_read_tokens, u.cache_write_tokens

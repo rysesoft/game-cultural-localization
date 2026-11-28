@@ -1,7 +1,7 @@
 """Adapter implementing TokenParityPort using engine placeholder, tag and glossary helpers."""
-from __future__ import annotations
 
-from typing import Any, List, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from gcl.infrastructure.formats.glossary import glossary_violations
 
@@ -16,17 +16,17 @@ __owns__ = "DefaultTokenParityAdapter bridging domain/application lint & rewrite
 class DefaultTokenParityAdapter:
     """Implements TokenParityPort using PlaceholderRegistry, TagRegistry and glossary rules."""
 
-    def placeholder_problems(self, src: str, dst: str, style: str = "auto", extra_regex: Any = None) -> List[str]:
+    def placeholder_problems(self, src: str, dst: str, style: str = "auto", extra_regex: Any = None) -> list[str]:
         return compare_placeholders(
             extract_placeholders(src, style, extra_regex),
             extract_placeholders(dst, style, extra_regex),
         )
 
-    def tag_problems(self, src: str, dst: str, style: str = "auto") -> List[str]:
+    def tag_problems(self, src: str, dst: str, style: str = "auto") -> list[str]:
         return compare_tags(extract_tags(src, style), extract_tags(dst, style))
 
-    def glossary_problems(self, src: str, dst: str, glossary: Sequence[Any]) -> List[str]:
+    def glossary_problems(self, src: str, dst: str, glossary: Sequence[Any]) -> list[str]:
         return glossary_violations(src, dst, glossary)
 
-    def parity_problems(self, src: str, dst: str, ph_style: str = "auto", tag_style: str = "auto") -> List[str]:
+    def parity_problems(self, src: str, dst: str, ph_style: str = "auto", tag_style: str = "auto") -> list[str]:
         return parity_problems(src, dst, ph_style, tag_style)

@@ -1,7 +1,6 @@
 """DeepSeek OpenAI compatible adapter with thinking toggle and SSE stream assembly."""
-from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from gcl.domain.errors import ProviderError, StreamInterrupted
 from gcl.domain.models import RawVendorReply, TokenUsage
@@ -14,11 +13,11 @@ __pattern__ = "Adapter"
 __owns__ = "DeepSeek chat/completions formatting, SSE reassembly and cache hit usage"
 
 
-def assemble_stream(text: str, label: str = "deepseek") -> Dict[str, Any]:
+def assemble_stream(text: str, label: str = "deepseek") -> dict[str, Any]:
     """Reassemble DeepSeek OpenAI compatible SSE chunks into one completion payload."""
-    content: List[str] = []
-    usage: Optional[Dict[str, Any]] = None
-    finish: Optional[str] = None
+    content: list[str] = []
+    usage: dict[str, Any] | None = None
+    finish: str | None = None
     done = False
     for event in sse_events(text, label):
         if event.get("__done__"):
@@ -45,11 +44,11 @@ class DeepSeekProvider(HttpProvider):
     name = "deepseek"
     capabilities = ProviderCapabilities(supports_streaming=True, supports_cache_control=False)
 
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._key}", "content-type": "application/json"}
 
-    def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> Dict[str, Any]:
-        body: Dict[str, Any] = {
+    def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> dict[str, Any]:
+        body: dict[str, Any] = {
             "model": self.model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "temperature": float(temperature),
@@ -63,10 +62,10 @@ class DeepSeekProvider(HttpProvider):
             body["thinking"] = {"type": "enabled" if thinking else "disabled"}
         return body
 
-    def _decode(self, text: str, headers: Dict[str, str]) -> Dict[str, Any]:
+    def _decode(self, text: str, headers: dict[str, str]) -> dict[str, Any]:
         return assemble_stream(text, f"{self.name}/{self.model}") if self._is_stream(text, headers) else super()._decode(text, headers)
 
-    def parse_reply(self, data: Dict[str, Any]) -> RawVendorReply:
+    def parse_reply(self, data: dict[str, Any]) -> RawVendorReply:
         choices = data.get("choices")
         if not isinstance(choices, list) or not choices:
             raise ProviderError(f"deepseek/{self.model}: response has no choices")

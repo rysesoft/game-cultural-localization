@@ -1,8 +1,8 @@
 """Juror vote normalization, everyday word filtering and tier cap rule."""
-from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from gcl.domain.models import JurorVote
 from gcl.domain.specifications import apply_everyday_policy
@@ -14,7 +14,7 @@ __pattern__ = "Domain Policy Bridge"
 __owns__ = "raw vote normalization, odd word verification and everyday tier score cap"
 
 
-def normalize_vote(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def normalize_vote(item: dict[str, Any]) -> dict[str, Any] | None:
     """Coerce a raw model vote dict into canonical fields or return None."""
     raw = item.get("score")
     try:
@@ -36,10 +36,10 @@ def normalize_vote(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     }
 
 
-def everyday_check(vote: Dict[str, Any], target: str) -> Dict[str, Any]:
+def everyday_check(vote: dict[str, Any], target: str) -> dict[str, Any]:
     """Keep only odd words genuinely present in target text (mutates vote dict)."""
     low = str(target).casefold()
-    words: List[str] = []
+    words: list[str] = []
     for raw in vote.get("odd_words") or []:
         w = str(raw).strip().strip("\"'.,!?")
         if w and any(ch.isalpha() for ch in w) and not any(ch in w for ch in "{}<>%[]") and w.casefold() in low and w not in words:
@@ -48,7 +48,7 @@ def everyday_check(vote: Dict[str, Any], target: str) -> Dict[str, Any]:
     return vote
 
 
-def everyday_rule(votes: Sequence[Dict[str, Any]]) -> bool:
+def everyday_rule(votes: Sequence[dict[str, Any]]) -> bool:
     """Apply apply_everyday_policy across tier vote dicts in place."""
     domain_votes = [
         JurorVote(

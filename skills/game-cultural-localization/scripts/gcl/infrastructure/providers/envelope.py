@@ -1,5 +1,4 @@
 """Re export facade for domain envelope codec kept for infrastructure provider callers."""
-from __future__ import annotations
 
 from gcl.domain.envelope_codec import (
     JSON_ONLY_HINT, PAYLOAD_SEP, envelope, estimate_tokens, extract_json, prompt_hash, salvage_keyed_items, split_envelope,

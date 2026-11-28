@@ -1,5 +1,4 @@
 """Unit tests for l10n_common: locales, placeholders, tags, loaders, glossary, width."""
-from __future__ import annotations
 
 import unittest
 from pathlib import Path

@@ -1,5 +1,4 @@
 """Vendor transport adapters conforming to VendorTransportAdapter and RawVendorReply."""
-from __future__ import annotations
 
 from .anthropic_adapter import AnthropicProvider
 from .deepseek_adapter import DeepSeekProvider

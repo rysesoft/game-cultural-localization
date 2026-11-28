@@ -1,5 +1,4 @@
 """Application pipeline orchestration modules."""
-from __future__ import annotations
 
 from .builder import LocalizationPipelineBuilder
 from .config import ARCHETYPES, RESUME_FILE, JuryPipelineOptions, PipelineHooks, PipelineState

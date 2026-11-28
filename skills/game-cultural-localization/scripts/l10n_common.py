@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Backward compatible Facade over gcl.domain and gcl.infrastructure format/token modules."""
-from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
@@ -47,10 +46,10 @@ def load_table(
     key_field: str = "key",
     *,
     target_only: bool = False,
-    delimiter: Optional[str] = None,
-    src_input: Optional[Path] = None,
-    shared_table: Optional[Path] = None,
-) -> List[Row]:
+    delimiter: str | None = None,
+    src_input: Path | None = None,
+    shared_table: Path | None = None,
+) -> list[Row]:
     """Load rows from any supported localization table via TableFormatRegistry."""
     opts = TableLoadOptions(
         src_field=src_field, dst_field=dst_field, key_field=key_field,
@@ -59,6 +58,6 @@ def load_table(
     return load_table_options(path, opts, DEFAULT_FORMAT_REGISTRY)
 
 
-def load_pairs(input_path: Path, src_field: str = "en", dst_field: str = "dst", key_field: str = "key", **kw: Any) -> List[Row]:
+def load_pairs(input_path: Path, src_field: str = "en", dst_field: str = "dst", key_field: str = "key", **kw: Any) -> list[Row]:
     """Backward compatible alias of load_table()."""
     return load_table(input_path, src_field, dst_field, key_field, **kw)

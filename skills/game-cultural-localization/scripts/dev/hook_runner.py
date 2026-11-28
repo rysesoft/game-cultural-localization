@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """Antigravity SessionStart and Stop lifecycle hook runner for persistent architecture governance.
 
-Reads hook JSON from stdin and emits hook JSON to stdout (Python 3.9+, stdlib only).
+Reads hook JSON from stdin and emits hook JSON to stdout (Python 3.15, stdlib only).
 """
-from __future__ import annotations
 
 import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 DEV_DIR = Path(__file__).resolve().parent
 SCRIPTS_ROOT = DEV_DIR.parent
@@ -21,7 +20,7 @@ if str(DEV_DIR) not in sys.path:
 import verify_architecture as va  # noqa: E402
 
 
-def _read_stdin() -> Dict[str, Any]:
+def _read_stdin() -> dict[str, Any]:
     raw = sys.stdin.read().strip()
     if not raw:
         return {}
@@ -32,7 +31,7 @@ def _read_stdin() -> Dict[str, Any]:
         return {}
 
 
-def _changed_files() -> List[str]:
+def _changed_files() -> list[str]:
     try:
         proc = subprocess.run(
             ["git", "-C", str(REPO_ROOT), "status", "--porcelain"],
@@ -45,7 +44,7 @@ def _changed_files() -> List[str]:
         return []
 
 
-def handle_session_start() -> Dict[str, Any]:
+def handle_session_start() -> dict[str, Any]:
     brief = (
         "GCL Architecture Memory Active. Before editing scripts/gcl/ or scripts/*.py read "
         "docs/architecture/NAVIGATION.md, docs/architecture/ARCHITECTURE_MEMORY.md and "
@@ -55,7 +54,7 @@ def handle_session_start() -> Dict[str, Any]:
     return {"injectSteps": [{"systemMessage": {"systemMessage": brief}}]}
 
 
-def handle_stop(payload: Dict[str, Any]) -> Dict[str, Any]:
+def handle_stop(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("continuationActive"):
         return {}
     reason = str(payload.get("terminationReason", "NO_TOOL_CALL"))

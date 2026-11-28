@@ -1,8 +1,7 @@
 """Composition root binding concrete infrastructure adapters to application services."""
-from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any
 
 from gcl.application.gates.lint_chain import LintChainRunner
 from gcl.application.rewrite.tournament import Pass2Tournament
@@ -47,7 +46,7 @@ class ServiceContainer:
         return BatchMemo(path)
 
     @staticmethod
-    def split_context_pack(pack: Any) -> Tuple[Optional[WriterContextAdapter], Optional[BlindContextAdapter]]:
+    def split_context_pack(pack: Any) -> tuple[WriterContextAdapter | None, BlindContextAdapter | None]:
         if pack is None:
             return None, None
         return _AnnotatedWriterView(pack), BlindContextAdapter(pack)

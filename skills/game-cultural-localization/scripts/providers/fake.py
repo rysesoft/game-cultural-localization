@@ -1,5 +1,4 @@
 """Facade delegating providers.fake symbols to gcl.infrastructure.providers.adapters.fake_adapter."""
-from __future__ import annotations
 
 import sys
 from pathlib import Path

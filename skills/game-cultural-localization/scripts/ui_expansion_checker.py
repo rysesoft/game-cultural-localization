@@ -28,15 +28,13 @@ Risk levels
         per-locale entry in the config "max_width" table, or the global --max-width)
 
 Exit codes: 0 clean, 1 HIGH risks with --fail-on-high (or WARN with --fail-on-warn),
-2 usage / input error.  Python 3.9+, standard library only.
+2 usage / input error.  Python 3.15, standard library only.
 """
-
-from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Optional
+from typing import Any, NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -47,7 +45,7 @@ from l10n_common import (  # noqa: E402
 
 TOOL = "ui_expansion_checker"
 
-EXPANSION_FACTORS: Dict[str, float] = {
+EXPANSION_FACTORS: dict[str, float] = {
     "en": 1.00, "tr-TR": 1.25, "de-DE": 1.35, "fr": 1.30, "es-ES": 1.30, "it-IT": 1.25,
     "pt-BR": 1.30, "pt-PT": 1.30, "pl-PL": 1.30, "lt-LT": 1.30, "ru-RU": 1.30,
     "ja-JP": 1.30, "ko-KR": 1.40, "zh-CN": 1.10, "zh-Hant": 1.10,
@@ -67,7 +65,7 @@ class Risk(NamedTuple):
     allowed: float
     reason: str
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "level": self.level, "key": self.key, "src": self.src, "dst": self.dst,
             "src_width": round(self.src_width, 2), "dst_width": round(self.dst_width, 2),
@@ -80,8 +78,8 @@ class CheckOptions(NamedTuple):
     factor: float
     warn_factor: float = 1.0
     high_factor: float = 1.5
-    max_width: Optional[float] = None
-    width_table: Optional[Dict[str, Any]] = None
+    max_width: float | None = None
+    width_table: dict[str, Any] | None = None
     cjk_cell: float = DEFAULT_CJK_CELL
     ambiguous_wide: bool = False
     tag_style: str = "auto"
@@ -99,7 +97,7 @@ def allowed_ratio(src_width: float, factor: float) -> float:
     return factor + bonus
 
 
-def _budget(row: Row, opt: CheckOptions) -> Optional[float]:
+def _budget(row: Row, opt: CheckOptions) -> float | None:
     for f in _BUDGET_FIELDS:
         v = row.meta.get(f)
         if v not in (None, ""):
@@ -117,9 +115,9 @@ def _budget(row: Row, opt: CheckOptions) -> Optional[float]:
     return opt.max_width
 
 
-def check_rows(rows: List[Row], opt: CheckOptions) -> List[Risk]:
+def check_rows(rows: list[Row], opt: CheckOptions) -> list[Risk]:
     """Return expansion risks sorted by (level, ratio desc, key) - deterministic."""
-    risks: List[Risk] = []
+    risks: list[Risk] = []
     for row in rows:
         src, dst = row.src, row.dst
         if not dst.strip():

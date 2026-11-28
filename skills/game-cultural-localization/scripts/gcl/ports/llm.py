@@ -1,5 +1,4 @@
 """Segregated LLM client and vendor transport port protocols."""
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
@@ -11,7 +10,7 @@ __pattern__ = "Port Interface"
 __owns__ = "LLM client, vendor transport adapter and capability contracts"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProviderCapabilities:
     """Explicit provider capability flags removing getattr runtime probing."""
     batched: bool = False

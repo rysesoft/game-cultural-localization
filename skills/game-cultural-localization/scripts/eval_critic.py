@@ -18,10 +18,8 @@ Usage:
 
 Exit codes: 0 every member reached the pairwise gate, 1 at least one member is below it,
 2 usage or input error.
-Python 3.9+, standard library only.
+Python 3.15, standard library only.
 """
-
-from __future__ import annotations
 
 import argparse
 import hashlib
@@ -33,7 +31,8 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from itertools import combinations
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -55,7 +54,7 @@ DEFAULT_SEED = 1234
 DEFAULT_SHOTS = 6
 
 
-def weighted_kappa(a: Sequence[int], b: Sequence[int], k: int = 5) -> Optional[float]:
+def weighted_kappa(a: Sequence[int], b: Sequence[int], k: int = 5) -> float | None:
     """Quadratic weighted Cohen's kappa for two raters on a 1..k scale (None without items)."""
     n = len(a)
     if n == 0 or n != len(b):
@@ -76,7 +75,7 @@ def weighted_kappa(a: Sequence[int], b: Sequence[int], k: int = 5) -> Optional[f
     return round(1.0 - num / den, 4)
 
 
-def load_pairs(path: Path) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+def load_pairs(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Read contrastive.json and validate its pairs."""
     data = load_json_data(path)
     if not isinstance(data, dict) or not isinstance(data.get("pairs"), list):
@@ -95,7 +94,7 @@ _LATIN_WORD = re.compile(r"[A-Za-z]{3,}")
 SHORT_WORDS = 3  # a pair whose English has at most this many words is a short label, judged apart
 
 
-def mixed_robot(pair: Dict[str, Any]) -> bool:
+def mixed_robot(pair: dict[str, Any]) -> bool:
     """A literal line that kept English words of its source untranslated, the literal model failed on it.
 
     Such a line is no test of a native ear, any reader spots it. The first set held 39 of them, all long lore lines.
@@ -107,11 +106,11 @@ def mixed_robot(pair: Dict[str, Any]) -> bool:
     return len(kept) >= 3 and len(kept) >= 0.25 * max(1, len(robot))
 
 
-def is_short(pair: Dict[str, Any]) -> bool:
+def is_short(pair: dict[str, Any]) -> bool:
     return len(str(pair.get("en", "")).split()) <= SHORT_WORDS
 
 
-def split_shots(pairs: Sequence[Dict[str, Any]], shots: int, limit: int, seed: int) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+def split_shots(pairs: Sequence[dict[str, Any]], shots: int, limit: int, seed: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Hold out `shots` pairs for the few-shot block, evaluate on (at most `limit` of) the rest."""
     rng = random.Random(seed)
     order = list(range(len(pairs)))
@@ -124,13 +123,13 @@ def split_shots(pairs: Sequence[Dict[str, Any]], shots: int, limit: int, seed: i
     return [pairs[i] for i in held], [pairs[i] for i in rest]
 
 
-def build_items(pairs: Sequence[Dict[str, Any]], seed: int, *, include_unknown: bool = True) -> Tuple[List[Dict[str, Any]], Dict[str, str], List[Dict[str, Any]], Dict[str, Tuple[str, str]]]:
+def build_items(pairs: Sequence[dict[str, Any]], seed: int, *, include_unknown: bool = True) -> tuple[list[dict[str, Any]], dict[str, str], list[dict[str, Any]], dict[str, tuple[str, str]]]:
     """Pairwise items (seeded side order), their native side, absolute-score entries (seeded order) and entry -> (kind, pair key)."""
     rng = random.Random(seed)
-    pw: List[Dict[str, Any]] = []
-    native_side: Dict[str, str] = {}
-    entries: List[Dict[str, Any]] = []
-    meta: Dict[str, Tuple[str, str]] = {}
+    pw: list[dict[str, Any]] = []
+    native_side: dict[str, str] = {}
+    entries: list[dict[str, Any]] = []
+    meta: dict[str, tuple[str, str]] = {}
     for p in pairs:
         if rng.random() < 0.5:
             pw.append({"id": p["key"], "a": p["native"], "b": p["robot"]})
@@ -151,14 +150,14 @@ def build_items(pairs: Sequence[Dict[str, Any]], seed: int, *, include_unknown: 
     return pw, native_side, entries, meta
 
 
-def _mean(xs: Sequence[float]) -> Optional[float]:
+def _mean(xs: Sequence[float]) -> float | None:
     return round(sum(xs) / len(xs), 4) if xs else None
 
 
-def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dict[str, Any]], shots_pairs: Sequence[Dict[str, Any]],
-             *, warmup: bool, pack_dir: Optional[Path], seed: int, warmup_count: int, pairwise_min: float,
-             langpack_version: Optional[str], workers: int = 1, store: Optional[Path] = None,
-             context: Optional[ContextPack] = None, include_unknown: bool = False) -> Dict[str, Any]:
+def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[dict[str, Any]], shots_pairs: Sequence[dict[str, Any]],
+             *, warmup: bool, pack_dir: Path | None, seed: int, warmup_count: int, pairwise_min: float,
+             langpack_version: str | None, workers: int = 1, store: Path | None = None,
+             context: ContextPack | None = None, include_unknown: bool = False) -> dict[str, Any]:
     """Run the calibration once (with or without warm-up) and return the B3.6 report.
 
     With workers > 1 every distinct model is calibrated in its own thread and sends up to `workers`
@@ -180,12 +179,12 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
             ctx = context.line(meta[e["key"]][1])
             if ctx:
                 e["context"] = ctx
-    unique: Dict[str, Tuple[str, Any]] = {}
+    unique: dict[str, tuple[str, Any]] = {}
     for tier in tiers:
         for m in router.jury(tier):
             unique.setdefault(m.model, (tier, m))  # a model in two tiers (deepseek-v4-pro in J2 and J3) is called once
 
-    stored: Dict[str, Any] = load_json_data(store) if store is not None and Path(store).is_file() else {}
+    stored: dict[str, Any] = load_json_data(store) if store is not None and Path(store).is_file() else {}
     lock = threading.Lock()
     # every finished batch is kept too, so a model stopped halfway (rate limit, provider queue) resumes where it stopped
     memo = BatchMemo(Path(store).with_name(Path(store).stem + ".batches.json")) if store is not None else None
@@ -196,7 +195,7 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
                            "instructions": [INSTRUCTIONS["pairwise"], INSTRUCTIONS["jury"]]}, ensure_ascii=False, sort_keys=True)
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
-    def calibrate(item: Tuple[str, Tuple[str, Any]]) -> Tuple[str, Optional[Dict[str, Any]], Optional[str]]:
+    def calibrate(item: tuple[str, tuple[str, Any]]) -> tuple[str, dict[str, Any] | None, str | None]:
         model, (tier, m) = item
         sig = signature(model, tier)
         if sig in stored:
@@ -231,8 +230,8 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
         hint = (f" Finished models are kept in {Path(store).name}, run the same command again to resume." if store is not None
                 else " Pass --cache FILE to keep finished models for a rerun.")
         raise L10nError("calibration failed for " + ", ".join(m for m, _ in failed) + f" ({failed[0][1]})." + hint)
-    cache: Dict[str, Dict[str, Any]] = {model: res for model, res, _err in outcomes if res is not None}
-    members: List[Dict[str, Any]] = []
+    cache: dict[str, dict[str, Any]] = {model: res for model, res, _err in outcomes if res is not None}
+    members: list[dict[str, Any]] = []
     for tier in tiers:
         for m in router.jury(tier):
             res = cache[m.model]
@@ -240,7 +239,7 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
             hit = {pid: res["choices"][pid] == side for pid, side in native_side.items()}
             short_ids = [p["key"] for p in pairs if is_short(p)]
             long_ids = [p["key"] for p in pairs if not is_short(p)]
-            by_kind: Dict[str, List[int]] = {"native": [], "robot": [], "unknown": []}
+            by_kind: dict[str, list[int]] = {"native": [], "robot": [], "unknown": []}
             for eid, (kind, _key) in meta.items():
                 by_kind["unknown" if kind.startswith("unknown:") else kind].append(res["scores"][eid])
             members.append({"tier": tier, "family": m.family, "model": m.model, "alias": m.alias,
@@ -251,8 +250,8 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
                             "robot_mean": _mean(by_kind["robot"]), "unknown_mean": _mean(by_kind["unknown"]), "n": len(native_side),
                             "unknown_distribution": {str(s): by_kind["unknown"].count(s) for s in range(1, 6)} if by_kind["unknown"] else {}})
     keys = sorted(meta)
-    inter: List[float] = []
-    intra: List[float] = []
+    inter: list[float] = []
+    intra: list[float] = []
     for x, y in combinations(members, 2):
         if x["model"] == y["model"]:
             continue
@@ -273,7 +272,7 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
             "secondary": {"native_mean_min": NATIVE_MEAN_MIN, "robot_mean_max": ROBOT_MEAN_MAX, "passed": secondary}}
 
 
-def _member_lines(rep: Dict[str, Any]) -> List[str]:
+def _member_lines(rep: dict[str, Any]) -> list[str]:
     out = []
     for m in rep["members"]:
         mark = "ok " if m["pairwise_accuracy"] >= rep["gate"]["pairwise_min"] else "LOW"
@@ -341,7 +340,7 @@ def main() -> int:
         without_w = evaluate(router, locale, tiers, evald, shots, warmup=False, **kw)
         delta = {f"{m['tier']}:{m['model']}": round(m["pairwise_accuracy"] - n["pairwise_accuracy"], 4)
                  for m, n in zip(with_w["members"], without_w["members"])}
-        report: Dict[str, Any] = {"locale": locale, "langpack_version": version, "with_warmup": with_w, "without_warmup": without_w,
+        report: dict[str, Any] = {"locale": locale, "langpack_version": version, "with_warmup": with_w, "without_warmup": without_w,
                                   "delta_pairwise": delta, "gate": with_w["gate"]}
         lines = [f"Critic calibration {locale}: {len(evald)} pairs, {len(shots)} held out as few-shots, warm-up compared",
                  "  with warm-up" if with_w["warmup"] else "  with warm-up (pack has no warm-up file, same as without)"]

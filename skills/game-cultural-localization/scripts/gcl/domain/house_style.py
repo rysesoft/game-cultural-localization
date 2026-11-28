@@ -1,8 +1,6 @@
 """House punctuation rules for README, docs, prompts and generated Markdown reports."""
-from __future__ import annotations
 
 import re
-from typing import List, Tuple
 
 __layer__ = "domain"
 __pattern__ = "Pure Domain Policy"
@@ -26,7 +24,7 @@ _EXAMPLE_RE = re.compile(
 
 def prose_only(markdown: str, exempt_examples: bool = False) -> str:
     """Return markdown with frontmatter, code, URLs and optional examples blanked."""
-    def blank(m: "re.Match[str]") -> str:
+    def blank(m: re.Match[str]) -> str:
         return re.sub(r"[^\n]", " ", m.group(0))
 
     text = markdown.replace("\r\n", "\n")
@@ -37,9 +35,9 @@ def prose_only(markdown: str, exempt_examples: bool = False) -> str:
     return text
 
 
-def punctuation_problems(markdown: str, exempt_examples: bool = False) -> List[Tuple[int, str]]:
+def punctuation_problems(markdown: str, exempt_examples: bool = False) -> list[tuple[int, str]]:
     """Return (line_number, message) pairs for prose violating house punctuation."""
-    problems: List[Tuple[int, str]] = []
+    problems: list[tuple[int, str]] = []
     for n, line in enumerate(prose_only(markdown, exempt_examples).split("\n"), start=1):
         if _TABLE_SEP_RE.match(line):
             continue

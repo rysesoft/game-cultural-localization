@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """API-independent orchestration CLI facade delegating to gcl.application.pipeline & gcl.composition."""
-from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
+from concurrent.futures import InterpreterPoolExecutor
+from collections.abc import Callable, Sequence
+from itertools import batched
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Protocol, Sequence
+from typing import Any, Protocol
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -45,7 +48,7 @@ class DryRunProvider:
 
     def __init__(self, locale: str) -> None:
         self.locale = locale
-        self.calls: List[Dict[str, str]] = []
+        self.calls: list[dict[str, str]] = []
 
     def complete(self, system: str, user: str) -> str:
         self.calls.append({"system": system[:80], "user": user[:80]})
@@ -111,7 +114,7 @@ def _extract_json(text: str) -> Any:
         raise L10nError(f"provider reply is not valid JSON: {exc.msg}")
 
 
-def phase0_preflight(state: PipelineState, rows: List[Row], fonts: List[Path]) -> None:
+def phase0_preflight(state: PipelineState, rows: list[Row], fonts: list[Path]) -> None:
     state.say(f"Phase 0: locale {state.locale}, {len(rows)} source rows")
     bible = state.workdir / f"{state.locale}_BIBLE.md"
     stub = f"# {state.locale} localization bible\n\n(stub created by orchestrator_stub; fill terminology, registers per archetype A1-A5, ledger)\n"
@@ -137,12 +140,12 @@ def phase0_preflight(state: PipelineState, rows: List[Row], fonts: List[Path]) -
             raise L10nError("font scan failed: " + proc.stderr.strip())
 
 
-def phase1_pass1(state: PipelineState, rows: List[Row], provider: Provider, batch_size: int) -> List[Path]:
+def phase1_pass1(state: PipelineState, rows: list[Row], provider: Provider, batch_size: int) -> list[Path]:
     system = system_prompt("game-culturalizer", state.locale, state.bible)
-    outputs: List[Path] = []
-    for i in range(0, len(rows), batch_size):
-        batch = rows[i:i + batch_size]
-        n = i // batch_size + 1
+    outputs: list[Path] = []
+    step = max(1, int(batch_size))
+    for n, batch_tuple in enumerate(batched(rows, step), start=1):
+        batch = list(batch_tuple)
         payload = {"task": "pass1", "locale": state.locale, "placeholder_style": state.ph_style, "tag_style": state.tag_style,
                    "rows": [{"key": r.key, "source": r.src, "category": r.meta.get("category", ""), "speaker": r.meta.get("speaker", "")} for r in batch]}
         user = (f"Translate the following clean-room batch into natural everyday {state.locale}. Reply with JSON "
@@ -160,10 +163,10 @@ def phase1_pass1(state: PipelineState, rows: List[Row], provider: Provider, batc
     return outputs
 
 
-def phase2_critique_and_pass2(state: PipelineState, pass1_files: List[Path], provider: Provider) -> List[Path]:
+def phase2_critique_and_pass2(state: PipelineState, pass1_files: list[Path], provider: Provider) -> list[Path]:
     critic_system = system_prompt("native-ear-critic", state.locale, "")
     editor_system = system_prompt("game-culturalizer", state.locale, state.bible)
-    finals: List[Path] = []
+    finals: list[Path] = []
     for n, p1 in enumerate(pass1_files, start=1):
         rows = load_table(p1, state.src_field, state.locale, state.key_field, target_only=True)
         entries = make_blind_slice.build_slice(rows, ["category", "speaker"], state.src_field, False, 0)
@@ -183,7 +186,7 @@ def phase2_critique_and_pass2(state: PipelineState, pass1_files: List[Path], pro
             raise L10nError(f"critique {crit_path.name} is invalid: " + "; ".join(problems[:5]))
         state.say(f"Phase 2: batch {n:02d} blind slice {len(entries)} rows, critique flagged {critique['summary']['flagged']}")
         suggestions = {e["key"]: e for e in critique.get("entries", [])}
-        rewritten: Dict[str, str] = {}
+        rewritten: dict[str, str] = {}
         if suggestions:
             payload2 = {"task": "pass2", "locale": state.locale,
                         "rows": [{"key": r.key, "source": r.src, "target": r.dst, "critique": suggestions.get(r.key)} for r in full_rows if r.key in suggestions]}
@@ -200,22 +203,73 @@ def phase2_critique_and_pass2(state: PipelineState, pass1_files: List[Path], pro
     return finals
 
 
-def phase3_gate(state: PipelineState, finals: List[Path], fonts: List[Path]) -> Dict[str, Any]:
-    rules = lqa_linter.load_rules(state.locale)
+def _gate_batch_worker(spec_json: str) -> str:
+    """Run LQA lint and UI expansion checks on one batch file inside a subinterpreter."""
+    import json as _json
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    spec = _json.loads(spec_json)
+    scripts_dir = spec["scripts_dir"]
+    if scripts_dir not in _sys.path:
+        _sys.path.insert(0, scripts_dir)
+    import l10n_common as _lc
+    import lqa_linter as _lint
+    import ui_expansion_checker as _ui
+
+    final_path = _Path(spec["final_str"])
+    locale = spec["locale"]
+    rows = _lc.load_table(final_path, spec["src_field"], locale, spec["key_field"])
+    rules = _lint.load_rules(locale)
+    findings = _lint.lint_rows(rows, rules, _lint.LintOptions(
+        locale=locale, placeholder_style=spec["ph_style"], tag_style=spec["tag_style"],
+        forbid_chars=spec["forbid_chars"], forbid_spaced_hyphen=spec["forbid_spaced_hyphen"],
+        strict_whitespace=spec["strict_whitespace"],
+    ))
+    risks = _ui.check_rows(rows, _ui.CheckOptions(locale=locale, factor=_ui.EXPANSION_FACTORS[locale], tag_style=spec["tag_style"]))
+    out_path = _Path(spec["workdir_str"]) / f"lqa_{locale}_{final_path.stem[-2:]}.json"
+    out_path.write_text(_json.dumps(
+        {"findings": [x.as_dict() for x in findings], "risks": [r.as_dict() for r in risks]},
+        ensure_ascii=False, indent=2,
+    ), encoding="utf-8")
+    return _json.dumps({
+        "errors": sum(1 for x in findings if x.severity == "ERR"),
+        "warnings": sum(1 for x in findings if x.severity == "WARN"),
+        "high": sum(1 for r in risks if r.level == "HIGH"),
+        "warn": sum(1 for r in risks if r.level == "WARN"),
+    })
+
+
+def phase3_gate(state: PipelineState, finals: list[Path], fonts: list[Path]) -> dict[str, Any]:
+    lqa_linter.load_rules(state.locale)
     summary = {"errors": 0, "warnings": 0, "high": 0, "warn": 0, "missing_glyphs": 0, "full_width_fallbacks": 0, "glyphs_checked": bool(fonts)}
     missing, wide = set(), set()
+    specs = [
+        json.dumps({
+            "scripts_dir": str(SCRIPTS_DIR), "final_str": str(f), "workdir_str": str(state.workdir),
+            "src_field": state.src_field, "locale": state.locale, "key_field": state.key_field,
+            "ph_style": state.ph_style, "tag_style": state.tag_style,
+            "forbid_chars": str(state.gate.get("forbid_chars", "")),
+            "forbid_spaced_hyphen": bool(state.gate.get("forbid_spaced_hyphen", False)),
+            "strict_whitespace": bool(state.gate.get("strict_whitespace", False)),
+        })
+        for f in finals
+    ]
+    batch_stats: list[str]
+    if len(specs) >= 2:
+        try:
+            workers = min(len(specs), max(2, os.cpu_count() or 2))
+            with InterpreterPoolExecutor(max_workers=workers) as ex:
+                batch_stats = list(ex.map(_gate_batch_worker, specs))
+        except RuntimeError:
+            batch_stats = [_gate_batch_worker(s) for s in specs]
+    else:
+        batch_stats = [_gate_batch_worker(s) for s in specs]
+    for raw in batch_stats:
+        counts = json.loads(raw)
+        for key in ("errors", "warnings", "high", "warn"):
+            summary[key] += int(counts[key])
     for f in finals:
-        rows = load_table(f, state.src_field, state.locale, state.key_field)
-        findings = lqa_linter.lint_rows(rows, rules, lqa_linter.LintOptions(
-            locale=state.locale, placeholder_style=state.ph_style, tag_style=state.tag_style,
-            forbid_chars=str(state.gate.get("forbid_chars", "")), forbid_spaced_hyphen=bool(state.gate.get("forbid_spaced_hyphen", False)),
-            strict_whitespace=bool(state.gate.get("strict_whitespace", False))))
-        risks = ui_expansion_checker.check_rows(rows, ui_expansion_checker.CheckOptions(locale=state.locale, factor=ui_expansion_checker.EXPANSION_FACTORS[state.locale], tag_style=state.tag_style))
-        summary["errors"] += sum(1 for x in findings if x.severity == "ERR")
-        summary["warnings"] += sum(1 for x in findings if x.severity == "WARN")
-        summary["high"] += sum(1 for r in risks if r.level == "HIGH")
-        summary["warn"] += sum(1 for r in risks if r.level == "WARN")
-        (state.workdir / f"lqa_{state.locale}_{f.stem[-2:]}.json").write_text(json.dumps({"findings": [x.as_dict() for x in findings], "risks": [r.as_dict() for r in risks]}, ensure_ascii=False, indent=2), encoding="utf-8")
         if fonts:
             cmd = [sys.executable, str(SCRIPTS_DIR / "font_glyph_scanner.py"), "--input", str(f), "--dst-field", state.locale, "--locale", state.locale, "--json"]
             for font in fonts:
@@ -242,8 +296,8 @@ def phase3_gate(state: PipelineState, finals: List[Path], fonts: List[Path]) -> 
 def run_pipeline(
     input_path: Path, locale: str, workdir: Path, provider: Provider, *, src_field: str = "en", dst_field: str = "dst",
     key_field: str = "key", ph_style: str = "auto", tag_style: str = "auto", batch_size: int = 50,
-    fonts: Optional[List[Path]] = None, gate: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    fonts: list[Path] | None = None, gate: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Run legacy Phase 0-3 flow and return result dict."""
     workdir.mkdir(parents=True, exist_ok=True)
     rows = [Row(r.key, r.dst, "", r.meta) for r in load_table(input_path, src_field, src_field, key_field, target_only=True)]
@@ -263,12 +317,12 @@ def _register(row: Row) -> str:
     return reg if reg else infer_register(str(row.meta.get("category") or ""), row.src, "game")
 
 
-def send_broken_lines_to_pass2(res: Dict[str, Any], targets: Dict[str, str], sources: Dict[str, str], ph_style: str, tag_style: str) -> int:
+def send_broken_lines_to_pass2(res: dict[str, Any], targets: dict[str, str], sources: dict[str, str], ph_style: str, tag_style: str) -> int:
     """Delegate broken placeholder/tag escalation to gcl.application.pipeline.stages."""
     return _send_broken_lines(res, targets, sources, ph_style, tag_style, _CONTAINER.parity)
 
 
-def _batch_budget(router: Any, start: int) -> Optional[Dict[str, Any]]:
+def _batch_budget(router: Any, start: int) -> dict[str, Any] | None:
     import budget_report
     recs = router.budget.records[start:]
     if not recs:
@@ -278,9 +332,9 @@ def _batch_budget(router: Any, start: int) -> Optional[Dict[str, Any]]:
 
 
 def _write_report(
-    report_changes: Any, verdict_doc: Dict[str, Any], locale: str, n: int, tag: str, workdir: Path,
-    rewrites: Optional[Dict[str, Any]], sources: Dict[str, Dict[str, str]], pack_dir: Path, budget: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    report_changes: Any, verdict_doc: dict[str, Any], locale: str, n: int, tag: str, workdir: Path,
+    rewrites: dict[str, Any] | None, sources: dict[str, dict[str, str]], pack_dir: Path, budget: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     rep = report_changes.build_report(verdict_doc, locale, f"{n:02d}", rewrites=rewrites, sources=sources, pack_dir=pack_dir, budget=budget)
     (workdir / f"changes_{tag}.json").write_text(json.dumps(rep, ensure_ascii=False, indent=2), encoding="utf-8")
     (workdir / f"changes_{tag}.md").write_text(report_changes.render_markdown(rep), encoding="utf-8")
@@ -300,7 +354,7 @@ def _build_hooks() -> PipelineHooks:
     from roundtrip_check import load_threshold, roundtrip_evidence
     from warmup_loader import load_warmup, render_warmup
 
-    def _prepare_blind(p1: Path, blind: Path, locale: str, src_field: str, key_field: str) -> List[Dict[str, Any]]:
+    def _prepare_blind(p1: Path, blind: Path, locale: str, src_field: str, key_field: str) -> list[dict[str, Any]]:
         slice_rows = load_table(p1, src_field, locale, key_field, target_only=True)
         entries = make_blind_slice.build_slice(slice_rows, ["category", "speaker"], src_field, False, 0)
         make_blind_slice.verify_no_leak(entries, load_table(p1, src_field, locale, key_field), src_field)
@@ -309,7 +363,7 @@ def _build_hooks() -> PipelineHooks:
         return jentries
 
     def _run_pass2(verdicts: Any, sources: Any, locale: str, router: Any, opts: JuryPipelineOptions,
-                   p2_sys: str, pk_sys: str, wctx: Any, bctx: Any, memo: Any, src_name: str, **kw: Any) -> Dict[str, Any]:
+                   p2_sys: str, pk_sys: str, wctx: Any, bctx: Any, memo: Any, src_name: str, **kw: Any) -> dict[str, Any]:
         t_opts = TournamentOptions(
             pass2_system=p2_sys, pick_system=pk_sys, n=opts.candidates, seed=opts.seed,
             ph_style=opts.ph_style, tag_style=opts.tag_style, source_file=src_name, workers=opts.workers,
@@ -323,8 +377,8 @@ def _build_hooks() -> PipelineHooks:
             score_fn=pass2_rewrite.score_entries,
         )
 
-    def _write_change(vdoc: Dict[str, Any], locale: str, n: int, tag: str, workdir: Path,
-                      rewrites: Any, sources: Dict[str, Dict[str, str]], pack_dir: Path, budget: Any) -> Dict[str, Any]:
+    def _write_change(vdoc: dict[str, Any], locale: str, n: int, tag: str, workdir: Path,
+                      rewrites: Any, sources: dict[str, dict[str, str]], pack_dir: Path, budget: Any) -> dict[str, Any]:
         return _write_report(report_changes, vdoc, locale, n, tag, workdir, rewrites, sources, pack_dir, budget)
 
     return PipelineHooks(
@@ -349,14 +403,14 @@ def _build_hooks() -> PipelineHooks:
 
 def run_jury_pipeline(
     input_path: Path, locale: str, workdir: Path, router: Any, *, src_field: str = "en", key_field: str = "key",
-    ph_style: str = "auto", tag_style: str = "auto", batch_size: int = 200, fonts: Optional[List[Path]] = None,
-    langpack_dir: Optional[Path] = None, tm_path: Optional[Path] = None, deliberation: bool = True,
+    ph_style: str = "auto", tag_style: str = "auto", batch_size: int = 200, fonts: list[Path] | None = None,
+    langpack_dir: Path | None = None, tm_path: Path | None = None, deliberation: bool = True,
     budget_caps: bool = True, candidates: int = 3, seed: int = 1234, workers: int = 1,
-    context_map: Optional[Path] = None, resume: bool = True, gate: Optional[Dict[str, Any]] = None,
-    draft_field: Optional[str] = None, lean_prompt: bool = True, clean_light_pass: bool = True,
+    context_map: Path | None = None, resume: bool = True, gate: dict[str, Any] | None = None,
+    draft_field: str | None = None, lean_prompt: bool = True, clean_light_pass: bool = True,
     tiered_pass2: bool = True, unanimous_skip_recheck: bool = True, tm_shortcircuit: bool = True,
     require_juried_context: bool = False, salvage_truncated: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Run Phase 0-3 with the mixed family jury via LocalizationPipelineBuilder."""
     opts = JuryPipelineOptions(
         src_field=src_field, key_field=key_field, ph_style=ph_style, tag_style=tag_style, batch_size=batch_size,

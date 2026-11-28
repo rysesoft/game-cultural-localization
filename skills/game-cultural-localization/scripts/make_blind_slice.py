@@ -17,17 +17,15 @@ Usage:
          [--source-col en] [--max-rows N] [--skip-empty]
 
 Exit codes: 0 slice written, 2 usage / input error (including a source leak).
-Python 3.9+, standard library only.
+Python 3.15, standard library only.
 """
-
-from __future__ import annotations
 
 import argparse
 import csv
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -40,13 +38,13 @@ DEFAULT_CONTEXT_COLS = ("category", "speaker")
 _RESERVED = {"target", "key"}
 
 
-def build_slice(rows: List[Any], context_cols: List[str], source_col: str, skip_empty: bool, max_rows: int) -> List[Dict[str, Any]]:
+def build_slice(rows: list[Any], context_cols: list[str], source_col: str, skip_empty: bool, max_rows: int) -> list[dict[str, Any]]:
     """Reduce loaded rows to key + context + target dictionaries (never the source)."""
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for row in rows:
         if skip_empty and not row.dst.strip():
             continue
-        entry: Dict[str, Any] = {"key": row.key}
+        entry: dict[str, Any] = {"key": row.key}
         for col in context_cols:
             val = row.meta.get(col)
             if val not in (None, ""):
@@ -62,7 +60,7 @@ def build_slice(rows: List[Any], context_cols: List[str], source_col: str, skip_
     return out
 
 
-def verify_no_leak(entries: List[Dict[str, Any]], rows: List[Any], source_col: str) -> None:
+def verify_no_leak(entries: list[dict[str, Any]], rows: list[Any], source_col: str) -> None:
     """Abort if any entry carries the source column, or a context value equals its own source line or any source sentence.
 
     A short name is no leak. A speaker such as 'Dorian Crowe' is also the English text of the codex line that names
@@ -81,10 +79,10 @@ def verify_no_leak(entries: List[Dict[str, Any]], rows: List[Any], source_col: s
                 raise L10nError(f"context column '{k}' of key '{e['key']}' contains source text; remove it from --context-cols")
 
 
-def write_slice(entries: List[Dict[str, Any]], out: Path, locale: str, source_file: str) -> None:
+def write_slice(entries: list[dict[str, Any]], out: Path, locale: str, source_file: str) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     if out.suffix.lower() in (".csv", ".tsv"):
-        cols: List[str] = ["key"]
+        cols: list[str] = ["key"]
         for e in entries:
             for k in e:
                 if k not in cols and k != "target":
@@ -136,7 +134,7 @@ def main() -> int:
     target_col = args.target_col or cfg.get("dst_field")
     if target_col is None:
         # Multi-locale tables (key,en,de-DE,fr...): prefer a column named after the locale.
-        probe_rows: List[Any] = []
+        probe_rows: list[Any] = []
         for candidate in (args.locale, locale, "dst", "target", "text"):
             try:
                 probe_rows = load_table(path, source_col, candidate, key_col, target_only=True,

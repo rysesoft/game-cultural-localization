@@ -1,5 +1,4 @@
 """Tests for ui_expansion_checker.py."""
-from __future__ import annotations
 
 import json
 import unittest

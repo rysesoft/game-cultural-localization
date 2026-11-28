@@ -1,8 +1,7 @@
 """Row context extraction and Specification based lint rule scoping."""
-from __future__ import annotations
 
 import re
-from typing import Any, Dict, Set
+from typing import Any
 
 from gcl.domain.lint_models import ROW_CONTEXTS, RULE_CONTEXTS, LintOptions, Rule
 from gcl.domain.specifications import RuleAppliesSpec
@@ -22,9 +21,9 @@ _BUTTON_KEY_RE = re.compile(r"(?i)(?:^|[_.])(?:btn|button)(?:$|[_.])")
 _CTX_KEYS = ("category", "context", "type", "ui_type", "speaker_or_ui_type", "audience", "tags")
 
 
-def row_contexts(key: str, meta: Dict[str, Any]) -> Set[str]:
+def row_contexts(key: str, meta: dict[str, Any]) -> set[str]:
     """Derive row context tags from metadata fields and key conventions."""
-    tags: Set[str] = set()
+    tags: set[str] = set()
     values = []
     for k in _CTX_KEYS:
         v = meta.get(k)
@@ -53,6 +52,6 @@ def row_contexts(key: str, meta: Dict[str, Any]) -> Set[str]:
     return tags
 
 
-def rule_applies(rule: Rule, contexts: Set[str]) -> bool:
+def rule_applies(rule: Rule, contexts: set[str]) -> bool:
     """Evaluate whether rule applies to row context tags via RuleAppliesSpec."""
     return RuleAppliesSpec(rule.context, rule.skip_contexts).is_satisfied_by(contexts)

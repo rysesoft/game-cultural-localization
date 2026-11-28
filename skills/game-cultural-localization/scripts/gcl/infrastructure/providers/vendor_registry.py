@@ -1,8 +1,8 @@
 """Open Closed vendor descriptor registry isolating adapter and batch wiring."""
-from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Mapping, Optional
+from collections.abc import Callable, Mapping
+from typing import Any
 
 from gcl.domain.errors import L10nError
 
@@ -13,10 +13,10 @@ __layer__ = "infrastructure"
 __pattern__ = "Registry and Abstract Factory"
 __owns__ = "pluggable vendor adapter, batch backend and option builder registration"
 
-OptionsBuilder = Callable[[Any, Mapping[str, Any], str, bool], Dict[str, Any]]
+type OptionsBuilder = Callable[[Any, Mapping[str, Any], str, bool], dict[str, Any]]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class VendorDescriptor:
     """Declarative metadata describing one LLM vendor family."""
 
@@ -24,19 +24,19 @@ class VendorDescriptor:
     adapter_cls: Any
     batch_backend_cls: Any = None
     supports_config: bool = True
-    options_builder: Optional[OptionsBuilder] = None
+    options_builder: OptionsBuilder | None = None
     thinking_note_flag: bool = False
     supports_flex: bool = False
 
 
-def _base_options(spec: Any) -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
+def _base_options(spec: Any) -> dict[str, Any]:
+    out: dict[str, Any] = {}
     if getattr(spec, "max_output_tokens", None):
         out["max_output_tokens"] = spec.max_output_tokens
     return out
 
 
-def _effort_options(spec: Any, provider_conf: Mapping[str, Any], role: str) -> Dict[str, Any]:
+def _effort_options(spec: Any, provider_conf: Mapping[str, Any], role: str) -> dict[str, Any]:
     out = _base_options(spec)
     conf = provider_conf.get("effort", {}) or {}
     val = conf.get(role, conf.get("default"))
@@ -45,11 +45,11 @@ def _effort_options(spec: Any, provider_conf: Mapping[str, Any], role: str) -> D
     return out
 
 
-def _anthropic_options(spec: Any, provider_conf: Mapping[str, Any], role: str, force_thinking: bool) -> Dict[str, Any]:
+def _anthropic_options(spec: Any, provider_conf: Mapping[str, Any], role: str, force_thinking: bool) -> dict[str, Any]:
     return _effort_options(spec, provider_conf, role)
 
 
-def _google_options(spec: Any, provider_conf: Mapping[str, Any], role: str, force_thinking: bool) -> Dict[str, Any]:
+def _google_options(spec: Any, provider_conf: Mapping[str, Any], role: str, force_thinking: bool) -> dict[str, Any]:
     out = _effort_options(spec, provider_conf, role)
     stier = provider_conf.get("service_tier")
     if isinstance(stier, str) and stier.strip():
@@ -57,7 +57,7 @@ def _google_options(spec: Any, provider_conf: Mapping[str, Any], role: str, forc
     return out
 
 
-def _deepseek_options(spec: Any, provider_conf: Mapping[str, Any], role: str, force_thinking: bool) -> Dict[str, Any]:
+def _deepseek_options(spec: Any, provider_conf: Mapping[str, Any], role: str, force_thinking: bool) -> dict[str, Any]:
     out = _base_options(spec)
     conf = provider_conf.get("thinking", {}) or {}
     val = conf.get(role, conf.get("default"))
@@ -71,12 +71,12 @@ class VendorRegistry:
     """Open Closed registry decoupling Router and config validation from vendor classes."""
 
     def __init__(self) -> None:
-        self._vendors: Dict[str, VendorDescriptor] = {}
+        self._vendors: dict[str, VendorDescriptor] = {}
 
     def register(self, descriptor: VendorDescriptor) -> None:
         self._vendors[descriptor.name] = descriptor
 
-    def get(self, name: str) -> Optional[VendorDescriptor]:
+    def get(self, name: str) -> VendorDescriptor | None:
         return self._vendors.get(name)
 
     def create(self, name: str, model: str, **kwargs: Any) -> Any:
@@ -90,26 +90,26 @@ class VendorRegistry:
         desc = self._vendors.get(name)
         return bool(desc and desc.supports_config)
 
-    def config_vendor_names(self) -> List[str]:
+    def config_vendor_names(self) -> list[str]:
         return sorted(k for k, v in self._vendors.items() if v.supports_config)
 
     def has_batch(self, name: str) -> bool:
         desc = self._vendors.get(name)
         return bool(desc and desc.batch_backend_cls is not None)
 
-    def batch_vendor_names(self) -> List[str]:
+    def batch_vendor_names(self) -> list[str]:
         return sorted(k for k, v in self._vendors.items() if v.batch_backend_cls is not None)
 
     def batch_backend_cls(self, name: str) -> Any:
         desc = self._vendors.get(name)
         return desc.batch_backend_cls if desc else None
 
-    def provider_classes(self) -> Dict[str, Any]:
+    def provider_classes(self) -> dict[str, Any]:
         return {k: v.adapter_cls for k, v in self._vendors.items()}
 
     def build_options(
         self, spec: Any, provider_conf: Mapping[str, Any], role: str, force_thinking: bool, *, flex: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         desc = self._vendors.get(spec.provider)
         out = desc.options_builder(spec, provider_conf, role, force_thinking) if (desc and desc.options_builder is not None) else _base_options(spec)
         if flex and desc and desc.supports_flex and "service_tier" not in out:

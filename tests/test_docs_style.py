@@ -1,5 +1,4 @@
 """P15: documentation style and coverage (house punctuation, maps, changelog, versions, CLI surface of every tool)."""
-from __future__ import annotations
 
 import json
 import re
