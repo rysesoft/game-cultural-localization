@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate or check docs/architecture/NAVIGATION.md from module AST and metadata headers.
 
-Python 3.9+, standard library only.
+Python 3.15, standard library only.
 """
 from __future__ import annotations
 

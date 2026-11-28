@@ -2,7 +2,7 @@
 
 **AI translated game text usually reads correct and still sounds translated. This plugin makes it sound native.** It is a game localization suite for AI coding agents and LLM tools. It turns machine or LLM first drafts into natural game text in 15 locales, and a jury of three model families checks the result line by line without a human native reviewer in the loop. Built for localization leads, narrative teams and indie developers who ship with AI assisted translation and refuse to ship translationese. Antigravity is the primary target. Claude Code, Gemini CLI, Cursor, Codex and any plain LLM API are supported through the open Agent Skills format.
 
-[![CI](https://github.com/rysesoft/game-cultural-localization/actions/workflows/tests.yml/badge.svg)](https://github.com/rysesoft/game-cultural-localization/actions/workflows/tests.yml) [![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB.svg)](#specification) [![Languages 15](https://img.shields.io/badge/languages-15-success.svg)](#supported-languages) [![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](#specification)
+[![CI](https://github.com/rysesoft/game-cultural-localization/actions/workflows/tests.yml/badge.svg)](https://github.com/rysesoft/game-cultural-localization/actions/workflows/tests.yml) [![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![Python 3.15](https://img.shields.io/badge/python-3.15-3776AB.svg)](#specification) [![Languages 15](https://img.shields.io/badge/languages-15-success.svg)](#supported-languages) [![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](#specification)
 
 [Türkçe README](./README_TR.md). Maintained by [Rysesoft](https://github.com/rysesoft).
 
@@ -108,7 +108,7 @@ On a real game, build the context map first and pass it with `--context-map loc_
 | Deterministic gates with exit codes 0/1/2 | no | partial (QA checks) | yes, linter, UI, font, critique schema |
 | Engine independent tokens (Unity, Unreal, Godot, ICU, printf) | partial | partial | yes, parity checked per style |
 | API independent (any LLM, plain system prompts) | yes | no (vendor bound) | yes |
-| Zero dependencies | n/a | no | yes, Python 3.9+ stdlib only |
+| Zero dependencies | n/a | no | yes, Python 3.15 stdlib only |
 | Gender neutral player voice per language | no | no | yes, playbook section 4 |
 | Plural and ICU categories (few, many) | no | partial | yes, playbook section 5 |
 | Regional leak detection (pt-BR in pt-PT, zh-CN in zh-Hant) | no | partial | yes, data driven rules |
@@ -187,7 +187,7 @@ python scripts/ui_expansion_checker.py --input final_de-DE.json --locale de-DE -
 | Input formats | JSON list, JSON dict, CSV, TSV, Gettext PO (multi line and plural `msgstr`), Unity Localization StringTable `.asset` |
 | Placeholder styles | `auto`, `unity` (`{0}`, `{name}`, Smart Strings), `unreal` (`{Name}`, `\|hpp`), `godot` (`%s`, `{name}`), `icu` (plural and select), `printf`, `python` |
 | Tag styles | `tmp` (`<b> <color=> <sprite=> <style=> <link=>`), `html`, `bbcode` (`[b] [color=] [url=]`) |
-| Runtime | Python 3.9 or newer, standard library only, UTF-8 in and out, BOM tolerant |
+| Runtime | Python 3.15, standard library only, UTF-8 in and out, BOM tolerant |
 | Exit codes | 0 clean, 1 findings (errors, or warnings with `--fail-on-warn`, HIGH with `--fail-on-high`), 2 usage or input error |
 | Context | `CONTEXT_MAP.md` per project decides the meaning of every line. An optional names list (`--glossary`, header `term_en,<locale>[,<locale>...],notes`) only checks the spelling of proper names |
 | Critique file | `critique_<locale>_<batch>.json`, naturalness score 1 to 5 plus an issue type, only scores below 5 listed |

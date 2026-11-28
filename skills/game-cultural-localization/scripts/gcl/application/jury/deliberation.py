@@ -157,7 +157,10 @@ def deliberate_lines(
 
 def make_deliberator(router: Any, locale: str, system: str) -> Any:
     """Build deliberator callable with attached .many() batch helper."""
-    members = router.jury("J3")
+    try:
+        members = router.jury("J3", task_role="deliberate")
+    except TypeError:
+        members = router.jury("J3")
     scrub = name_scrubber(router.config)
     critical_max = int(router.config.agreement.get("critical_max", 2))
 

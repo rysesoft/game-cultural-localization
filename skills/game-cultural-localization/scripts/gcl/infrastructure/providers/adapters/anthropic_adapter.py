@@ -67,13 +67,18 @@ class AnthropicProvider(HttpProvider):
 
     def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> Dict[str, Any]:
         sys_text = system + ("\n\n" + JSON_ONLY_HINT if json_mode else "")
-        return {
+        body: Dict[str, Any] = {
             "model": self.model,
             "system": [{"type": "text", "text": sys_text, "cache_control": {"type": "ephemeral"}}],
             "messages": [{"role": "user", "content": user}],
             "max_tokens": self.max_output(ANTHROPIC_MAX_OUTPUT),
             "stream": True,
         }
+        effort = self.options.get("effort")
+        if isinstance(effort, str) and effort.strip():
+            body["thinking"] = {"type": "adaptive"}
+            body["output_config"] = {"effort": effort.strip().lower()}
+        return body
 
     def _decode(self, text: str, headers: Dict[str, str]) -> Dict[str, Any]:
         return assemble_stream(text, f"{self.name}/{self.model}") if self._is_stream(text, headers) else super()._decode(text, headers)

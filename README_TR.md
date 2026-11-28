@@ -2,7 +2,7 @@
 
 **Yapay zekâyla çevrilen oyun metni çoğu zaman doğru okunur ama yine de çeviri olduğu belli olur. Bu eklenti metni oyuncunun kendi dilinde yazılmış gibi seslendirir.** Yapay zekâ kodlama ajanları ve LLM araçları için hazırlanmış bir oyun yerelleştirme paketidir. Makine çevirisi ya da LLM taslaklarını 15 dilde doğal oyun metnine dönüştürür. Sonucu üç ayrı model ailesinden oluşan bir jüri satır satır denetler, döngüde anadili konuşan bir insan denetçiye gerek kalmaz. Yapay zekâ destekli çeviriyle oyun çıkaran ama çeviri kokan metni yayınlamak istemeyen yerelleştirme sorumluları, anlatı ekipleri ve bağımsız geliştiriciler için yapıldı. Birincil hedef Antigravity. Claude Code, Gemini CLI, Cursor, Codex ve herhangi bir düz LLM API'si de açık Agent Skills biçimi sayesinde destekleniyor.
 
-[![CI](https://github.com/rysesoft/game-cultural-localization/actions/workflows/tests.yml/badge.svg)](https://github.com/rysesoft/game-cultural-localization/actions/workflows/tests.yml) [![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB.svg)](#teknik-özellikler) [![Languages 15](https://img.shields.io/badge/languages-15-success.svg)](#desteklenen-diller) [![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](#teknik-özellikler)
+[![CI](https://github.com/rysesoft/game-cultural-localization/actions/workflows/tests.yml/badge.svg)](https://github.com/rysesoft/game-cultural-localization/actions/workflows/tests.yml) [![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![Python 3.15](https://img.shields.io/badge/python-3.15-3776AB.svg)](#teknik-özellikler) [![Languages 15](https://img.shields.io/badge/languages-15-success.svg)](#desteklenen-diller) [![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](#teknik-özellikler)
 
 [English README](./README.md). Geliştiren ve bakımını yapan [Rysesoft](https://github.com/rysesoft).
 
@@ -108,7 +108,7 @@ Gerçek bir oyunda önce bağlam haritasını çıkarın ve `--context-map loc_w
 | 0/1/2 çıkış kodlu deterministik kapılar | hayır | kısmen (QA denetimleri) | evet, linter, arayüz, font, eleştiri şeması |
 | Motordan bağımsız işaretler (Unity, Unreal, Godot, ICU, printf) | kısmen | kısmen | evet, her stil için eşlik denetimi |
 | API'den bağımsız (herhangi bir LLM, düz sistem promptları) | evet | hayır (sağlayıcıya bağlı) | evet |
-| Sıfır bağımlılık | uygulanmaz | hayır | evet, yalnızca Python 3.9+ standart kütüphanesi |
+| Sıfır bağımlılık | uygulanmaz | hayır | evet, yalnızca Python 3.15 standart kütüphanesi |
 | Her dil için cinsiyetten bağımsız oyuncu sesi | hayır | hayır | evet, rehberin 4. bölümü |
 | Çoğul ve ICU kategorileri (few, many) | hayır | kısmen | evet, rehberin 5. bölümü |
 | Bölgesel sızıntı tespiti (pt-PT içinde pt-BR, zh-Hant içinde zh-CN) | hayır | kısmen | evet, veriye dayalı kurallar |
@@ -187,7 +187,7 @@ python scripts/ui_expansion_checker.py --input final_de-DE.json --locale de-DE -
 | Girdi biçimleri | JSON listesi, JSON sözlüğü, CSV, TSV, Gettext PO (çok satırlı ve çoğul `msgstr`), Unity Localization StringTable `.asset` |
 | Yer tutucu stilleri | `auto`, `unity` (`{0}`, `{name}`, Smart Strings), `unreal` (`{Name}`, `\|hpp`), `godot` (`%s`, `{name}`), `icu` (plural ve select), `printf`, `python` |
 | Etiket stilleri | `tmp` (`<b> <color=> <sprite=> <style=> <link=>`), `html`, `bbcode` (`[b] [color=] [url=]`) |
-| Çalışma ortamı | Python 3.9 ya da üstü, yalnızca standart kütüphane, UTF-8 girdi ve çıktı, BOM'a dayanıklı |
+| Çalışma ortamı | Python 3.15, yalnızca standart kütüphane, UTF-8 girdi ve çıktı, BOM'a dayanıklı |
 | Çıkış kodları | 0 temiz, 1 bulgu var (hatalar, `--fail-on-warn` ile uyarılar, `--fail-on-high` ile HIGH riskler), 2 kullanım ya da girdi hatası |
 | Bağlam | Her projenin `CONTEXT_MAP.md` dosyası her satırın anlamını belirler. İsteğe bağlı isim listesi (`--glossary`, başlık `term_en,<locale>[,<locale>...],notes`) yalnızca özel isimlerin yazılışını denetler |
 | Eleştiri dosyası | `critique_<locale>_<batch>.json`, 1 ile 5 arası doğallık puanı ve sorun türü, yalnızca 5'in altındaki puanlar listelenir |

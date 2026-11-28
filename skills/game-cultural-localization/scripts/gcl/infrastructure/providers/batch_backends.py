@@ -82,6 +82,15 @@ class _Backend:
         return data
 
     def _result(self, data: Dict[str, Any], it_system: str = "", it_user: str = "") -> ChatResult:
+        if hasattr(self.provider, "parse_reply"):
+            rep = self.provider.parse_reply(data)
+            u = rep.usage
+            return ChatResult(
+                rep.text,
+                u.input_tokens if u.input_tokens > 0 else estimate_tokens(it_system + it_user),
+                u.output_tokens if u.output_tokens > 0 else estimate_tokens(rep.text),
+                self.model, 0, u.cache_read_tokens, u.cache_write_tokens, "", u.thought_tokens,
+            )
         parsed = self.provider._parse(data)
         text, tin, tout = parsed[:3]
         cread, cwrite = (int(parsed[3] or 0), int(parsed[4] or 0)) if len(parsed) >= 5 else (0, 0)

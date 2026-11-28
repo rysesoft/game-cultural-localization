@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """AST architecture, SOLID, Clean Code and house punctuation fitness verifier.
 
-Python 3.9+, standard library only. Exit 0 clean, Exit 1 contract violations found.
+Python 3.15, standard library only. Exit 0 clean, Exit 1 contract violations found.
 """
 from __future__ import annotations
 

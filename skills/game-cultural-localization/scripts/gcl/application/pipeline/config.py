@@ -46,7 +46,7 @@ class JuryPipelineOptions:
     key_field: str = "key"
     ph_style: str = "auto"
     tag_style: str = "auto"
-    batch_size: int = 50
+    batch_size: int = 200
     fonts: Sequence[Path] = ()
     langpack_dir: Optional[Path] = None
     tm_path: Optional[Path] = None
@@ -59,6 +59,13 @@ class JuryPipelineOptions:
     resume: bool = True
     gate: Optional[Dict[str, Any]] = None
     draft_field: Optional[str] = None
+    lean_prompt: bool = True
+    clean_light_pass: bool = True
+    tiered_pass2: bool = True
+    unanimous_skip_recheck: bool = True
+    tm_shortcircuit: bool = True
+    require_juried_context: bool = False
+    salvage_truncated: bool = True
 
 
 @dataclass(frozen=True)
@@ -74,7 +81,7 @@ class PipelineHooks:
     default_langpack_dir: Callable[[], Path]
     load_warmup_sample: Callable[[Path, List[str], int, int], List[Dict[str, Any]]]
     render_warmup: Callable[[Any], str]
-    system_prompt: Callable[[str, str, str], str]
+    system_prompt: Callable[..., str]
     load_context_views: Callable[[Path, str], Any]
     load_threshold: Callable[[str, Path], Any]
     translate_rows: Callable[..., Dict[str, str]]

@@ -16,8 +16,11 @@ __owns__ = "providers.config.json loading, ModelSpec definitions and schema chec
 
 DEFAULT_CONFIG_PATH = SCRIPTS_DIR / "providers.config.json"
 SINGLE_ROLES = ("pass1", "pass2", "roundtrip", "literal")
+OPTIONAL_SINGLE_ROLES = ("pass2_light",)
 CONTEXT_ROLES = ("context_orchestrator", "context_agent")
 JURY_TIERS = ("J1", "J2", "J3")
+_EFFORT_LEVELS = frozenset({"low", "medium", "high"})
+_SERVICE_TIERS = frozenset({"standard", "flex", "priority"})
 _TOP_KEYS = ("providers", "models", "roles", "agreement", "budget_caps", "roundtrip")
 _DEFAULTS: Dict[str, Dict[str, Any]] = {
     "agreement": {"pass_min": 4, "max_spread": 1, "critical_max": 2},
@@ -67,6 +70,9 @@ class ProvidersConfig:
             raise L10nError(f"{self.path}: role '{role}' is not a single-model role")
         return self.models[alias]
 
+    def has_role(self, role: str) -> bool:
+        return role in self.roles
+
     def jury(self, tier: str) -> List[ModelSpec]:
         aliases = self.roles.get(tier)
         if not isinstance(aliases, list):
@@ -106,6 +112,12 @@ def _validate_provider_entry(name: str, p: Any, path: Path, reg: VendorRegistry)
     thinking = p.get("thinking", {})
     if not isinstance(thinking, dict) or not all(isinstance(v, bool) or v is None for v in thinking.values()):
         raise L10nError(f"{path}: providers.{name}.thinking must map roles to true, false or null")
+    effort = p.get("effort", {})
+    if not isinstance(effort, dict) or not all(v is None or (isinstance(v, str) and v.lower() in _EFFORT_LEVELS) for v in effort.values()):
+        raise L10nError(f"{path}: providers.{name}.effort must map roles to low, medium, high or null")
+    stier = p.get("service_tier")
+    if stier is not None and (not isinstance(stier, str) or stier.lower() not in _SERVICE_TIERS):
+        raise L10nError(f"{path}: providers.{name}.service_tier must be standard, flex or priority")
     batch = p.get("batch")
     if batch is not None:
         if not reg.has_batch(name):
@@ -145,7 +157,7 @@ def _validate_roles(roles: Dict[str, Any], models: Dict[str, Any], path: Path) -
             raise L10nError(f"{path}: roles.{role} must name one model alias")
         if roles[role] not in models:
             raise L10nError(f"{path}: roles.{role} '{roles[role]}' is not a model alias")
-    for role in CONTEXT_ROLES:
+    for role in CONTEXT_ROLES + OPTIONAL_SINGLE_ROLES:
         if role in roles and (not isinstance(roles[role], str) or roles[role] not in models):
             raise L10nError(f"{path}: roles.{role} must name one model alias")
     for tier in JURY_TIERS:
@@ -164,8 +176,9 @@ def _validate_roles(roles: Dict[str, Any], models: Dict[str, Any], path: Path) -
                 )
             families[fam] = a
     for k in roles:
-        if k not in SINGLE_ROLES and k not in CONTEXT_ROLES and k not in JURY_TIERS:
-            raise L10nError(f"{path}: unknown role '{k}'; known: {', '.join(SINGLE_ROLES + CONTEXT_ROLES + JURY_TIERS)}")
+        if k not in SINGLE_ROLES and k not in OPTIONAL_SINGLE_ROLES and k not in CONTEXT_ROLES and k not in JURY_TIERS:
+            known = ", ".join(SINGLE_ROLES + OPTIONAL_SINGLE_ROLES + CONTEXT_ROLES + JURY_TIERS)
+            raise L10nError(f"{path}: unknown role '{k}'; known: {known}")
 
 
 def _validate_policies(data: Dict[str, Any], path: Path) -> None:

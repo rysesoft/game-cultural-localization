@@ -10,7 +10,7 @@ from gcl.application.tasks.concrete_tasks import score_entries
 from gcl.application.tasks.vote_codec import everyday_rule
 from gcl.domain.errors import L10nError
 
-from .policy import STATUSES, TIERS, EscalationTally, agrees, classify, juror_view, status_for
+from .policy import STATUSES, TIERS, EscalationTally, agrees, classify, is_clean_light_pass, juror_view, status_for
 
 __layer__ = "application"
 __pattern__ = "Chain of Responsibility"
@@ -29,10 +29,15 @@ def _tier_votes(router: Any, tier: str, entries: Sequence[Dict[str, Any]], local
     out: Dict[str, List[Dict[str, Any]]] = {e["key"]: [] for e in entries}
     workers = int(kw.get("workers", 1))
     system, batch_size, memo = str(kw.get("system", "")), kw.get("batch_size"), kw.get("memo")
+    extra_opts: Dict[str, Any] = {}
+    if kw.get("item_memo") is not None:
+        extra_opts["item_memo"] = kw["item_memo"]
+    if kw.get("salvage_truncated"):
+        extra_opts["salvage_truncated"] = True
     score_fn = kw.get("score_fn") or score_entries
 
     def one(m: Any) -> Dict[str, Dict[str, Any]]:
-        return score_fn(m.provider, view, locale, tier=tier, system=system, batch_size=batch_size, workers=workers, memo=memo)
+        return score_fn(m.provider, view, locale, tier=tier, system=system, batch_size=batch_size, workers=workers, memo=memo, **extra_opts)
 
     if workers > 1 and len(members) > 1:
         with ThreadPoolExecutor(max_workers=len(members)) as ex:
@@ -67,6 +72,9 @@ class JuryBatchContext:
     roundtrip_fn: Optional[Callable[[Sequence[Dict[str, Any]]], Dict[str, Dict[str, Any]]]]
     deliberator: Optional[Deliberator]
     score_fn: Callable[..., Dict[str, Dict[str, Any]]] = score_entries
+    clean_light_pass: bool = False
+    item_memo: Any = None
+    salvage_truncated: bool = False
     votes: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
     evidence: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     settled: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -82,6 +90,12 @@ class JuryBatchContext:
             "key": key, "final_tier": tier, "score": score, "status": status,
             "votes": self.votes[key], "evidence": self.evidence[key], "rationales": list(rationales), **(extra or {}),
         }
+
+    def settle_tier_pass(self, key: str, tier: str, tier_votes: Sequence[Dict[str, Any]]) -> None:
+        scores = [v["score"] for v in tier_votes]
+        score = min(scores)
+        clean = self.clean_light_pass and is_clean_light_pass(tier_votes, self.evidence[key].get("ban_hits", ()))
+        self.settle(key, tier, score, "pass" if clean else status_for(score), [v["reason"] for v in tier_votes])
 
     def cap_check(self, stage: str, keys: Sequence[str], limit: float) -> Optional[Dict[str, Any]]:
         total = len(self.order)
@@ -124,13 +138,13 @@ class TierHandler(ABC):
 
 class J1TierHandler(TierHandler):
     def process(self, ctx: JuryBatchContext) -> None:
-        tv = _tier_votes(ctx.router, "J1", ctx.entries, ctx.locale, system=ctx.system, batch_size=ctx.batch_size, workers=ctx.workers, memo=ctx.memo, score_fn=ctx.score_fn)
+        tv = _tier_votes(ctx.router, "J1", ctx.entries, ctx.locale, system=ctx.system, batch_size=ctx.batch_size, workers=ctx.workers, memo=ctx.memo, score_fn=ctx.score_fn, item_memo=ctx.item_memo, salvage_truncated=ctx.salvage_truncated)
         for k in ctx.order:
             ctx.votes[k].extend(tv[k])
             scores = [v["score"] for v in tv[k]]
             c = classify(scores, ctx.agreement)
             if c == "pass":
-                ctx.settle(k, "J1", min(scores), status_for(min(scores)), [v["reason"] for v in tv[k]])
+                ctx.settle_tier_pass(k, "J1", tv[k])
             elif c == "critical":
                 ctx.to_j3.append(k)
             else:
@@ -152,13 +166,13 @@ class J2TierHandler(TierHandler):
         if not ctx.to_j2:
             return
         items = [ctx.by_key[k] for k in ctx.to_j2]
-        tv = _tier_votes(ctx.router, "J2", items, ctx.locale, system=ctx.system, batch_size=ctx.batch_size, workers=ctx.workers, memo=ctx.memo, score_fn=ctx.score_fn)
+        tv = _tier_votes(ctx.router, "J2", items, ctx.locale, system=ctx.system, batch_size=ctx.batch_size, workers=ctx.workers, memo=ctx.memo, score_fn=ctx.score_fn, item_memo=ctx.item_memo, salvage_truncated=ctx.salvage_truncated)
         moved = 0
         for k in ctx.to_j2:
             ctx.votes[k].extend(tv[k])
             scores = [v["score"] for v in tv[k]]
             if classify(scores, ctx.agreement) == "pass":
-                ctx.settle(k, "J2", min(scores), status_for(min(scores)), [v["reason"] for v in tv[k]])
+                ctx.settle_tier_pass(k, "J2", tv[k])
             else:
                 ctx.to_j3.append(k)
                 moved += 1
@@ -181,7 +195,7 @@ class J3TierHandler(TierHandler):
         if not ctx.to_j3:
             return
         items = [ctx.by_key[k] for k in ctx.to_j3]
-        tv = _tier_votes(ctx.router, "J3", items, ctx.locale, system=ctx.system, batch_size=ctx.batch_size, workers=ctx.workers, memo=ctx.memo, score_fn=ctx.score_fn)
+        tv = _tier_votes(ctx.router, "J3", items, ctx.locale, system=ctx.system, batch_size=ctx.batch_size, workers=ctx.workers, memo=ctx.memo, score_fn=ctx.score_fn, item_memo=ctx.item_memo, salvage_truncated=ctx.salvage_truncated)
         ctx.j3_votes = tv
         for k in ctx.to_j3:
             ctx.votes[k].extend(tv[k])
@@ -198,7 +212,10 @@ class DeliberationHandler(TierHandler):
             j3 = ctx.j3_votes[k]
             scores = [v["score"] for v in j3]
             if agrees(scores, ctx.agreement):
-                ctx.settle(k, "J3", min(scores), status_for(min(scores)), [v["reason"] for v in j3])
+                if ctx.clean_light_pass and is_clean_light_pass(j3, ctx.evidence[k].get("ban_hits", ())):
+                    ctx.settle(k, "J3", min(scores), "pass", [v["reason"] for v in j3])
+                else:
+                    ctx.settle(k, "J3", min(scores), status_for(min(scores)), [v["reason"] for v in j3])
                 continue
             disputed += 1
             result = outcomes.get(k)
@@ -243,6 +260,9 @@ def run_jury(entries: Sequence[Dict[str, Any]], locale: str, router: Any, **kw: 
         batch_size=kw.get("batch_size"), workers=int(kw.get("workers", 1)), memo=kw.get("memo"),
         roundtrip_fn=kw.get("roundtrip_fn"), deliberator=kw.get("deliberator"),
         score_fn=kw.get("score_fn") or score_entries,
+        clean_light_pass=bool(kw.get("clean_light_pass", False)),
+        item_memo=kw.get("item_memo"),
+        salvage_truncated=bool(kw.get("salvage_truncated", False)),
         votes={k: [] for k in order}, evidence=evidence, stats={"lines": len(order)},
     )
     head = J1TierHandler()

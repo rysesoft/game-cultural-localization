@@ -4,7 +4,9 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Iterable, List, Mapping, NamedTuple, Optional, Sequence
 
-from gcl.aspects.call_chain import AspectChain, BudgetTelemetryAspect, FallbackModelAspect, ProceedCall
+from gcl.aspects.call_chain import (
+    AspectChain, BudgetTelemetryAspect, FallbackModelAspect, ProceedCall, ThinkingEffortAspect,
+)
 from gcl.aspects.event_bus import BudgetLog, BudgetLogSubscriber, InMemoryEventBus
 from gcl.domain.errors import L10nError, MissingKeyError, ModelNotFoundError
 from gcl.domain.models import ChatRequest, ChatResult
@@ -34,12 +36,13 @@ class Member(NamedTuple):
 class RoleProvider:
     """Role scoped LLMClient proxy applying FallbackModelAspect and BudgetTelemetryAspect."""
 
-    def __init__(self, router: "Router", spec: ModelSpec, role: str) -> None:
+    def __init__(self, router: "Router", spec: ModelSpec, role: str, *, task_role: Optional[str] = None) -> None:
         self.router = router
         self.spec = spec
         self.role = role
+        self.task_role = task_role or role
         self.fallback_from: Optional[str] = None
-        self._impl = router._batch_wrap(spec, router._instantiate(spec, role, force_thinking=False))
+        self._impl = router._batch_wrap(spec, router._instantiate(spec, self.task_role, force_thinking=False))
 
     @property
     def name(self) -> str:
@@ -68,9 +71,11 @@ class RoleProvider:
         return caps if isinstance(caps, ProviderCapabilities) else ProviderCapabilities(batched=self.batched)
 
     def _telemetry_meta(self) -> Dict[str, object]:
+        opts = getattr(self._impl, "options", None) or {}
         return {
             "role": self.role, "provider": self.spec.provider, "alias": self.spec.alias,
             "model": self.spec.id, "batched": self.batched,
+            "flex": bool(opts.get("service_tier") == "flex") and not self.batched,
             "dry_run": self.router.dry_run, "fallback_from": self.fallback_from or "",
         }
 
@@ -87,7 +92,7 @@ class RoleProvider:
         self.router._missing_key_check([new])
         self.fallback_from = old.id
         self.spec = new
-        self._impl = self.router._instantiate(new, self.role, force_thinking=old.fallback_thinking)
+        self._impl = self.router._instantiate(new, self.task_role, force_thinking=old.fallback_thinking)
         suffix = self.router._registry.fallback_suffix(new.provider, old.fallback_thinking)
         self.router.note(f"{old.alias} ({old.id}) not found for role {self.role}, using fallback {new.alias} ({new.id}){suffix}")
         return self._call_impl
@@ -103,6 +108,7 @@ class RoleProvider:
             self._call_impl,
             (
                 BudgetTelemetryAspect(self.router.event_bus, self._telemetry_meta),
+                ThinkingEffortAspect(lambda: dict(getattr(self._impl, "options", None) or {})),
                 FallbackModelAspect(self._switch_fallback),
             ),
         )
@@ -116,6 +122,7 @@ class Router:
         self.config = config
         self.dry_run = bool(kw.get("dry_run", False))
         self.batch = bool(kw.get("batch", False))
+        self.flex = bool(kw.get("flex", False))
         self.get_transport = kw.get("get_transport")
         self._registry: VendorRegistry = kw.get("registry") or DEFAULT_VENDOR_REGISTRY
         self._collectors: Dict[str, BatchCollector] = {}
@@ -163,7 +170,7 @@ class Router:
             return fake
         self._missing_key_check([spec])
         pconf = self.config.providers[spec.provider]
-        options = self._registry.build_options(spec, pconf, role, force_thinking)
+        options = self._registry.build_options(spec, pconf, role, force_thinking, flex=self.flex)
         kwargs: Dict[str, Any] = {
             "api_key": str(self.env.get(pconf["env_key"], "")).strip(),
             "endpoint": pconf["endpoint"],
@@ -193,17 +200,17 @@ class Router:
     def batch_jobs(self) -> List[Dict[str, Any]]:
         return [j for c in self._collectors.values() for j in c.jobs]
 
-    def for_model(self, alias: str, role: str) -> RoleProvider:
+    def for_model(self, alias: str, role: str, *, task_role: Optional[str] = None) -> RoleProvider:
         if alias not in self.config.models:
             raise L10nError(f"unknown model alias '{alias}'; known: {', '.join(self.config.models)}")
-        return RoleProvider(self, self.config.models[alias], role)
+        return RoleProvider(self, self.config.models[alias], role, task_role=task_role)
 
-    def for_role(self, role: str) -> RoleProvider:
-        return RoleProvider(self, self.config.role_model(role), role)
+    def for_role(self, role: str, *, task_role: Optional[str] = None) -> RoleProvider:
+        return RoleProvider(self, self.config.role_model(role), role, task_role=task_role)
 
-    def jury(self, tier: str) -> List[Member]:
+    def jury(self, tier: str, *, task_role: Optional[str] = None) -> List[Member]:
         return [
-            Member(tier, i, spec.alias, spec.provider, spec.id, RoleProvider(self, spec, tier))
+            Member(tier, i, spec.alias, spec.provider, spec.id, RoleProvider(self, spec, tier, task_role=task_role))
             for i, spec in enumerate(self.config.jury(tier))
         ]
 

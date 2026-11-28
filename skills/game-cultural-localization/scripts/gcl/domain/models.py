@@ -83,6 +83,7 @@ class ChatResult(NamedTuple):
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
     batch_id: str = ""
+    thought_tokens: int = 0
 
 
 @dataclass(frozen=True)

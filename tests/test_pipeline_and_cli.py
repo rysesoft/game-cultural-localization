@@ -36,7 +36,7 @@ class WorkflowTemplateTests(unittest.TestCase):
         self.assertIn("--fail-on-high", src)
         self.assertIn("_BIBLE.md", src)
         self.assertIn("pipeline(", src)  # retry path for failed batches
-        tree = ast.parse(src, feature_version=(3, 9), type_comments=False) if hasattr(ast, "parse") else None
+        tree = ast.parse(src, feature_version=(3, 15), type_comments=False) if hasattr(ast, "parse") else None
         self.assertIsNotNone(tree)
         self.assertFalse((SCRIPTS / "localization_pipeline_template.py").exists())
 

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from typing import Callable, Dict, Optional, Protocol, Sequence, Tuple, runtime_checkable
+from typing import Any, Callable, Dict, Optional, Protocol, Sequence, Tuple, runtime_checkable
 
 from gcl.domain.errors import L10nError, ModelNotFoundError, ProviderError
 from gcl.domain.models import ChatRequest, ChatResult
@@ -74,8 +74,10 @@ class BudgetTelemetryAspect:
             latency_ms=res.latency_ms if res else 0, ok=(not error),
             cache_read_tokens=res.cache_read_tokens if res else 0,
             cache_write_tokens=res.cache_write_tokens if res else 0,
+            thought_tokens=int(getattr(res, "thought_tokens", 0) or 0) if res else 0,
             batch_id=str(getattr(res, "batch_id", "")) if res else "",
-            batched=bool(meta.get("batched", False)), dry_run=bool(meta.get("dry_run", False)),
+            batched=bool(meta.get("batched", False)), flex=bool(meta.get("flex", False)),
+            dry_run=bool(meta.get("dry_run", False)),
             fallback_from=str(meta.get("fallback_from", "")), error=error,
         ))
 
@@ -92,6 +94,25 @@ class FallbackModelAspect:
         except ModelNotFoundError as exc:
             fallback_proceed = self._switch_fn(exc)
             return fallback_proceed(request)
+
+
+class ThinkingEffortAspect:
+    """Attaches resolved effort and service tier options onto ChatRequest.options."""
+
+    def __init__(self, options_fn: Callable[[], Dict[str, Any]]) -> None:
+        self._opts_fn = options_fn
+
+    def around(self, request: ChatRequest, proceed: ProceedCall) -> ChatResult:
+        extra = self._opts_fn()
+        if not extra:
+            return proceed(request)
+        merged = {**extra, **request.options}
+        req = ChatRequest(
+            system=request.system, user=request.user, role=request.role, model=request.model,
+            temperature=request.temperature, max_tokens=request.max_tokens, json_mode=request.json_mode,
+            options=merged,
+        )
+        return proceed(req)
 
 
 class AspectChain:

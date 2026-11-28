@@ -58,12 +58,13 @@ def translate_rows(
     provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, task: str = "pass1",
     system: Optional[str] = None, batch_size: Optional[int] = None, max_tokens: int = 4096,
     extra: Optional[Dict[str, Any]] = None, workers: int = 1, memo: Optional[BatchMemo] = None,
-    max_chars: Optional[int] = None,
+    max_chars: Optional[int] = None, item_memo: Optional[BatchMemo] = None, salvage_truncated: bool = False,
 ) -> Dict[str, str]:
     """Translate source rows with task 'pass1' or 'literal'; return key -> target."""
     return _translate_rows(
         provider, rows, locale, task=task, system=system, batch_size=batch_size,
         max_tokens=max_tokens, extra=extra, workers=workers, memo=memo, max_chars=max_chars,
+        item_memo=item_memo, salvage_truncated=salvage_truncated,
     )
 
 
@@ -71,11 +72,13 @@ def backtranslate_rows(
     provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
     batch_size: Optional[int] = None, max_tokens: int = 4096, workers: int = 1,
     memo: Optional[BatchMemo] = None, max_chars: Optional[int] = None,
+    item_memo: Optional[BatchMemo] = None, salvage_truncated: bool = False,
 ) -> Dict[str, str]:
     """Back translate rows into English; return key -> back translation."""
     return _backtranslate_rows(
         provider, rows, locale, system=system, batch_size=batch_size,
         max_tokens=max_tokens, workers=workers, memo=memo, max_chars=max_chars,
+        item_memo=item_memo, salvage_truncated=salvage_truncated,
     )
 
 
@@ -83,12 +86,13 @@ def score_entries(
     provider: Any, entries: Sequence[Dict[str, Any]], locale: str, *, tier: str = "J1",
     system: Optional[str] = None, batch_size: Optional[int] = None, max_tokens: int = 4096,
     extra: Optional[Dict[str, Any]] = None, workers: int = 1, memo: Optional[BatchMemo] = None,
-    max_chars: Optional[int] = None,
+    max_chars: Optional[int] = None, item_memo: Optional[BatchMemo] = None, salvage_truncated: bool = False,
 ) -> Dict[str, Dict[str, Any]]:
     """Ask one jury member to score target only entries; return key -> normalized vote."""
     return _score_entries(
         provider, entries, locale, tier=tier, system=system, batch_size=batch_size,
         max_tokens=max_tokens, extra=extra, workers=workers, memo=memo, max_chars=max_chars,
+        item_memo=item_memo, salvage_truncated=salvage_truncated,
     )
 
 
@@ -96,11 +100,13 @@ def pairwise_choices(
     provider: Any, pairs: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
     batch_size: Optional[int] = None, max_tokens: int = 2048, workers: int = 1,
     memo: Optional[BatchMemo] = None, max_chars: Optional[int] = None,
+    item_memo: Optional[BatchMemo] = None, salvage_truncated: bool = False,
 ) -> Dict[str, str]:
     """Ask one member which side of each pair is more natural; return id -> 'a' | 'b'."""
     return _pairwise_choices(
         provider, pairs, locale, system=system, batch_size=batch_size,
         max_tokens=max_tokens, workers=workers, memo=memo, max_chars=max_chars,
+        item_memo=item_memo, salvage_truncated=salvage_truncated,
     )
 
 
@@ -112,12 +118,14 @@ def revote(provider: Any, payload: Dict[str, Any], locale: str, *, system: Optio
 def revote_many(
     provider: Any, payloads: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
     batch_size: Optional[int] = None, max_chars: Optional[int] = None, max_tokens: int = 4096,
-    workers: int = 1, memo: Optional[BatchMemo] = None,
+    workers: int = 1, memo: Optional[BatchMemo] = None, item_memo: Optional[BatchMemo] = None,
+    salvage_truncated: bool = False,
 ) -> Dict[str, Dict[str, Any]]:
     """Run deliberation re-votes for many disputed lines at once."""
     return _revote_many(
         provider, payloads, locale, system=system, batch_size=batch_size,
         max_chars=max_chars, max_tokens=max_tokens, workers=workers, memo=memo,
+        item_memo=item_memo, salvage_truncated=salvage_truncated,
     )
 
 
@@ -125,11 +133,13 @@ def pass2_candidates(
     provider: Any, rows: Sequence[Dict[str, Any]], locale: str, *, n: int = 3,
     system: Optional[str] = None, batch_size: Optional[int] = None, max_tokens: int = 4096,
     workers: int = 1, memo: Optional[BatchMemo] = None, max_chars: Optional[int] = None,
+    item_memo: Optional[BatchMemo] = None, salvage_truncated: bool = False,
 ) -> Dict[str, List[str]]:
     """Ask Pass 2 writer model for n candidates per flagged row."""
     return _pass2_candidates(
         provider, rows, locale, n=n, system=system, batch_size=batch_size,
         max_tokens=max_tokens, workers=workers, memo=memo, max_chars=max_chars,
+        item_memo=item_memo, salvage_truncated=salvage_truncated,
     )
 
 
@@ -137,11 +147,13 @@ def pick_candidates(
     provider: Any, items: Sequence[Dict[str, Any]], locale: str, *, system: Optional[str] = None,
     batch_size: Optional[int] = None, max_tokens: int = 2048, workers: int = 1,
     memo: Optional[BatchMemo] = None, max_chars: Optional[int] = None,
+    item_memo: Optional[BatchMemo] = None, salvage_truncated: bool = False,
 ) -> Dict[str, str]:
     """Run blind choice among Pass 2 candidates."""
     return _pick_candidates(
         provider, items, locale, system=system, batch_size=batch_size,
         max_tokens=max_tokens, workers=workers, memo=memo, max_chars=max_chars,
+        item_memo=item_memo, salvage_truncated=salvage_truncated,
     )
 
 

@@ -1,6 +1,6 @@
-# CLI Reference. game-cultural-localization scripts (v3.1.0)
+# CLI Reference. game-cultural-localization scripts (v3.2.0)
 
-All tools live in `skills/game-cultural-localization/scripts/`, need **Python 3.9+ with the standard
+All tools live in `skills/game-cultural-localization/scripts/`, need **Python 3.15 with the standard
 library only**, run on Windows, macOS and Linux, force UTF-8 console output and share one
 exit-code contract.
 
@@ -205,7 +205,7 @@ Legacy flow (`--provider module:function`). Any callable `complete(system: str, 
 | `--dry-run` | jury flow with the fake provider, no key and no network |
 | `--live` | jury flow with the real APIs |
 | `--provider module:function` | legacy single critic flow |
-| `--providers-config`, `--fake-scenario`, `--budget-log`, `--batch` | model access of the jury flow, the budget log defaults to `<workdir>/budget.jsonl`, `--batch` sends the Anthropic and Google calls through their batch APIs at half the price |
+| `--providers-config`, `--fake-scenario`, `--budget-log`, `--batch`, `--flex` | model access of the jury flow, the budget log defaults to `<workdir>/budget.jsonl`, `--batch` sends the Anthropic and Google calls through their batch APIs at half the price, `--flex` uses Google Gemini flex service tier at half price |
 | `--langpack-dir` | root of the language packs, default the skill's `langpack/` |
 | `--tm` | translation memory (`tm.py` SQLite) for Pass 1 RAG and the jury evidence |
 | `--font` | font files for the glyph scan of the Phase 3 gate, repeatable, in fallback order with the primary first (see `font_glyph_scanner.py`). Without one the gate says so in its log and summary (`glyphs_checked` false, `PASSED (glyphs not checked)`). `missing_glyphs` counts the distinct characters no font of the chain covers and `full_width_fallbacks` the distinct characters that fall back to a full width glyph for the locale, and the gate passes only when both are 0 |
@@ -214,9 +214,15 @@ Legacy flow (`--provider module:function`). Any callable `complete(system: str, 
 | `--draft-field` | input column that already holds a translation, such as the game's machine translation. Pass 1 keeps it as it is and translates only the rows where it is empty, the jury judges the draft and Pass 2 corrects only the lines the jury flags, so the change reports show the real corrections and an unchanged good line stays as the game has it |
 | `--no-deliberation` | leave J3 disagreements unresolved |
 | `--no-budget-caps` | never stop at the J2 or J3 cap |
+| `--full-agent-prompt` | keep full IDE workflow instructions in Pass 1 system prompts instead of compacting them for API calls |
+| `--rewrite-all-light` | route clean `[5, 5, 4]` verdicts to Pass 2 instead of settling them directly as `pass` |
+| `--no-tiered-pass2` | rewrite `rewrite_light` rows with the flagship `pass2` model instead of `pass2_light` with 2 candidates |
+| `--always-recheck` | run J1 confirmation recheck even after a unanimous 3 of 3 blind pick |
+| `--no-tm-shortcircuit` | disable exact context matched approved TM short circuits |
+| `--require-juried-context` | fail fast if `CONTEXT_MAP.md` has a locale appendix without `CONTEXT_MAP.jury.md` |
 | `--candidates` | Pass 2 candidates per flagged line, default 3 |
 | `--seed` | seed of warm-up, few-shots and candidate order, default 1234 |
-| `--workers` | model calls in flight per step, default 4, 1 sends one call at a time. Pass 1, the jury members, the deliberation round and the Pass 2 pickers run in parallel and the files stay the same. Each batch of `--batch-size` lines runs as one unit, so a live run of a whole game wants a larger batch such as `--batch-size 200` |
+| `--workers` | model calls in flight per step, default 4, 1 sends one call at a time. Pass 1, the jury members, the deliberation round and the Pass 2 pickers run in parallel and the files stay the same. Each batch of `--batch-size` lines runs as one unit, defaulting to 200 (with `--batch` the whole table coalesces into one outer wave) |
 | `--key-field`, `--placeholder-style`, `--tag-style`, `--batch-size`, `--font` | pipeline options |
 
 JSON report. `{passed, flow (jury or legacy), summary (gate), log, finals, batches[{batch, verdicts, rewrites, final, report, unresolved, stats}], halted, unresolved, trust_level, notes, exit_code}`.
@@ -452,6 +458,7 @@ The system prompt is `prompts/critic.<locale>.md` with a seeded warm-up sample f
 | `--pairwise-min` | gate, default 0.85 |
 | `--workers` | batches in flight per model, default 4. Above 1 every distinct model is calibrated in its own thread. The report is the same for every value, only the wall clock changes. A live full run with 8 models drops from hours to minutes |
 | `--keep-mixed-robots` | keep pairs whose literal line left three or more English words of its source untranslated. By default they are left out and counted (`dropped_mixed_robots`), any reader spots such a line and it measures no native ear. The report gives every member's accuracy on short labels (three English words or fewer, `pairwise_short`) and on longer lines (`pairwise_long`) apart, short labels often read the same either way |
+| `--include-unknown` | score raw strong model `unknown` lines during calibration too (off by default to save calibration calls) |
 | `--cache` | JSON file that keeps the answers of every finished model under a signature of model, tier, prompt and items. When one model fails the others are kept and the run stops with a hint, the same command then only calls the missing models. Every finished batch is also kept in `<cache stem>.batches.json` next to it, so a model stopped halfway by a rate limit or a provider queue resumes at the batch where it stopped. Keep both out of the shipped pack, for example in `loc_work/` |
 | `--context-map` | `CONTEXT_MAP.md` of the game. The map joins the critic prompt and every pair and entry gets the neutral fields of its line note from `line_notes.json` next to the map (screen, element, player action, inserted text, room, speaker, listener, register). The locale appendix `CONTEXT_MAP.<locale>.md` is never read here, it holds the studio's own choices and would hand the jurors the answer key. The report and the trust card name the map and count the pairs with line context |
 | `--update-trust-card` | store the result under `calibration` in `langpack/<locale>/trust_card.json` |
@@ -477,7 +484,7 @@ Aggregates the `budget.jsonl` lines of every model call by role, by provider, by
 | `--project-rows` / `--project-locales` | projection size, default 20000 lines and 15 locales |
 | `--max-cost` | exit 1 when the projected cost (or the actual cost without `--rows`) in USD is above this |
 
-JSON report. `{files, records, dry_run_records, totals, by_role, by_provider, by_model, by_role_model, projection{calls_per_row, cost_per_row_usd, calls, input_tokens, output_tokens, cost_usd, complete, note}, missing_prices, fallbacks}`. Every group has `calls` (requests), `errors`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `batched`, `batch_jobs`, `latency_ms`, `mean_latency_ms`, `cost_usd` and `priced`.
+JSON report. `{files, records, dry_run_records, totals, by_role, by_provider, by_model, by_role_model, projection{calls_per_row, cost_per_row_usd, calls, input_tokens, output_tokens, cost_usd, complete, note}, missing_prices, fallbacks}`. Every group has `calls` (requests), `errors`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `thought_tokens`, `batched`, `batch_jobs`, `latency_ms`, `mean_latency_ms`, `cost_usd` and `priced`.
 
 Exit codes. 0 report written. 1 cost above `--max-cost`. 2 usage or input error (no log, broken line).
 
@@ -516,6 +523,7 @@ Evidence per line. `ban_hits` (locale rules of `rules/<locale>.json` on the targ
 | `--seed` | seed of the warm-up and few-shot sample, default 1234 |
 | `--batch-size` | lines per model call, default 100 with a character budget |
 | `--no-budget-caps` | never stop at the J2 or J3 cap |
+| `--clean-light-pass` | settle clean `[5, 5, 4]` jury lines with zero odd words and zero ban hits as `pass` |
 | `--no-deliberation` | leave J3 disagreements `unresolved` instead of running the deliberation round |
 | `--tm` | translation memory (`tm.py` SQLite file) for the `tm_neighbors` evidence, queried by the English source when `--source-table` is given, else by the target |
 | `--workers` | batches in flight per member, default 4. The three members of a tier, the back-translations and the disputed J3 lines of the deliberation round run in parallel, the verdicts are the same as with 1 |
@@ -606,6 +614,8 @@ For every verdict with status `rewrite_light`, `rewrite`, `critical` or `unresol
 | `--candidates` | candidates per line, default 3 (1 to 6) |
 | `--workers` | batches in flight per model, default 4. The three J1 pickers run in parallel, the result is the same as with 1 |
 | `--cache` | JSON file that keeps every finished batch of candidates and blind picks, the same command resumes a stopped run where it ended |
+| `--tiered` | route `rewrite_light` verdicts to `pass2_light` with 2 candidates and reserve `pass2` for stronger statuses |
+| `--skip-unanimous-recheck` | skip the J1 confirmation recheck when all three blind pickers agreed on the winning candidate |
 | `--context-map` | `CONTEXT_MAP.md` of the game. The Pass 2 writer reads the map, the locale appendix `CONTEXT_MAP.<locale>.md` and the full line notes (scout notes included), the blind J1 pickers read the map and the neutral line fields only |
 | `--statuses` | verdict statuses to rewrite, default `rewrite_light,rewrite,critical,unresolved` |
 | `--placeholder-style` / `--tag-style` | token syntax for the parity check |

@@ -41,6 +41,18 @@ class TournamentOptions:
     writer_context: Optional[WriterContextView] = None
     blind_context: Optional[BlindContextView] = None
     memo: Any = None
+    tiered: bool = False
+    light_candidates: int = 2
+    unanimous_skip_recheck: bool = False
+    item_memo: Any = None
+    salvage_truncated: bool = False
+
+
+def _jury_tier(router: Any, tier: str, task_role: str) -> Any:
+    try:
+        return router.jury(tier, task_role=task_role)
+    except TypeError:
+        return router.jury(tier)
 
 
 @dataclass
@@ -89,7 +101,7 @@ class Pass2Tournament:
         if missing:
             raise L10nError(f"keys missing from the source table: {', '.join(missing[:5])}")
         rows = self._prepare_rows(todo, sources, opts.writer_context)
-        cands = self._pass2_fn(router.for_role("pass2"), rows, locale, n=opts.n, system=p2_sys, workers=opts.workers, memo=opts.memo) if rows else {}
+        cands = self._generate_candidates(todo, rows, locale, router, p2_sys, opts) if rows else {}
         items, id_maps = self._shuffle_candidates(rows, cands, opts.seed, opts.blind_context)
         picks = self._run_pickers(router, items, locale, pk_sys, opts)
         sel = self._select_winners(todo, rows, cands, id_maps, picks, locale, opts)
@@ -148,11 +160,44 @@ class Pass2Tournament:
             })
         return items, id_maps
 
+    @staticmethod
+    def _task_extra(opts: TournamentOptions) -> Dict[str, Any]:
+        extra: Dict[str, Any] = {}
+        if opts.item_memo is not None:
+            extra["item_memo"] = opts.item_memo
+        if opts.salvage_truncated:
+            extra["salvage_truncated"] = True
+        return extra
+
+    @staticmethod
+    def _light_provider(router: Any) -> Any:
+        try:
+            return router.for_role("pass2_light")
+        except L10nError:
+            return router.for_role("pass2")
+
+    def _generate_candidates(
+        self, todo: Sequence[Dict[str, Any]], rows: Sequence[Dict[str, Any]], locale: str, router: Any, p2_sys: str, opts: TournamentOptions,
+    ) -> Dict[str, List[str]]:
+        extra = self._task_extra(opts)
+        if not opts.tiered:
+            return self._pass2_fn(router.for_role("pass2"), rows, locale, n=opts.n, system=p2_sys, workers=opts.workers, memo=opts.memo, **extra)
+        status_by_key = {v["key"]: v.get("status") for v in todo}
+        light = [r for r in rows if status_by_key.get(r["key"]) == "rewrite_light"]
+        heavy = [r for r in rows if status_by_key.get(r["key"]) != "rewrite_light"]
+        out: Dict[str, List[str]] = {}
+        if light:
+            out.update(self._pass2_fn(self._light_provider(router), light, locale, n=opts.light_candidates, system=p2_sys, workers=opts.workers, memo=opts.memo, **extra))
+        if heavy:
+            out.update(self._pass2_fn(router.for_role("pass2"), heavy, locale, n=opts.n, system=p2_sys, workers=opts.workers, memo=opts.memo, **extra))
+        return out
+
     def _run_pickers(self, router: Any, items: List[Dict[str, Any]], locale: str, pk_sys: str, opts: TournamentOptions) -> List[Tuple[Any, Dict[str, str]]]:
         if not items:
             return []
-        pickers = router.jury("J1")
-        pick = lambda m: self._pick_fn(m.provider, items, locale, system=pk_sys, workers=opts.workers, memo=opts.memo)
+        pickers = _jury_tier(router, "J1", "pick")
+        extra = self._task_extra(opts)
+        pick = lambda m: self._pick_fn(m.provider, items, locale, system=pk_sys, workers=opts.workers, memo=opts.memo, **extra)
         if int(opts.workers) > 1 and len(pickers) > 1:
             with ThreadPoolExecutor(max_workers=len(pickers)) as ex:
                 return list(zip(pickers, ex.map(pick, pickers)))
@@ -225,22 +270,32 @@ class Pass2Tournament:
         recheck = [(l, r) for l, r in zip(sel.lines, sel.rows) if l["valid"] and l["new"] != l["old"]]
         if not recheck:
             return sel.entries
+        members = _jury_tier(router, "J1", "recheck")
+        pending_recheck = []
+        for l, r in recheck:
+            chosen, vcounts = l.get("chosen"), l.get("votes_per_candidate") or []
+            if opts.unanimous_skip_recheck and chosen is not None and members and chosen < len(vcounts) and vcounts[chosen] >= len(members):
+                l["recheck"] = [5] * len(members)
+            else:
+                pending_recheck.append((l, r))
+        if not pending_recheck:
+            return sel.entries
         bctx = opts.blind_context
         view = [
             {"key": l["key"], "target": l["new"], **{k: r[k] for k in CONTEXT_FIELDS if r.get(k)},
              **({"context": bctx.line_fields(l["key"])} if bctx is not None and bctx.line_fields(l["key"]) else {})}
-            for l, r in recheck
+            for l, r in pending_recheck
         ]
         agreement = {k: int(x) for k, x in router.config.agreement.items()}
-        members = router.jury("J1")
-        rescore = lambda m: self._score_fn(m.provider, view, locale, tier="J1", system=pk_sys, workers=opts.workers, memo=opts.memo)
+        extra = self._task_extra(opts)
+        rescore = lambda m: self._score_fn(m.provider, view, locale, tier="J1", system=pk_sys, workers=opts.workers, memo=opts.memo, **extra)
         if int(opts.workers) > 1 and len(members) > 1:
             with ThreadPoolExecutor(max_workers=len(members)) as ex:
                 scores = list(ex.map(rescore, members))
         else:
             scores = [rescore(m) for m in members]
         unconfirmed = set()
-        for l, r in recheck:
+        for l, r in pending_recheck:
             got = [s[l["key"]]["score"] for s in scores]
             l["recheck"] = got
             if classify(got, agreement) != "pass":

@@ -48,10 +48,21 @@ class AtomicJsonMemoRepository:
     def put(self, key: str, value: Any) -> None:
         with self._lock:
             self._data[key] = value
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(self._data, ensure_ascii=False) + "\n", encoding="utf-8")
-            tmp.replace(self.path)
+            self._flush()
+
+    def put_many(self, items: Dict[str, Any]) -> None:
+        """Persist multiple memo entries atomically with a single disk write."""
+        if not items:
+            return
+        with self._lock:
+            self._data.update(items)
+            self._flush()
+
+    def _flush(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self._data, ensure_ascii=False) + "\n", encoding="utf-8")
+        tmp.replace(self.path)
 
     def __len__(self) -> int:
         return len(self._data)

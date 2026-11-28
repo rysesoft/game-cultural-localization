@@ -1,25 +1,26 @@
 {
-  "_comment": "Model ids verified 2026-11-26 against the official model pages (see ARGE brief B3.2). Prices are USD per 1M tokens, null = price not entered yet. price_cache_read and price_cache_write price prompt tokens served from or written to the provider's prompt cache (Anthropic needs the cache marker the adapter sends, DeepSeek caches on its own, Gemini 4 showed no cache hits live), a missing value means price_in. DeepSeek prices are the off-peak rates. Gemini 4 prices are the paid tier of the AI Studio pricing page checked on 2026-11-27, gemini-4-carbon at the rate that starts on 2026-12-01 (2.00 and 10.00 before). API keys are never stored here, only the environment variable names. deepseek.thinking maps a role (pass1, pass2, roundtrip, literal, J1, J2, J3) or 'default' to true / false, a missing entry keeps the API default (thinking on). literal and roundtrip are mechanical tasks and run without thinking, live runs showed thinking alone can use up the output limit there. max_output_tokens is the model's own output maximum, measured live on 2026-11-27 (Claude 5.5 128000 and DeepSeek 393216 as the API states it, Gemini 4 accepts any value and caps it at its own maximum). Every call asks for it, only generated tokens are billed, so a reply is never cut while a model thinks. batch holds the batch API settings that --batch uses (Anthropic Message Batches and Gemini Batch Mode, DeepSeek has none). price_factor is the share of the standard price a batched call costs (0.5 at both), a job is sent once no new call arrived for linger_s seconds or max_requests calls wait, its state is asked every poll_s seconds.",
+  "_comment": "Model ids verified 2026-11-26 against the official model pages (see ARGE brief B3.2). Prices are USD per 1M tokens, null = price not entered yet. price_cache_read and price_cache_write price prompt tokens served from or written to the provider's prompt cache (Anthropic needs the cache marker the adapter sends, DeepSeek caches on its own, Gemini 4 cachedContentTokenCount feeds cache_read_tokens), a missing value means price_in. DeepSeek prices are the off-peak rates. Gemini 4 prices are the paid tier of the AI Studio pricing page checked on 2026-11-27, gemini-4-carbon at the rate that starts on 2026-12-01 (2.00 and 10.00 before). API keys are never stored here, only the environment variable names. deepseek.thinking maps a role (pass1, pass2, roundtrip, literal, pick, recheck, pairwise, J1, J2, J3) or 'default' to true / false, a missing entry keeps the API default. anthropic.effort and google.effort map roles to low, medium or high thinking effort. max_output_tokens is the model's output maximum (Claude 5.5 128000, DeepSeek 393216, Gemini 4 foreground 65536). batch holds the batch API settings that --batch uses (Anthropic Message Batches and Gemini Batch Mode, DeepSeek has none).",
   "providers": {
-    "anthropic": {"env_key": "ANTHROPIC_API_KEY", "rps": 5, "endpoint": "https://api.anthropic.com/v1/messages", "batch": {"price_factor": 0.5, "linger_s": 5, "poll_s": 30, "max_requests": 5000}},
-    "google":    {"env_key": "GOOGLE_API_KEY",    "rps": 5, "endpoint": "https://generativelanguage.googleapis.com/v1beta", "batch": {"price_factor": 0.5, "linger_s": 5, "poll_s": 30, "max_requests": 1000}},
-    "deepseek":  {"env_key": "DEEPSEEK_API_KEY",  "rps": 5, "endpoint": "https://api.deepseek.com/chat/completions", "thinking": {"literal": false, "roundtrip": false}}
+    "anthropic": {"env_key": "ANTHROPIC_API_KEY", "rps": 5, "endpoint": "https://api.anthropic.com/v1/messages", "effort": {"J1": "low", "pick": "low", "recheck": "low", "pairwise": "low", "pass1": "medium", "pass2_light": "medium", "J2": "medium", "pass2": "high", "J3": "high", "deliberate": "high"}, "batch": {"price_factor": 0.5, "linger_s": 5, "poll_s": 30, "max_requests": 5000}},
+    "google":    {"env_key": "GOOGLE_API_KEY",    "rps": 5, "endpoint": "https://generativelanguage.googleapis.com/v1beta", "effort": {"J1": "low", "pick": "low", "recheck": "low", "pairwise": "low", "pass1": "medium", "J2": "medium", "pass2": "high", "J3": "high", "deliberate": "high"}, "batch": {"price_factor": 0.5, "linger_s": 5, "poll_s": 30, "max_requests": 1000}},
+    "deepseek":  {"env_key": "DEEPSEEK_API_KEY",  "rps": 5, "endpoint": "https://api.deepseek.com/chat/completions", "thinking": {"literal": false, "roundtrip": false, "pick": false, "recheck": false, "pairwise": false}}
   },
   "models": {
     "haiku":    {"provider": "anthropic", "id": "claude-haiku-5-5",  "max_output_tokens": 128000,  "price_in": 0.10, "price_out": 0.50, "price_cache_read": 0.01, "price_cache_write": 0.125},
     "sonnet":   {"provider": "anthropic", "id": "claude-sonnet-5-5", "max_output_tokens": 128000,  "price_in": 2.0,  "price_out": 10.0, "price_cache_read": 0.10, "price_cache_write": 2.5},
     "opus":     {"provider": "anthropic", "id": "claude-opus-5-5",   "max_output_tokens": 128000,  "price_in": 4.0,  "price_out": 20.0, "price_cache_read": 0.20, "price_cache_write": 5.0},
-    "hydrogen": {"provider": "google",    "id": "gemini-4-hydrogen", "max_output_tokens": 1000000, "price_in": 1.50, "price_out": 7.50, "price_cache_read": 0.075},
-    "neon":     {"provider": "google",    "id": "gemini-4-neon",     "max_output_tokens": 1000000, "price_in": 3.00, "price_out": 15.00, "price_cache_read": 0.15},
-    "carbon":   {"provider": "google",    "id": "gemini-4-carbon",   "max_output_tokens": 1000000, "price_in": 4.0,  "price_out": 20.0, "price_cache_read": 0.20},
+    "hydrogen": {"provider": "google",    "id": "gemini-4-hydrogen", "max_output_tokens": 65536,   "price_in": 1.50, "price_out": 7.50, "price_cache_read": 0.075},
+    "neon":     {"provider": "google",    "id": "gemini-4-neon",     "max_output_tokens": 65536,   "price_in": 3.00, "price_out": 15.00, "price_cache_read": 0.15},
+    "carbon":   {"provider": "google",    "id": "gemini-4-carbon",   "max_output_tokens": 65536,   "price_in": 4.0,  "price_out": 20.0, "price_cache_read": 0.20},
     "v4flash":  {"provider": "deepseek",  "id": "deepseek-flash",    "max_output_tokens": 393216,  "price_in": 0.15, "price_out": 0.60, "price_cache_read": 0.003},
     "v4pro":    {"provider": "deepseek",  "id": "deepseek-v4-pro",   "max_output_tokens": 393216,  "price_in": 0.66, "price_out": 1.98, "price_cache_read": 0.022, "fallback": "v4flash", "fallback_thinking": true}
   },
   "roles": {
-    "pass1":     "sonnet",
-    "pass2":     "opus",
-    "roundtrip": "v4flash",
-    "literal":   "v4flash",
+    "pass1":       "sonnet",
+    "pass2":       "opus",
+    "pass2_light": "sonnet",
+    "roundtrip":   "v4flash",
+    "literal":     "v4flash",
     "context_orchestrator": "opus",
     "context_agent":        "sonnet",
     "J1": ["haiku",  "v4flash", "hydrogen"],

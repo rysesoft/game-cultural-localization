@@ -124,7 +124,7 @@ def split_shots(pairs: Sequence[Dict[str, Any]], shots: int, limit: int, seed: i
     return [pairs[i] for i in held], [pairs[i] for i in rest]
 
 
-def build_items(pairs: Sequence[Dict[str, Any]], seed: int) -> Tuple[List[Dict[str, Any]], Dict[str, str], List[Dict[str, Any]], Dict[str, Tuple[str, str]]]:
+def build_items(pairs: Sequence[Dict[str, Any]], seed: int, *, include_unknown: bool = True) -> Tuple[List[Dict[str, Any]], Dict[str, str], List[Dict[str, Any]], Dict[str, Tuple[str, str]]]:
     """Pairwise items (seeded side order), their native side, absolute-score entries (seeded order) and entry -> (kind, pair key)."""
     rng = random.Random(seed)
     pw: List[Dict[str, Any]] = []
@@ -139,9 +139,10 @@ def build_items(pairs: Sequence[Dict[str, Any]], seed: int) -> Tuple[List[Dict[s
             pw.append({"id": p["key"], "a": p["robot"], "b": p["native"]})
             native_side[p["key"]] = "b"
         lines = [("native", p["native"]), ("robot", p["robot"])]
-        for model, text in sorted((p.get("unknown") or {}).items()):
-            if isinstance(text, str) and text.strip():
-                lines.append((f"unknown:{model}", text))
+        if include_unknown:
+            for model, text in sorted((p.get("unknown") or {}).items()):
+                if isinstance(text, str) and text.strip():
+                    lines.append((f"unknown:{model}", text))
         for kind, text in lines:
             eid = f"e{len(entries):05d}"
             entries.append({"key": eid, "target": text, "register": p.get("register", "")})
@@ -157,7 +158,7 @@ def _mean(xs: Sequence[float]) -> Optional[float]:
 def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dict[str, Any]], shots_pairs: Sequence[Dict[str, Any]],
              *, warmup: bool, pack_dir: Optional[Path], seed: int, warmup_count: int, pairwise_min: float,
              langpack_version: Optional[str], workers: int = 1, store: Optional[Path] = None,
-             context: Optional[ContextPack] = None) -> Dict[str, Any]:
+             context: Optional[ContextPack] = None, include_unknown: bool = False) -> Dict[str, Any]:
     """Run the calibration once (with or without warm-up) and return the B3.6 report.
 
     With workers > 1 every distinct model is calibrated in its own thread and sends up to `workers`
@@ -170,7 +171,7 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
     if warmup and pack_dir is not None and ((pack_dir / "warmup.jsonl").is_file() or (pack_dir / "local" / "warmup.jsonl").is_file()):
         warm_text = render_warmup(load_warmup(pack_dir, regs, warmup_count, seed))
     system = render_prompt("critic", locale, warmup=warm_text, contrastive=render_contrastive(shots_pairs, count=len(shots_pairs), seed=seed))
-    pw, native_side, entries, meta = build_items(pairs, seed)
+    pw, native_side, entries, meta = build_items(pairs, seed, include_unknown=include_unknown)
     context_lines = 0
     if context is not None and context.text:  # jurors read the map and the neutral line fields, never the locale appendix
         system = context.system(system)
@@ -201,7 +202,11 @@ def evaluate(router: Any, locale: str, tiers: Sequence[str], pairs: Sequence[Dic
         if sig in stored:
             return model, stored[sig], None
         try:
-            choices = pairwise_choices(m.provider, pw, locale, system=system, workers=workers, memo=memo)
+            pw_provider = router.for_model(m.alias, tier, task_role="pairwise") if hasattr(router, "for_model") else m.provider
+        except TypeError:
+            pw_provider = m.provider
+        try:
+            choices = pairwise_choices(pw_provider, pw, locale, system=system, workers=workers, memo=memo)
             votes = score_entries(m.provider, entries, locale, tier=tier, system=system, workers=workers, memo=memo)
         except Exception as exc:  # noqa: BLE001  one failing model must not throw away the finished ones
             return model, None, f"{type(exc).__name__}: {exc}"
@@ -297,6 +302,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--workers", type=int, default=4, help="Batches in flight per model, models run in parallel when above 1 (default 4, 1 = one call at a time)")
     ap.add_argument("--cache", default=None, help="JSON file that keeps every finished model; a rerun with the same pairs, seed and prompt only calls the missing models")
     ap.add_argument("--keep-mixed-robots", action="store_true", help="Keep pairs whose literal line left English words untranslated (dropped by default, any reader spots them)")
+    ap.add_argument("--include-unknown", action="store_true", help="Also score raw unknown strong model lines (skipped by default to save calibration calls)")
     ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md of the game, its line_notes.json next to it gives every pair its context")
     add_model_args(ap)
     add_common_args(ap, TOOL)
@@ -328,7 +334,8 @@ def main() -> int:
         raise L10nError("--workers must be 1 or more")
     kw = {"pack_dir": pack_dir, "seed": args.seed, "warmup_count": args.warmup_count, "pairwise_min": args.pairwise_min, "langpack_version": version,
           "workers": args.workers, "store": Path(args.cache) if args.cache else None,
-          "context": load_context(Path(args.context_map), locale) if args.context_map else None}
+          "context": load_context(Path(args.context_map), locale) if args.context_map else None,
+          "include_unknown": args.include_unknown}
     if args.compare_warmup:
         with_w = evaluate(router, locale, tiers, evald, shots, warmup=True, **kw)
         without_w = evaluate(router, locale, tiers, evald, shots, warmup=False, **kw)

@@ -2,15 +2,21 @@
 
 All notable changes to this plugin are documented here. The version number lives in `plugin.json` and `scripts/l10n_common.py`.
 
-## [Unreleased]
+## [3.2.0] 2026-11-28
+
+Phase M cost, token and request optimization suite on top of the SOLID, OOP and AOP architecture under `skills/game-cultural-localization/scripts/gcl/`, targeting Python 3.15 with zero external dependencies.
 
 ### Changed
 - Internal SOLID, OOP, AOP and Clean Code architecture under `skills/game-cultural-localization/scripts/gcl/` (`domain`, `ports`, `aspects`, `application`, `infrastructure`, `composition`), keeping all CLI scripts in `scripts/` as thin backward compatible facades.
 - Added automated architecture governance (`docs/architecture/`, `scripts/dev/verify_architecture.py`, `scripts/dev/sync_navigation.py`, `.agents/hooks.json`) enforcing downward layer imports, zero cycles, juror blindness, OCP vendor registration and Clean Code limits.
-- Exposed `--batch` on `orchestrator_stub.py` to route Anthropic and Google calls through the existing async batch collector.
+- Standardized runtime target on single Python 3.15 (`MIN_PYTHON = (3, 15)`).
+- Raised default orchestrator batch size from `50` to `200`, coalesced full tables in `--batch` async mode, lowered `GOOGLE_MAX_OUTPUT` to `65536` and configured role scoped `effort` and thinking modes across Anthropic, Google and DeepSeek adapters.
+- Kept one immutable critic and Pass 2 system prompt prefix across all batches of a run and compacted IDE/CLI agent prose out of API Pass 1 system prompts via `gcl.domain.prompt_compactor`.
+- Settled clean `[5, 5, 4]` jury lines (`0` odd words, `0` ban hits) as `pass` in orchestrator runs, routed `rewrite_light` rows through `pass2_light` (`sonnet`, 2 candidates) and skipped redundant rechecks on unanimous `3/3` blind picks.
+- Added truncated JSON array salvage (`salvage_keyed_items`), fail fast `PermanentProviderError` on permanent 4xx statuses, item level resume cache (`model_items.json`), context signature deduplication (`gcl.application.pipeline.dedup`), in memory `SqliteTMRepository` trigram caching plus exact approved TM short circuits, Gemini `--flex` tier support with `0.5x` cost accounting, `--include-unknown` default off in `eval_critic.py`, accurate Pass 2 change counts in `write_final_batch` and undecided change hold back in `export_decisions.py`.
 
 ### Fixed
-- `GoogleProvider.parse_reply` now records `usageMetadata.cachedContentTokenCount` and `thoughtsTokenCount` in `TokenUsage` and `ChatResult.cache_read_tokens`.
+- `GoogleProvider.parse_reply` and `DeepSeekProvider.parse_reply` record reasoning tokens into `thought_tokens` across `ChatResult`, `LLMCallObserved` and `budget_report.py`.
 
 ## [3.1.0] 2026-11-27
 

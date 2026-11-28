@@ -27,8 +27,10 @@ class LLMCallObserved(DomainEvent):
     ok: bool
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+    thought_tokens: int = 0
     batch_id: str = ""
     batched: bool = False
+    flex: bool = False
     dry_run: bool = False
     fallback_from: str = ""
     error: str = ""

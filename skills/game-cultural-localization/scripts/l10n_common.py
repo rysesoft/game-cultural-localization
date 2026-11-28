@@ -10,7 +10,7 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from gcl.domain.errors import EXIT_FINDINGS, EXIT_OK, EXIT_USAGE, L10nError, __version__  # noqa: E402,F401
+from gcl.domain.errors import EXIT_FINDINGS, EXIT_OK, EXIT_USAGE, MIN_PYTHON, L10nError, __version__  # noqa: E402,F401
 from gcl.domain.locales import CANONICAL_LOCALES, PLURAL_FORMS, normalize_locale  # noqa: E402,F401
 from gcl.domain.models import Finding, GlossaryTerm, PlaceholderSet, Risk, Row, Tag  # noqa: E402,F401
 from gcl.infrastructure.formats.cli_support import (  # noqa: E402,F401

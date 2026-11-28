@@ -177,7 +177,7 @@ slices = await agent(
          f"--context-cols category,speaker,archetype --out {SCRATCH}/blind_{LOCALE}_{b}.json" for b in BATCHES],
         [f"{SCRATCH}/blind_{LOCALE}_{b}.json" for b in BATCHES],
     ),
-    schema=RESULT_SCHEMA, role=f"{LOCALE} blind-slice builder", type_name="game-culturalizer",
+    schema=RESULT_SCHEMA, role=f"{LOCALE} blind-slice builder", type_name="game-culturalizer", model="flash_lite",
 )
 if not slices.get("ok"):
     raise RuntimeError("blind slices failed: " + "; ".join(slices.get("errors", [])))
@@ -192,7 +192,7 @@ validation = await agent(
          f"--locale {LOCALE} --placeholder-style {PH_STYLE} --tag-style {TAG_STYLE}" for b in BATCHES],
         ["validation report per batch"],
     ),
-    schema=RESULT_SCHEMA, role=f"{LOCALE} critique validator", type_name="game-culturalizer",
+    schema=RESULT_SCHEMA, role=f"{LOCALE} critique validator", type_name="game-culturalizer", model="flash_lite",
 )
 if not validation.get("ok"):
     raise RuntimeError("critique validation failed: " + "; ".join(validation.get("errors", [])))
@@ -215,7 +215,7 @@ for b in BATCHES:
         gate_cmds.append(f"python {SCRIPTS}/font_glyph_scanner.py --input {f} --dst-field {LOCALE} {font_flags} --json {SCRATCH}/font_{LOCALE}_{b}.json")
 gate = await agent(
     prompt=shell_prompt(gate_cmds, [f"{SCRATCH}/lqa_{LOCALE}_*.json", f"{SCRATCH}/ui_{LOCALE}_*.json"]),
-    schema=RESULT_SCHEMA, role=f"{LOCALE} LQA gate", type_name="game-culturalizer",
+    schema=RESULT_SCHEMA, role=f"{LOCALE} LQA gate", type_name="game-culturalizer", model="flash_lite",
 )
 log(f"LQA gate: {gate}")
 if not gate.get("ok"):

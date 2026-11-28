@@ -63,6 +63,7 @@ def rewrite_lines(
     pass2_system: str, pick_system: str, n: int = 3, seed: int = 1234, ph_style: str = "auto",
     tag_style: str = "auto", statuses: Sequence[str] = DEFAULT_STATUSES, source_file: str = "",
     workers: int = 1, context: Optional[ContextPack] = None, memo: Any = None,
+    tiered: bool = False, unanimous_skip_recheck: bool = False,
 ) -> Dict[str, Any]:
     """Generate Pass 2 candidates, pick blind with J1, validate and recheck."""
     ctx = context if context is not None and context.text else None
@@ -71,7 +72,7 @@ def rewrite_lines(
         ph_style=ph_style, tag_style=tag_style, statuses=tuple(statuses), source_file=source_file, workers=workers,
         writer_context=WriterContextAdapter(ctx) if ctx is not None else None,
         blind_context=BlindContextAdapter(ctx) if ctx is not None else None,
-        memo=memo,
+        memo=memo, tiered=tiered, unanimous_skip_recheck=unanimous_skip_recheck,
     )
     return run_tournament(
         verdicts, sources, locale, router, opts, _VALIDATOR, _PARITY,
@@ -118,6 +119,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--workers", type=int, default=4, help="Batches in flight per model, the three J1 pickers run in parallel (default 4, 1 = one call at a time)")
     ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md of the game, with line_notes.json and CONTEXT_MAP.<locale>.md next to it")
     ap.add_argument("--cache", default=None, help="JSON file that keeps every finished batch of candidates and picks, the same command resumes where a stopped run ended")
+    ap.add_argument("--tiered", action="store_true", help="Route rewrite_light verdicts to pass2_light with 2 candidates and keep pass2 for stronger statuses")
+    ap.add_argument("--skip-unanimous-recheck", action="store_true", help="Skip the J1 recheck when all three blind pickers agreed on the winning candidate")
     add_model_args(ap)
     add_common_args(ap, TOOL)
     return ap
@@ -151,6 +154,7 @@ def main() -> int:
         source_file=str(doc.get("source_file") or Path(args.source_table).name), workers=args.workers,
         context=load_context(Path(args.context_map), locale) if args.context_map else None,
         memo=BatchMemo(Path(args.cache)) if args.cache else None,
+        tiered=args.tiered, unanimous_skip_recheck=args.skip_unanimous_recheck,
     )
     result = {"locale": locale, "source_file": doc.get("source_file"), "verdicts": str(inp), "lines": res["lines"], "critique": res["critique"], "notes": router.notes}
     out.parent.mkdir(parents=True, exist_ok=True)

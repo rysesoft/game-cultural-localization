@@ -97,9 +97,12 @@ def write_verdict_doc(
 
 
 def write_final_batch(final_path: Path, p1_rows: Sequence[Dict[str, Any]], rw: Dict[str, Any], res: Dict[str, Any], locale: str) -> int:
-    """Apply confirmed Pass 2 rewrites into final_batch_NN.json and return rewrite count."""
+    """Apply confirmed Pass 2 rewrites into final_batch_NN.json and return actual change count."""
     status_by_key = {v["key"]: v["status"] for v in res["verdicts"]}
-    applied = {l["key"]: l["new"] for l in rw["lines"] if l["valid"] and status_by_key.get(l["key"]) != "unresolved"}
+    applied = {
+        l["key"]: l["new"] for l in rw["lines"]
+        if l["valid"] and status_by_key.get(l["key"]) != "unresolved" and l["new"] != l["old"]
+    }
     out_rows = [{**row, locale: applied.get(row["key"], row[locale])} for row in p1_rows]
     final_path.write_text(json.dumps(out_rows, ensure_ascii=False, indent=2), encoding="utf-8")
     return len(applied)

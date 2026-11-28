@@ -17,7 +17,7 @@ This repository is the **Game Cultural Localization** plugin. It turns machine o
 
 1. Read [CHANGELOG.md](./CHANGELOG.md) (newest entries first), [architecture memory](./docs/architecture/ARCHITECTURE_MEMORY.md), [navigation map](./docs/architecture/NAVIGATION.md) and [scripts/CLI_REFERENCE.md](./skills/game-cultural-localization/scripts/CLI_REFERENCE.md).
 2. Inside `skills/game-cultural-localization/scripts/gcl/`, also follow [gcl/AGENTS.md](./skills/game-cultural-localization/scripts/gcl/AGENTS.md). Keep layer imports downward only, never add third party packages and regenerate `NAVIGATION.md` after structural edits with `python skills/game-cultural-localization/scripts/dev/sync_navigation.py`.
-3. Run the architecture verifier and the tests before and after every change, on the oldest and a current Python.
+3. Run the architecture verifier and the tests before and after every change on Python 3.15.
    ```bash
    python skills/game-cultural-localization/scripts/dev/verify_architecture.py
    python -B -m unittest discover tests
@@ -32,7 +32,7 @@ This repository is the **Game Cultural Localization** plugin. It turns machine o
 - **API keys.** Keys live only in the environment variables `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` and `DEEPSEEK_API_KEY`. Never write a key into a file, a commit, a log or a message. Scan the outgoing diff for key values before every push.
 - **Tests never call a real API.** Use `--dry-run` and the fake provider (`scripts/providers/fake.py`), `GCL_OFFLINE=1` blocks the network.
 - **Never write into a game project.** Read it, write results to `loc_work/` or another folder outside it. Shipped files carry no machine paths.
-- **Runtime.** Python 3.9 or newer, standard library only. Every CLI exits 0 for clean, 1 for findings and 2 for usage or input errors.
+- **Runtime.** Python 3.15, standard library only. Every CLI exits 0 for clean, 1 for findings and 2 for usage or input errors.
 - **House punctuation style.** README files, docs, prompts, generated reports and commit bodies use no semicolons, no en or em dashes and no colon inside or between sentences (`scripts/text_style.py` checks it). Code, inline code and URLs are exempt.
 - **Every new tool** appears in the `SKILL.md` map, gets a `CLI_REFERENCE.md` section, a `CHANGELOG.md` line and tests, and its test module is listed in `tests/README.md`. `README.md` and `README_TR.md` change together.
 - **Git.** Commit subjects use `feat(<area>): ...`. Ask the user before every push. Never commit `loc_work/`, `langpack/*/local/` or anything holding a key.

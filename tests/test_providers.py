@@ -318,7 +318,7 @@ class HttpAdapterTests(unittest.TestCase):
     def test_every_call_asks_for_the_models_own_maximum(self):
         # fixed floors of 16000 and 32000 cut Gemini, DeepSeek and claude-haiku-5-5 in live runs
         for name, reply, field, top in (("anthropic", ANTHROPIC_OK, ("max_tokens",), 128000), ("deepseek", DEEPSEEK_OK, ("max_tokens",), 393216),
-                                        ("google", GOOGLE_OK, ("generationConfig", "maxOutputTokens"), 1000000)):
+                                        ("google", GOOGLE_OK, ("generationConfig", "maxOutputTokens"), 65536)):
             p, t, _ = self._make(name, [(200, reply, {}), (200, reply, {}), (200, reply, {})])
             p.complete("s", "u", max_tokens=1024)
             p.complete("s", "u", max_tokens=40000)
@@ -335,7 +335,7 @@ class HttpAdapterTests(unittest.TestCase):
     def test_config_max_output_tokens(self):
         cfg = load_providers_config()
         self.assertEqual({s.provider: s.max_output_tokens for s in cfg.models.values()},
-                         {"anthropic": 128000, "google": 1000000, "deepseek": 393216})
+                         {"anthropic": 128000, "google": 65536, "deepseek": 393216})
         router = Router(cfg, env={"ANTHROPIC_API_KEY": "a", "GOOGLE_API_KEY": "g", "DEEPSEEK_API_KEY": "d"})
         self.assertEqual(router.for_role("pass2")._impl.options["max_output_tokens"], 128000)
         with TempDir() as td:

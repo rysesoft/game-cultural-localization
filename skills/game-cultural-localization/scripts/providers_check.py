@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from l10n_common import (  # noqa: E402
     EXIT_FINDINGS, EXIT_OK, L10nError, add_common_args, add_input_argument, emit_report, resolve_input, run_main, __version__,
 )
-from providers import JURY_TIERS, SINGLE_ROLES, FakeScenario, Router, envelope, load_providers_config  # noqa: E402
+from providers import JURY_TIERS, OPTIONAL_SINGLE_ROLES, SINGLE_ROLES, FakeScenario, Router, envelope, load_providers_config  # noqa: E402
 
 TOOL = "providers_check"
 
@@ -38,7 +38,7 @@ TOOL = "providers_check"
 def parse_roles(raw: str) -> List[str]:
     """Split and validate a comma separated role list."""
     roles = [r.strip() for r in raw.split(",") if r.strip()]
-    known = SINGLE_ROLES + JURY_TIERS
+    known = SINGLE_ROLES + OPTIONAL_SINGLE_ROLES + JURY_TIERS
     for r in roles:
         if r not in known:
             raise L10nError(f"unknown role '{r}'; known: {', '.join(known)}")

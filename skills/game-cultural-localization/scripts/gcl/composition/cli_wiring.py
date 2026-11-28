@@ -14,7 +14,7 @@ __owns__ = "CLI model router construction, batch worker scaling and budget path 
 
 
 def add_model_args(ap: Any) -> None:
-    """Attach standard model config, dry run, budget log and --batch CLI arguments."""
+    """Attach standard model config, dry run, budget log, --batch and --flex CLI arguments."""
     ap.add_argument("--providers-config", default=None, help="providers.config.json (default: the bundled one)")
     ap.add_argument("--dry-run", action="store_true", help="Use the offline fake provider (no API key, no network)")
     ap.add_argument("--fake-scenario", help="Fake provider scenario JSON (with --dry-run)")
@@ -23,6 +23,10 @@ def add_model_args(ap: Any) -> None:
         "--batch", action="store_true",
         help="Send the calls of Anthropic and Google models through their batch APIs at half the price. A reply comes "
              "when its job ends, usually within an hour, at most a day. DeepSeek stays real time",
+    )
+    ap.add_argument(
+        "--flex", action="store_true",
+        help="Use the Google Gemini flex service tier at half the standard token price",
     )
 
 
@@ -42,8 +46,9 @@ def make_router(args: Any, roles: Sequence[str], budget_default: Optional[Path] 
     cfg = load_providers_config(Path(args.providers_config) if getattr(args, "providers_config", None) else None)
     budget = Path(args.budget_log) if getattr(args, "budget_log", None) else budget_default
     batch = bool(getattr(args, "batch", False))
+    flex = bool(getattr(args, "flex", False))
     scenario = FakeScenario.load(Path(args.fake_scenario)) if getattr(args, "fake_scenario", None) else None
-    router = Router(cfg, dry_run=bool(getattr(args, "dry_run", False)), scenario=scenario, budget_log=budget, batch=batch)
+    router = Router(cfg, dry_run=bool(getattr(args, "dry_run", False)), scenario=scenario, budget_log=budget, batch=batch, flex=flex)
     router.require(roles)
     if batch and hasattr(args, "workers"):
         args.workers = max(int(args.workers or 1), BATCH_WORKERS)

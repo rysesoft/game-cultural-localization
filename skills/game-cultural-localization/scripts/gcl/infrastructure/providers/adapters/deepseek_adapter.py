@@ -75,12 +75,15 @@ class DeepSeekProvider(HttpProvider):
         tin = usage.get("prompt_tokens")
         tout = usage.get("completion_tokens")
         hit = usage.get("prompt_cache_hit_tokens")
+        details = usage.get("completion_tokens_details") or {}
+        thoughts = details.get("reasoning_tokens") if isinstance(details, dict) else None
         return RawVendorReply(
             text=str(msg.get("content") or ""),
             usage=TokenUsage(
                 input_tokens=tin if isinstance(tin, int) else 0,
                 output_tokens=tout if isinstance(tout, int) else 0,
                 cache_read_tokens=hit if isinstance(hit, int) else 0,
+                thought_tokens=thoughts if isinstance(thoughts, int) else 0,
             ),
             finish_reason=str((choices[0] or {}).get("finish_reason") or "stop"),
         )

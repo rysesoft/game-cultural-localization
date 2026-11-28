@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 import unicodedata
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .errors import L10nError
 
@@ -59,6 +59,30 @@ def extract_json(text: str) -> Any:
 def prompt_hash(system: str, user: str) -> str:
     """Deterministic 16 hex digit hash of a prompt pair."""
     return hashlib.sha256((system + "\x00" + user).encode("utf-8")).hexdigest()[:16]
+
+
+def salvage_keyed_items(text: str, reply_field: str) -> List[Dict[str, Any]]:
+    """Recover complete JSON object items from a truncated keyed list response."""
+    cleaned = _FENCE_RE.sub("", text.strip())
+    m = re.search(rf'"{re.escape(reply_field)}"\s*:\s*\[', cleaned)
+    if not m:
+        return []
+    decoder = json.JSONDecoder()
+    pos, n = m.end(), len(cleaned)
+    items: List[Dict[str, Any]] = []
+    while pos < n:
+        while pos < n and cleaned[pos] in " \t\r\n,":
+            pos += 1
+        if pos >= n or cleaned[pos] == "]" or cleaned[pos] != "{":
+            break
+        try:
+            obj, end = decoder.raw_decode(cleaned, pos)
+        except json.JSONDecodeError:
+            break
+        if isinstance(obj, dict):
+            items.append(obj)
+        pos = end
+    return items
 
 
 def estimate_tokens(text: str) -> int:

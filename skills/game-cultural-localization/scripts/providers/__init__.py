@@ -16,7 +16,8 @@ from gcl.infrastructure.providers.adapters import (  # noqa: E402
 from gcl.infrastructure.providers.batch_backends import BACKENDS as BATCH_BACKENDS  # noqa: E402
 from gcl.infrastructure.providers.batch_collector import BATCH_PRICE_FACTOR, BatchCollector  # noqa: E402
 from gcl.infrastructure.providers.config import (  # noqa: E402
-    CONTEXT_ROLES, DEFAULT_CONFIG_PATH, JURY_TIERS, SINGLE_ROLES, ModelSpec, ProvidersConfig, load_providers_config,
+    CONTEXT_ROLES, DEFAULT_CONFIG_PATH, JURY_TIERS, OPTIONAL_SINGLE_ROLES, SINGLE_ROLES, ModelSpec, ProvidersConfig,
+    load_providers_config,
 )
 from gcl.infrastructure.providers.envelope import envelope, estimate_tokens, extract_json, split_envelope  # noqa: E402
 from gcl.infrastructure.providers.factory import Member, RoleProvider, Router  # noqa: E402
@@ -28,7 +29,8 @@ from gcl.ports.llm import LLMClient as Provider  # noqa: E402
 __all__ = [
     "BudgetLog", "ChatResult", "DEFAULT_CONFIG_PATH", "FakeProvider", "FakeScenario", "FromLegacy", "JURY_TIERS",
     "LegacyAdapter", "Member", "MissingKeyError", "ModelNotFoundError", "ModelSpec", "Provider", "ProviderError",
-    "ProvidersConfig", "RateLimiter", "CONTEXT_ROLES", "RoleProvider", "Router", "SINGLE_ROLES", "as_legacy",
+    "ProvidersConfig", "RateLimiter", "CONTEXT_ROLES", "OPTIONAL_SINGLE_ROLES", "RoleProvider", "Router",
+    "SINGLE_ROLES", "as_legacy",
     "envelope", "estimate_tokens", "extract_json", "get_provider", "load_providers_config", "split_envelope",
 ]
 

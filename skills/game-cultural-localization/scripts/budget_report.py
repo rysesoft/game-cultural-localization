@@ -24,7 +24,7 @@ Usage:
 
 Exit codes: 0 report written, 1 the cost (projected when --rows is given, else actual)
 exceeds --max-cost, 2 usage or input error (no log, broken line).
-Python 3.9+, standard library only.
+Python 3.15, standard library only.
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ def read_records(paths: Sequence[Path]) -> List[Dict[str, Any]]:
                 raise L10nError(f"{p}:{n}: invalid JSON line ({exc.msg})")
             if not isinstance(rec, dict) or not all(isinstance(rec.get(k), str) for k in ("role", "provider", "model")):
                 raise L10nError(f"{p}:{n}: a budget line needs role, provider and model")
-            for k in ("input_tokens", "output_tokens", "latency_ms", "cache_read_tokens", "cache_write_tokens"):
+            for k in ("input_tokens", "output_tokens", "latency_ms", "cache_read_tokens", "cache_write_tokens", "thought_tokens"):
                 v = rec.get(k, 0)
                 if not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0:
                     raise L10nError(f"{p}:{n}: '{k}' must be a non-negative number")
@@ -98,11 +98,11 @@ def price_table(config: Any) -> Prices:
 
 
 def cost_of(model: str, tin: float, tout: float, prices: Prices, cache_read: float = 0, cache_write: float = 0,
-            batch: bool = False) -> Optional[float]:
+            batch: bool = False, flex: bool = False) -> Optional[float]:
     """USD cost, None when the model or one of its prices is unknown.
 
     tin is the whole prompt. The cached parts are taken out of it and priced with their own rates. A batched call
-    costs the provider's batch price factor of that.
+    costs the provider's batch price factor of that; a flex call costs 0.5 of the standard rate when not batched.
     """
     pin, pout, pread, pwrite, bfac = (tuple(prices.get(model, ())) + (None,) * 5)[:5]
     if pin is None or pout is None:
@@ -111,7 +111,8 @@ def cost_of(model: str, tin: float, tout: float, prices: Prices, cache_read: flo
     pwrite = pin if pwrite is None else pwrite
     uncached = max(0.0, tin - cache_read - cache_write)
     cost = (uncached * pin + cache_read * pread + cache_write * pwrite + tout * pout) / 1e6
-    return cost * (bfac if batch and bfac is not None else 1.0)
+    mult = (bfac if bfac is not None else 1.0) if batch else (0.5 if flex else 1.0)
+    return cost * mult
 
 
 def aggregate(records: Iterable[Dict[str, Any]], keys: Sequence[str], prices: Prices) -> List[Dict[str, Any]]:
@@ -120,7 +121,7 @@ def aggregate(records: Iterable[Dict[str, Any]], keys: Sequence[str], prices: Pr
     for r in records:
         gk = tuple(str(r.get(k, "")) for k in keys)
         g = groups.setdefault(gk, {**{k: v for k, v in zip(keys, gk)}, "calls": 0, "errors": 0, "input_tokens": 0, "output_tokens": 0,
-                                   "cache_read_tokens": 0, "cache_write_tokens": 0, "batched": 0, "batch_jobs": [],
+                                   "cache_read_tokens": 0, "cache_write_tokens": 0, "thought_tokens": 0, "batched": 0, "batch_jobs": [],
                                    "latency_ms": 0, "cost_usd": 0.0, "priced": True, "unpriced_models": []})
         g["calls"] += 1
         if r.get("batch"):
@@ -132,9 +133,10 @@ def aggregate(records: Iterable[Dict[str, Any]], keys: Sequence[str], prices: Pr
         g["output_tokens"] += int(r.get("output_tokens", 0))
         g["cache_read_tokens"] += int(r.get("cache_read_tokens", 0))
         g["cache_write_tokens"] += int(r.get("cache_write_tokens", 0))
+        g["thought_tokens"] += int(r.get("thought_tokens", 0))
         g["latency_ms"] += int(r.get("latency_ms", 0))
         c = cost_of(r["model"], r.get("input_tokens", 0), r.get("output_tokens", 0), prices,
-                    r.get("cache_read_tokens", 0), r.get("cache_write_tokens", 0), bool(r.get("batch")))
+                    r.get("cache_read_tokens", 0), r.get("cache_write_tokens", 0), bool(r.get("batch")), bool(r.get("flex")))
         if c is None:
             g["priced"] = False
             if r["model"] not in g["unpriced_models"]:
@@ -214,6 +216,8 @@ def main() -> int:
     if totals["cache_read_tokens"] or totals["cache_write_tokens"]:
         share = totals["cache_read_tokens"] / totals["input_tokens"] if totals["input_tokens"] else 0.0
         lines.append(f"  Prompt cache  read {totals['cache_read_tokens']} ({share:.0%} of the input), written {totals['cache_write_tokens']}")
+    if totals["thought_tokens"]:
+        lines.append(f"  Thoughts  {totals['thought_tokens']} tokens")
     for title, rows in (("By role", by_role), ("By provider", by_provider), ("By model", by_model)):
         lines.append(f"  {title}")
         for g in rows:

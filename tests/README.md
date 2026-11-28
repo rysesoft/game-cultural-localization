@@ -4,7 +4,7 @@ Standard library `unittest` only. Run it from the repository root. No test calls
 
 ```
 python -B -m unittest discover tests      # -B keeps __pycache__ out of the source tree
-pwsh tests/run_all.ps1          # runs the suite with every Python it finds (bundled runtime, py -3.14, python)
+pwsh tests/run_all.ps1          # runs the suite on Python 3.15 (LocalAppData Python315, py -3.15, python)
 ```
 
 | Module | Covers |
@@ -35,5 +35,6 @@ pwsh tests/run_all.ps1          # runs the suite with every Python it finds (bun
 | `test_cost_levers.py` | batches with a row and a character budget, the first batch alone to write the prompt cache, an empty Pass 1 target asked again, batched deliberation re-votes with the same outcome as line by line, the parallel Pass 2 recheck, batch API mode (one job for calls that arrive together, Anthropic and Google request and result shapes through a fake transport, failed requests and jobs, job size limits), one collector per model, the batch price and request counts in the budget report |
 | `test_orchestrator_jury.py` | jury flow end to end with `--dry-run` (every Phase 0 to 3 file, rewrite applied, report style, budget roles), determinism, budget cap stop with report and skipped gate, unresolved line, TM retrieval and evidence, language pack warm-up, legacy `--provider` flow, mode errors |
 | `test_architecture_contracts.py` | AST layer dependencies, cyclic import detection, juror blindness lock, provider factory OCP lock, navigation sync and Clean Code size verification (`verify_architecture.py`), `Specification` boolean algebra, immutable `LineState` transitions, AOP `AspectChain` and `MemoizationTaskAspect`, Gemini `cachedContentTokenCount` usage parsing, custom registry extensibility, writer vs blind `ContextView` isolation, `orchestrator_stub.py --batch` dry run |
+| `test_v32_optimizations.py` | Python 3.15 runtime target, version lockstep `3.2.0`, Google `65536` cap, `thinkingLevel`, `--flex` tier and `thought_tokens` telemetry, Anthropic adaptive effort, DeepSeek sub-role thinking, prefix-stable critic prompts across batches and Pass 2, Pass 1 prompt compaction, `CleanLightPassSpec`, tiered `pass2_light` vs `pass2`, unanimous `3/3` recheck skip, `PermanentProviderError` fast-fail, `salvage_keyed_items`, item-level memoization, context-safe dedup, cached `SqliteTMRepository` and `exact_approved`, `eval_critic --include-unknown`, `write_final_batch` actual count and undecided export hold-back |
 
 Fixtures live in `tests/fixtures/` (JSON, BOM-JSON, CSV, semicolon CSV, multi-line CSV, TSV, PO LF/CRLF, Unity StringTable `.asset`, TMP FontAsset `.asset` static/dynamic, fake font). Temporary files are created under the OS temp directory, never inside the repository.

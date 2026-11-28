@@ -5,7 +5,7 @@ import re
 import sqlite3
 import unicodedata
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 from gcl.domain.errors import L10nError
 from gcl.ports.storage import TMQuery, TMSegment
@@ -61,11 +61,20 @@ class SqliteTMRepository:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._gram_cache: Dict[Tuple[str, int], FrozenSet[str]] = {}
         try:
             self.db = sqlite3.connect(str(self.path))
             self.db.executescript(SCHEMA)
         except sqlite3.DatabaseError as exc:
             raise L10nError(f"{path}: not a usable SQLite translation memory ({exc})")
+
+    def _seg_grams(self, side: str, seg_id: int, text: str) -> FrozenSet[str]:
+        ckey = (side, seg_id)
+        cached = self._gram_cache.get(ckey)
+        if cached is None:
+            cached = frozenset(trigrams(text))
+            self._gram_cache[ckey] = cached
+        return cached
 
     def __enter__(self) -> "SqliteTMRepository":
         return self
@@ -94,7 +103,12 @@ class SqliteTMRepository:
             (seg.locale, seg.key, seg.src, seg.dst, seg.category, seg.speaker, seg.register, seg.status, seg.origin, norm),
         )
         seg_id = cur.lastrowid
-        grams = [("s:" + g, seg_id) for g in trigrams(seg.src)] + [("d:" + g, seg_id) for g in trigrams(seg.dst)]
+        s_grams = trigrams(seg.src)
+        d_grams = trigrams(seg.dst)
+        if seg_id is not None:
+            self._gram_cache[("src", int(seg_id))] = frozenset(s_grams)
+            self._gram_cache[("dst", int(seg_id))] = frozenset(d_grams)
+        grams = [("s:" + g, seg_id) for g in s_grams] + [("d:" + g, seg_id) for g in d_grams]
         self.db.executemany("INSERT INTO grams(gram, seg_id) VALUES (?, ?)", grams)
         return "inserted"
 
@@ -106,8 +120,11 @@ class SqliteTMRepository:
             "UPDATE segments SET src=?, dst=?, category=?, speaker=?, register=?, status=?, origin=? WHERE id=?",
             (seg.src, seg.dst, seg.category, seg.speaker, seg.register, seg.status, seg.origin, seg_id),
         )
+        d_grams = trigrams(seg.dst)
+        self._gram_cache[("src", int(seg_id))] = frozenset(trigrams(seg.src))
+        self._gram_cache[("dst", int(seg_id))] = frozenset(d_grams)
         self.db.execute("DELETE FROM grams WHERE seg_id=? AND gram LIKE 'd:%'", (seg_id,))
-        self.db.executemany("INSERT INTO grams(gram, seg_id) VALUES (?, ?)", [("d:" + g, seg_id) for g in trigrams(seg.dst)])
+        self.db.executemany("INSERT INTO grams(gram, seg_id) VALUES (?, ?)", [("d:" + g, seg_id) for g in d_grams])
         return "updated" if (old_dst != seg.dst or old_status != seg.status) else "kept"
 
     def add(self, locale: str, key: str, src: str, dst: str, **kw: Any) -> str:
@@ -142,13 +159,19 @@ class SqliteTMRepository:
         scored.sort(key=lambda t: t[:4])
         return [t[4] for t in scored[: query.k]]
 
-    @staticmethod
-    def _score_candidates(rows: Sequence[Tuple[Any, ...]], grams: Sequence[str], query: TMQuery) -> List[Tuple[Any, ...]]:
+    def _score_candidates(self, rows: Sequence[Tuple[Any, ...]], grams: Sequence[str], query: TMQuery) -> List[Tuple[Any, ...]]:
         scored: List[Tuple[Any, ...]] = []
+        qset = frozenset(grams)
+        if not qset:
+            return scored
+        qlen = len(qset)
         for seg_id, key, src, dst, cat, spk, status, _shared in rows:
             if query.exclude_key is not None and key == query.exclude_key:
                 continue
-            sim = dice(grams, trigrams(src if query.on == "src" else dst))
+            cset = self._seg_grams(query.on, int(seg_id), src if query.on == "src" else dst)
+            if not cset:
+                continue
+            sim = round(2.0 * len(qset & cset) / (qlen + len(cset)), 4)
             if sim < query.min_similarity:
                 continue
             if query.category and cat == query.category and query.speaker and spk == query.speaker:
@@ -162,6 +185,28 @@ class SqliteTMRepository:
                 "status": status, "similarity": sim, "match": match,
             }))
         return scored
+
+    def exact_approved(self, locale: str, src: str, *, category: str = "", speaker: str = "") -> Optional[Dict[str, Any]]:
+        """Return an unambiguous context compatible approved TM match for src, else None."""
+        norm = normalize(src)
+        if not norm:
+            return None
+        rows = self.db.execute(
+            "SELECT key, src, dst, category, speaker, status FROM segments "
+            "WHERE locale=? AND src_norm=? AND status='approved' ORDER BY id ASC",
+            (locale, norm),
+        ).fetchall()
+        exact_ctx = [r for r in rows if r[3] == category and r[4] == speaker]
+        pool = exact_ctx if exact_ctx else [
+            r for r in rows if (not category or r[3] == category) and (not speaker or r[4] == speaker)
+        ]
+        if not pool or len({r[2] for r in pool}) != 1:
+            return None
+        key, rsrc, dst, cat, spk, status = pool[0]
+        return {
+            "key": key, "src": rsrc, "dst": dst, "category": cat,
+            "speaker": spk, "status": status, "similarity": 1.0, "match": "exact",
+        }
 
     def neighbors(self, locale: str, text: str, **kw: Any) -> List[Dict[str, Any]]:
         """Legacy keyword compatible wrapper around query_neighbors(TMQuery)."""

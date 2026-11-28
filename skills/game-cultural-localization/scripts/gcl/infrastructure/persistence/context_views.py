@@ -22,6 +22,10 @@ class BlindContextAdapter:
     def map_text(self) -> str:
         return str(getattr(self._pack, "jury_text", "") or getattr(self._pack, "text", ""))
 
+    @property
+    def has_jury_view(self) -> bool:
+        return bool(getattr(self._pack, "jury_text", ""))
+
     def build_system(self, base: str) -> str:
         return str(self._pack.system(base, writer=False))
 

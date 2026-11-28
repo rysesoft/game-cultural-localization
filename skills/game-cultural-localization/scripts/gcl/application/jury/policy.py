@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Sequence, Tuple
 
-from gcl.domain.specifications import CriticalVoteSpec, MaxSpreadSpec, TierPassSpec
+from gcl.domain.specifications import CleanLightPassSpec, CriticalVoteSpec, MaxSpreadSpec, TierPassSpec
 
 __layer__ = "application"
 __pattern__ = "Specification Policy"
@@ -57,3 +57,10 @@ def juror_view(entry: Dict[str, Any]) -> Dict[str, Any]:
         if entry.get(k) not in (None, ""):
             view[k] = entry[k]
     return view
+
+
+def is_clean_light_pass(votes: Sequence[Dict[str, Any]], ban_hits: Sequence[Any]) -> bool:
+    """True for clean [5, 5, 4] votes with zero odd words and zero ban hits."""
+    scores = [int(v["score"]) for v in votes]
+    odd_count = sum(len(v.get("odd_words") or []) for v in votes)
+    return CleanLightPassSpec().is_satisfied_by((scores, odd_count, len(ban_hits)))

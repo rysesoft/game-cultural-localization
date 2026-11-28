@@ -62,15 +62,23 @@ class GoogleProvider(HttpProvider):
         return {"x-goog-api-key": self._key, "content-type": "application/json"}
 
     def _body(self, system: str, user: str, temperature: float, max_tokens: int, json_mode: bool) -> Dict[str, Any]:
-        return {
+        gen: Dict[str, Any] = {
+            "temperature": float(temperature),
+            "maxOutputTokens": self.max_output(GOOGLE_MAX_OUTPUT),
+            "responseMimeType": "application/json" if json_mode else "text/plain",
+        }
+        effort = self.options.get("effort")
+        if isinstance(effort, str) and effort.strip():
+            gen["thinkingConfig"] = {"thinkingLevel": effort.strip().upper()}
+        body: Dict[str, Any] = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
-            "generationConfig": {
-                "temperature": float(temperature),
-                "maxOutputTokens": self.max_output(GOOGLE_MAX_OUTPUT),
-                "responseMimeType": "application/json" if json_mode else "text/plain",
-            },
+            "generationConfig": gen,
         }
+        service_tier = self.options.get("service_tier")
+        if isinstance(service_tier, str) and service_tier.strip():
+            body["serviceTier"] = service_tier.strip().lower()
+        return body
 
     def parse_reply(self, data: Dict[str, Any]) -> RawVendorReply:
         cands = data.get("candidates")

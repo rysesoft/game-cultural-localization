@@ -67,11 +67,15 @@ class BudgetLogSubscriber:
             rec["cache_read_tokens"] = event.cache_read_tokens
         if event.cache_write_tokens:
             rec["cache_write_tokens"] = event.cache_write_tokens
+        if event.thought_tokens:
+            rec["thought_tokens"] = event.thought_tokens
         if event.batch_id:
             rec["batch"] = True
             rec["batch_id"] = event.batch_id
         elif event.batched:
             rec["batch"] = True
+        if event.flex:
+            rec["flex"] = True
         if event.dry_run:
             rec["dry_run"] = True
         if event.fallback_from:

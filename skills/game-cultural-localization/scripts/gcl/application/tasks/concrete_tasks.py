@@ -47,7 +47,10 @@ class TranslateTask(KeyedBatchTask):
             t = it.get("target")
             return isinstance(t, str) and (bool(t.strip()) or str(it.get("key")) not in needs)
 
-        spec = KeyedCallSpec(self.task_name, "rows", "rows", "key", ok, int(opts.get("max_tokens", 4096)))
+        spec = KeyedCallSpec(
+            self.task_name, "rows", "rows", "key", ok, int(opts.get("max_tokens", 4096)),
+            salvage_truncated=bool(opts.get("salvage_truncated", False)),
+        )
         payload = {"locale": locale, **(opts.get("extra") or {})}
         got = call_keyed(provider, system, payload, batch, spec)
         return {k: str(v["target"]) for k, v in got.items()}
@@ -68,8 +71,14 @@ class BacktranslateTask(KeyedBatchTask):
     def cache_tag(self, provider: Any, system: str, locale: str, opts: Dict[str, Any]) -> Any:
         return ("roundtrip", getattr(provider, "model", "?"), system, INSTRUCTIONS["roundtrip"], locale, int(opts.get("max_tokens", 4096)))
 
+    def item_cache_value(self, item: Any, opts: Dict[str, Any]) -> Any:
+        return {"key": item["key"], "target": item["target"]}
+
     def run_batch(self, provider: Any, system: str, locale: str, batch: List[Any], opts: Dict[str, Any]) -> Dict[str, Any]:
-        spec = KeyedCallSpec("roundtrip", "rows", "rows", "key", lambda it: isinstance(it.get("back"), str), int(opts.get("max_tokens", 4096)))
+        spec = KeyedCallSpec(
+            "roundtrip", "rows", "rows", "key", lambda it: isinstance(it.get("back"), str),
+            int(opts.get("max_tokens", 4096)), salvage_truncated=bool(opts.get("salvage_truncated", False)),
+        )
         got = call_keyed(provider, system, {"locale": locale}, batch, spec)
         return {k: str(v["back"]) for k, v in got.items()}
 
@@ -92,7 +101,10 @@ class JuryScoreTask(KeyedBatchTask):
         )
 
     def run_batch(self, provider: Any, system: str, locale: str, batch: List[Any], opts: Dict[str, Any]) -> Dict[str, Any]:
-        spec = KeyedCallSpec("jury", "entries", "votes", "key", lambda it: normalize_vote(it) is not None, int(opts.get("max_tokens", 4096)))
+        spec = KeyedCallSpec(
+            "jury", "entries", "votes", "key", lambda it: normalize_vote(it) is not None,
+            int(opts.get("max_tokens", 4096)), salvage_truncated=bool(opts.get("salvage_truncated", False)),
+        )
         payload = {"locale": locale, "tier": opts.get("tier", "J1"), **(opts.get("extra") or {})}
         got = call_keyed(provider, system, payload, batch, spec)
         targets = {str(e.get("key")): str(e.get("target", "")) for e in batch}
@@ -103,6 +115,7 @@ class PairwiseChoiceTask(KeyedBatchTask):
     """Forced choice A/B comparison task for critic calibration."""
 
     task_name = "pairwise"
+    item_id_field = "id"
 
     def build_system(self, locale: str, opts: Dict[str, Any]) -> str:
         return system_for("pairwise", locale, opts.get("system"))
@@ -114,7 +127,10 @@ class PairwiseChoiceTask(KeyedBatchTask):
         return ("pairwise", getattr(provider, "model", "?"), system, INSTRUCTIONS["pairwise"], locale, int(opts.get("max_tokens", 2048)))
 
     def run_batch(self, provider: Any, system: str, locale: str, batch: List[Any], opts: Dict[str, Any]) -> Dict[str, Any]:
-        spec = KeyedCallSpec("pairwise", "pairs", "choices", "id", lambda it: str(it.get("choice", "")).strip().lower() in ("a", "b"), int(opts.get("max_tokens", 2048)))
+        spec = KeyedCallSpec(
+            "pairwise", "pairs", "choices", "id", lambda it: str(it.get("choice", "")).strip().lower() in ("a", "b"),
+            int(opts.get("max_tokens", 2048)), salvage_truncated=bool(opts.get("salvage_truncated", False)),
+        )
         got = call_keyed(provider, system, {"locale": locale}, batch, spec)
         return {k: str(v["choice"]).strip().lower() for k, v in got.items()}
 
@@ -137,7 +153,10 @@ class DeliberateManyTask(KeyedBatchTask):
         return ("deliberate_many", getattr(provider, "model", "?"), system, INSTRUCTIONS["deliberate_many"], locale, int(opts.get("max_tokens", 4096)))
 
     def run_batch(self, provider: Any, system: str, locale: str, batch: List[Any], opts: Dict[str, Any]) -> Dict[str, Any]:
-        spec = KeyedCallSpec("deliberate_many", "lines", "votes", "key", lambda it: normalize_vote(it) is not None, int(opts.get("max_tokens", 4096)))
+        spec = KeyedCallSpec(
+            "deliberate_many", "lines", "votes", "key", lambda it: normalize_vote(it) is not None,
+            int(opts.get("max_tokens", 4096)), salvage_truncated=bool(opts.get("salvage_truncated", False)),
+        )
         got = call_keyed(provider, system, {"locale": locale}, batch, spec)
         targets = opts.get("targets", {})
         return {k: everyday_check(normalize_vote(v), targets.get(k, "")) for k, v in got.items()}  # type: ignore[arg-type]
@@ -165,7 +184,10 @@ class Pass2CandidateTask(KeyedBatchTask):
             c = it.get("candidates")
             return isinstance(c, list) and any(isinstance(x, str) and x.strip() for x in c)
 
-        spec = KeyedCallSpec("pass2", "rows", "rows", "key", ok, int(opts.get("max_tokens", 4096)))
+        spec = KeyedCallSpec(
+            "pass2", "rows", "rows", "key", ok, int(opts.get("max_tokens", 4096)),
+            salvage_truncated=bool(opts.get("salvage_truncated", False)),
+        )
         got = call_keyed(provider, system, {"locale": locale, "n_candidates": n}, batch, spec)
         return {k: ordered_unique(str(x) for x in v["candidates"] if isinstance(x, str) and x.strip())[:n] for k, v in got.items()}
 
@@ -193,7 +215,7 @@ class BlindPickTask(KeyedBatchTask):
         spec = KeyedCallSpec(
             "pick", "items", "picks", "key",
             lambda it: str(it.get("choice")) in ids.get(str(it.get("key")), set()),
-            int(opts.get("max_tokens", 2048)),
+            int(opts.get("max_tokens", 2048)), salvage_truncated=bool(opts.get("salvage_truncated", False)),
         )
         got = call_keyed(provider, system, {"locale": locale}, batch, spec)
         return {k: str(v["choice"]) for k, v in got.items()}

@@ -106,12 +106,14 @@ def run_jury(
     budget_caps: bool = True, tm_lookup: Optional[Callable[[Dict[str, Any]], List[Dict[str, Any]]]] = None,
     roundtrip_fn: Optional[Callable[[Sequence[Dict[str, Any]]], Dict[str, Dict[str, Any]]]] = None,
     deliberator: Optional[Deliberator] = None, workers: int = 1, tally: Optional[EscalationTally] = None, memo: Any = None,
+    clean_light_pass: bool = False, item_memo: Any = None, salvage_truncated: bool = False,
 ) -> Dict[str, Any]:
     """Run J1-J3 escalation chain via gcl.application.jury.run_jury with target-only ban hits."""
     return _run_jury(
         entries, locale, router, system=system, batch_size=batch_size, budget_caps=budget_caps,
         tm_lookup=tm_lookup, roundtrip_fn=roundtrip_fn, deliberator=deliberator,
         workers=workers, tally=tally, memo=memo, ban_hits_fn=ban_hits, score_fn=score_entries,
+        clean_light_pass=clean_light_pass, item_memo=item_memo, salvage_truncated=salvage_truncated,
     )
 
 
@@ -146,6 +148,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--seed", type=int, default=1234, help="Seed of the warm-up and few-shot sample (default 1234)")
     ap.add_argument("--batch-size", type=int, default=None, help="Lines per model call (default 100, with a character budget so long letters never pile up in one call)")
     ap.add_argument("--no-budget-caps", action="store_true", help="Do not stop when the J2 or J3 escalation ratio is above the cap")
+    ap.add_argument("--clean-light-pass", action="store_true", help="Settle clean [5, 5, 4] tiers with zero odd words and zero ban hits as pass")
     ap.add_argument("--no-deliberation", action="store_true", help="Leave J3 disagreements unresolved instead of running the deliberation round")
     ap.add_argument("--tm", default=None, help="Translation memory (tm.py SQLite) for the evidence: closest approved lines")
     ap.add_argument("--workers", type=int, default=4, help="Batches in flight per member, the three members of a tier and the disputed lines run in parallel (default 4, 1 = one call at a time)")
@@ -206,7 +209,8 @@ def main() -> int:
         deliberator = make_deliberator(router, locale, system)
     try:
         res = run_jury(entries, locale, router, system=system, batch_size=args.batch_size, budget_caps=not args.no_budget_caps,
-                       roundtrip_fn=roundtrip_fn, deliberator=deliberator, tm_lookup=tm_lookup, workers=args.workers, memo=memo)
+                       roundtrip_fn=roundtrip_fn, deliberator=deliberator, tm_lookup=tm_lookup, workers=args.workers, memo=memo,
+                       clean_light_pass=args.clean_light_pass)
     finally:
         if tm is not None:
             tm.close()

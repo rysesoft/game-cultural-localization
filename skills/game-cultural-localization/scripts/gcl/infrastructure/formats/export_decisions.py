@@ -88,6 +88,7 @@ def apply_decisions(final: Dict[str, str], reports: Sequence[Path]) -> Dict[str,
                 final[key] = old
                 stats["rejected"] += 1
             elif new != old:
+                final[key] = old
                 stats["undecided"].append(key)
     return stats
 

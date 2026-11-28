@@ -17,6 +17,7 @@ from gcl.application.pipeline import (  # noqa: E402
     send_broken_lines_to_pass2 as _send_broken_lines,
 )
 from gcl.composition.container import ServiceContainer  # noqa: E402
+from gcl.domain.prompt_compactor import compact_agent_for_api, compact_playbook_for_api  # noqa: E402
 from l10n_common import (  # noqa: E402
     EXIT_FINDINGS, EXIT_OK, L10nError, Row, add_common_args, add_input_argument, emit_report, load_config,
     load_table, normalize_locale, pick, resolve_input, run_main, SCRIPTS_DIR, __version__,
@@ -87,8 +88,13 @@ def load_playbook(locale: str) -> str:
     return path.read_text(encoding="utf-8-sig") if path.is_file() else ""
 
 
-def system_prompt(agent: str, locale: str, bible: str) -> str:
-    parts = [load_agent_prompt(agent), f"# Target locale: {locale}", load_playbook(locale)]
+def system_prompt(agent: str, locale: str, bible: str, *, lean_api: bool = False) -> str:
+    agent_body = load_agent_prompt(agent)
+    playbook = load_playbook(locale)
+    if lean_api:
+        agent_body = compact_agent_for_api(agent_body)
+        playbook = compact_playbook_for_api(playbook)
+    parts = [agent_body, f"# Target locale: {locale}", playbook]
     if bible:
         parts.append("# Project bible\n" + bible)
     parts.append("# Character archetypes\n" + "\n".join(f"{k}: {v}" for k, v in ARCHETYPES.items()))
@@ -303,11 +309,13 @@ def _build_hooks() -> PipelineHooks:
         return jentries
 
     def _run_pass2(verdicts: Any, sources: Any, locale: str, router: Any, opts: JuryPipelineOptions,
-                   p2_sys: str, pk_sys: str, wctx: Any, bctx: Any, memo: Any, src_name: str) -> Dict[str, Any]:
+                   p2_sys: str, pk_sys: str, wctx: Any, bctx: Any, memo: Any, src_name: str, **kw: Any) -> Dict[str, Any]:
         t_opts = TournamentOptions(
             pass2_system=p2_sys, pick_system=pk_sys, n=opts.candidates, seed=opts.seed,
             ph_style=opts.ph_style, tag_style=opts.tag_style, source_file=src_name, workers=opts.workers,
             writer_context=wctx, blind_context=bctx, memo=memo,
+            tiered=opts.tiered_pass2, unanimous_skip_recheck=opts.unanimous_skip_recheck,
+            item_memo=kw.get("item_memo"), salvage_truncated=opts.salvage_truncated,
         )
         return run_tournament(
             verdicts, sources, locale, router, t_opts, _CONTAINER.critique_validator, _CONTAINER.parity,
@@ -341,11 +349,13 @@ def _build_hooks() -> PipelineHooks:
 
 def run_jury_pipeline(
     input_path: Path, locale: str, workdir: Path, router: Any, *, src_field: str = "en", key_field: str = "key",
-    ph_style: str = "auto", tag_style: str = "auto", batch_size: int = 50, fonts: Optional[List[Path]] = None,
+    ph_style: str = "auto", tag_style: str = "auto", batch_size: int = 200, fonts: Optional[List[Path]] = None,
     langpack_dir: Optional[Path] = None, tm_path: Optional[Path] = None, deliberation: bool = True,
     budget_caps: bool = True, candidates: int = 3, seed: int = 1234, workers: int = 1,
     context_map: Optional[Path] = None, resume: bool = True, gate: Optional[Dict[str, Any]] = None,
-    draft_field: Optional[str] = None,
+    draft_field: Optional[str] = None, lean_prompt: bool = True, clean_light_pass: bool = True,
+    tiered_pass2: bool = True, unanimous_skip_recheck: bool = True, tm_shortcircuit: bool = True,
+    require_juried_context: bool = False, salvage_truncated: bool = True,
 ) -> Dict[str, Any]:
     """Run Phase 0-3 with the mixed family jury via LocalizationPipelineBuilder."""
     opts = JuryPipelineOptions(
@@ -353,6 +363,9 @@ def run_jury_pipeline(
         fonts=fonts or (), langpack_dir=langpack_dir, tm_path=tm_path, deliberation=deliberation,
         budget_caps=budget_caps, candidates=candidates, seed=seed, workers=workers,
         context_map=context_map, resume=resume, gate=gate, draft_field=draft_field,
+        lean_prompt=lean_prompt, clean_light_pass=clean_light_pass, tiered_pass2=tiered_pass2,
+        unanimous_skip_recheck=unanimous_skip_recheck, tm_shortcircuit=tm_shortcircuit,
+        require_juried_context=require_juried_context, salvage_truncated=salvage_truncated,
     )
     return LocalizationPipelineBuilder(_build_hooks()).run(input_path, locale, workdir, router, opts)
 
@@ -366,7 +379,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--key-field", default=None, help="Key column (default key)")
     ap.add_argument("--placeholder-style", default=None, help="unity|unreal|godot|icu|printf|python|auto")
     ap.add_argument("--tag-style", default=None, help="tmp|html|bbcode|auto")
-    ap.add_argument("--batch-size", type=int, default=50, help="Rows per batch (default 50)")
+    ap.add_argument("--batch-size", type=int, default=200, help="Rows per batch (default 200)")
     ap.add_argument("--font", action="append", default=[], help="Font file(s) for the glyph gate, repeatable, in fallback order with the primary first")
     ap.add_argument("--dry-run", action="store_true", help="Jury flow with the offline fake provider (no API key, no network)")
     ap.add_argument("--live", action="store_true", help="Jury flow with the real APIs (keys from the environment)")
@@ -375,6 +388,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--fake-scenario", help="Fake provider scenario JSON (with --dry-run)")
     ap.add_argument("--budget-log", default=None, help="budget.jsonl (default: <workdir>/budget.jsonl)")
     ap.add_argument("--batch", action="store_true", help="Send Anthropic and Google calls through their batch APIs at half the price")
+    ap.add_argument("--flex", action="store_true", help="Use the Google Gemini flex service tier at half the standard token price")
     ap.add_argument("--langpack-dir", default=None, help="Root of the language packs (default: the skill's langpack/)")
     ap.add_argument("--tm", default=None, help="Translation memory (tm.py SQLite) for Pass 1 RAG and jury evidence")
     ap.add_argument("--context-map", default=None, help="CONTEXT_MAP.md of the game (Phase 0 step 0), with line_notes.json and CONTEXT_MAP.<locale>.md next to it")
@@ -382,6 +396,12 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--no-deliberation", action="store_true", help="Leave J3 disagreements unresolved")
     ap.add_argument("--no-resume", action="store_true", help=f"Ignore the finished model batches kept in <workdir>/{RESUME_FILE} and call every model again")
     ap.add_argument("--no-budget-caps", action="store_true", help="Do not stop at the J2 or J3 escalation cap")
+    ap.add_argument("--full-agent-prompt", action="store_true", help="Keep full IDE workflow instructions in API Pass 1 system prompts instead of compacting them")
+    ap.add_argument("--rewrite-all-light", action="store_true", help="Send clean [5, 5, 4] verdicts to Pass 2 instead of settling them directly as pass")
+    ap.add_argument("--no-tiered-pass2", action="store_true", help="Use the flagship pass2 model with --candidates for rewrite_light instead of pass2_light with 2 candidates")
+    ap.add_argument("--always-recheck", action="store_true", help="Run the J1 confirmation recheck even when all 3 blind pickers unanimously chose the winning rewrite")
+    ap.add_argument("--no-tm-shortcircuit", action="store_true", help="Do not short circuit exact context matched approved TM segments past Pass 1 and Jury")
+    ap.add_argument("--require-juried-context", action="store_true", help="Abort if CONTEXT_MAP.md has a locale appendix without a separate CONTEXT_MAP.jury.md")
     ap.add_argument("--candidates", type=int, default=3, help="Pass 2 candidates per flagged line (default 3)")
     ap.add_argument("--seed", type=int, default=1234, help="Seed of warm-up, few-shots and candidate order (default 1234)")
     ap.add_argument("--workers", type=int, default=4, help="Model calls in flight per step of the jury flow (default 4, 1 = one call at a time); combine with a larger --batch-size such as 200 so every step has enough batches")
@@ -418,6 +438,9 @@ def main() -> int:
             candidates=args.candidates, seed=args.seed, workers=args.workers,
             context_map=Path(args.context_map or cfg["context_map"]) if (args.context_map or cfg.get("context_map")) else None,
             resume=not args.no_resume, gate=gate, draft_field=args.draft_field,
+            lean_prompt=not args.full_agent_prompt, clean_light_pass=not args.rewrite_all_light,
+            tiered_pass2=not args.no_tiered_pass2, unanimous_skip_recheck=not args.always_recheck,
+            tm_shortcircuit=not args.no_tm_shortcircuit, require_juried_context=args.require_juried_context,
         )
         exit_code = EXIT_OK if result["passed"] else EXIT_FINDINGS
         text = "\n".join([f"Orchestrator run (jury flow, {'dry run' if args.dry_run else 'live'}):"] + ["  " + l for l in result["log"]]

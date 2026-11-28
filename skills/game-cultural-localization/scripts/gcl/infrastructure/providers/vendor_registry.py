@@ -26,12 +26,34 @@ class VendorDescriptor:
     supports_config: bool = True
     options_builder: Optional[OptionsBuilder] = None
     thinking_note_flag: bool = False
+    supports_flex: bool = False
 
 
 def _base_options(spec: Any) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     if getattr(spec, "max_output_tokens", None):
         out["max_output_tokens"] = spec.max_output_tokens
+    return out
+
+
+def _effort_options(spec: Any, provider_conf: Mapping[str, Any], role: str) -> Dict[str, Any]:
+    out = _base_options(spec)
+    conf = provider_conf.get("effort", {}) or {}
+    val = conf.get(role, conf.get("default"))
+    if isinstance(val, str) and val.strip():
+        out["effort"] = val.strip().lower()
+    return out
+
+
+def _anthropic_options(spec: Any, provider_conf: Mapping[str, Any], role: str, force_thinking: bool) -> Dict[str, Any]:
+    return _effort_options(spec, provider_conf, role)
+
+
+def _google_options(spec: Any, provider_conf: Mapping[str, Any], role: str, force_thinking: bool) -> Dict[str, Any]:
+    out = _effort_options(spec, provider_conf, role)
+    stier = provider_conf.get("service_tier")
+    if isinstance(stier, str) and stier.strip():
+        out["service_tier"] = stier.strip().lower()
     return out
 
 
@@ -85,11 +107,14 @@ class VendorRegistry:
     def provider_classes(self) -> Dict[str, Any]:
         return {k: v.adapter_cls for k, v in self._vendors.items()}
 
-    def build_options(self, spec: Any, provider_conf: Mapping[str, Any], role: str, force_thinking: bool) -> Dict[str, Any]:
+    def build_options(
+        self, spec: Any, provider_conf: Mapping[str, Any], role: str, force_thinking: bool, *, flex: bool = False,
+    ) -> Dict[str, Any]:
         desc = self._vendors.get(spec.provider)
-        if desc and desc.options_builder is not None:
-            return desc.options_builder(spec, provider_conf, role, force_thinking)
-        return _base_options(spec)
+        out = desc.options_builder(spec, provider_conf, role, force_thinking) if (desc and desc.options_builder is not None) else _base_options(spec)
+        if flex and desc and desc.supports_flex and "service_tier" not in out:
+            out["service_tier"] = "flex"
+        return out
 
     def fallback_suffix(self, provider_name: str, fallback_thinking: bool) -> str:
         desc = self._vendors.get(provider_name)
@@ -99,8 +124,8 @@ class VendorRegistry:
 def build_default_vendor_registry() -> VendorRegistry:
     """Create the default registry with built in HTTP vendors and FakeProvider."""
     reg = VendorRegistry()
-    reg.register(VendorDescriptor("anthropic", AnthropicProvider, batch_backend_cls=AnthropicBatchBackend))
-    reg.register(VendorDescriptor("google", GoogleProvider, batch_backend_cls=GoogleBatchBackend))
+    reg.register(VendorDescriptor("anthropic", AnthropicProvider, batch_backend_cls=AnthropicBatchBackend, options_builder=_anthropic_options))
+    reg.register(VendorDescriptor("google", GoogleProvider, batch_backend_cls=GoogleBatchBackend, options_builder=_google_options, supports_flex=True))
     reg.register(VendorDescriptor("deepseek", DeepSeekProvider, options_builder=_deepseek_options, thinking_note_flag=True))
     reg.register(VendorDescriptor("fake", FakeProvider, supports_config=False))
     return reg

@@ -10,7 +10,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-from gcl.domain.errors import MissingKeyError, ModelNotFoundError, ProviderError, StreamInterrupted
+from gcl.domain.errors import MissingKeyError, ModelNotFoundError, PermanentProviderError, ProviderError, StreamInterrupted
 from gcl.domain.models import ChatRequest, ChatResult, RawVendorReply, TokenUsage
 from gcl.ports.llm import ProviderCapabilities
 
@@ -26,7 +26,7 @@ __owns__ = "urllib GET/POST execution, SSE event assembly and retry loop"
 DEFAULT_TIMEOUT_S = 600.0
 ANTHROPIC_MAX_OUTPUT = 128000
 DEEPSEEK_MAX_OUTPUT = 393216
-GOOGLE_MAX_OUTPUT = 1000000
+GOOGLE_MAX_OUTPUT = 65536
 OFFLINE_ENV = "GCL_OFFLINE"
 STREAM_DONE = {"__done__": True}
 
@@ -148,7 +148,9 @@ def _execute_with_retry(send_once: Callable[[], Tuple[int, bytes, Dict[str, str]
                 opts.sleep(wait_s)
             continue
         if status in (401, 403):
-            raise ProviderError(f"{opts.label}: authentication failed (HTTP {status}); check the API key environment variable")
+            raise PermanentProviderError(f"{opts.label}: authentication failed (HTTP {status}); check the API key environment variable")
+        if status in (400, 404):
+            raise PermanentProviderError(f"{opts.label}: HTTP {status}: {snippet}")
         raise ProviderError(f"{opts.label}: HTTP {status}: {snippet}")
     raise ProviderError(f"{opts.label}: giving up after {opts.max_attempts} attempts ({last})")
 
@@ -234,5 +236,5 @@ class HttpProvider:
         return ChatResult(
             rep.text, u.input_tokens if u.input_tokens > 0 else estimate_tokens(system + user),
             u.output_tokens if u.output_tokens > 0 else estimate_tokens(rep.text),
-            self.model, latency, u.cache_read_tokens, u.cache_write_tokens, rep.batch_id,
+            self.model, latency, u.cache_read_tokens, u.cache_write_tokens, rep.batch_id, u.thought_tokens,
         )
